@@ -40,9 +40,30 @@ describe('Home', () => {
     expect(screen.getByRole('button', { name: 'Staging Chamber' })).toBeDisabled();
 
     const composer = screen.getByRole('textbox', { name: 'Agent instruction' });
+    expect(composer).toHaveAttribute('readonly');
+    expect(composer).toHaveAccessibleDescription(
+      'Preview only. This field is read-only and cannot send instructions.',
+    );
     const form = composer.closest('form');
     expect(form).not.toBeNull();
     fireEvent.submit(form!);
+  });
+
+  it('marks preview-only operational facts for assistive technology', () => {
+    render(<Home />);
+
+    expect(screen.getByLabelText('Health: illustrative static preview')).toHaveTextContent(
+      'HEALTHY (PREVIEW)',
+    );
+    expect(screen.getByLabelText('Sandbox HEAD: illustrative static preview')).toHaveTextContent(
+      '9b4ec8f (PREVIEW)',
+    );
+    expect(screen.getByText(/GIT DAG LINEAGE \(STATIC PREVIEW\)/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/INDEX 47b91e\.\.\.c892fa 100644 \(STATIC PREVIEW\)/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/pgvector.*\(PREVIEW\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Sandbox Tests: 14 passing/)).toHaveTextContent('STATIC PREVIEW');
   });
 
   it('uses the stacked layout at the 960px tablet width', () => {

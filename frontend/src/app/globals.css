@@ -165,6 +165,7 @@ textarea:focus-visible {
   border-right: 1px solid var(--line);
 }
 .workspace-rail {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: #0b1019;
@@ -186,8 +187,8 @@ textarea:focus-visible {
 }
 .rail-health {
   position: absolute;
-  top: 58px;
-  left: 156px;
+  top: 10px;
+  right: 10px;
   color: var(--green);
   font:
     9px ui-monospace,

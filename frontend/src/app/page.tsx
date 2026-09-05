@@ -62,10 +62,10 @@ export default function Home() {
           <span className="brand-name">Repo Surgeon</span>
           <span className="bar-divider" />
           <button className="repo-switcher" type="button" aria-label="Switch repository" disabled>
-            <Glyph>▣</Glyph> &nbsp; acme/payments-api⌄
+            <Glyph>▣</Glyph> &nbsp; acme/payments-api <Glyph>⌄</Glyph>
           </button>
           <span className="branch-context">
-            <Glyph>⑂</Glyph> &nbsp; main <b>3 behind</b> &nbsp;→&nbsp;{' '}
+            <Glyph>⑂</Glyph> &nbsp; main <b>3 behind (PREVIEW)</b> &nbsp;<Glyph>→</Glyph>&nbsp;{' '}
             <strong>fix/session-token-store</strong>
           </span>
         </div>
@@ -89,7 +89,9 @@ export default function Home() {
       <div className="workspace-grid" data-layout={isStackedLayout ? 'stacked' : 'wide'}>
         <nav className="workspace-rail" aria-label="Workspace map">
           <div className="rail-label">WORKSPACE MAP</div>
-          <div className="rail-health">HEALTHY</div>
+          <div className="rail-health" aria-label="Health: illustrative static preview">
+            HEALTHY (PREVIEW)
+          </div>
           <div className="rail-items">
             <button type="button" disabled>
               <Glyph>✣</Glyph> <span>Git Graph &amp; Staging</span>
@@ -109,9 +111,9 @@ export default function Home() {
           </div>
           <div className="rail-footer">
             <span>ENGINE DAEMON (STATIC PREVIEW)</span>
-            <strong>ONLINE</strong>
+            <strong aria-label="Engine daemon status: illustrative static preview">ONLINE</strong>
             <span>Sandbox HEAD (STATIC PREVIEW)</span>
-            <code>9b4ec8f</code>
+            <code aria-label="Sandbox HEAD: illustrative static preview">9b4ec8f (PREVIEW)</code>
             <span>
               <Glyph>▣</Glyph> &nbsp; STRICT LOCAL CONFINEMENT (STATIC PREVIEW)
             </span>
@@ -121,7 +123,7 @@ export default function Home() {
           <PanelHeading number={1}>Repos &amp; lineage</PanelHeading>
           <div className="repo-content">
             <div className="section-kicker">
-              CONNECTED REPOS <Glyph>☷</Glyph>
+              CONNECTED REPOS (STATIC PREVIEW) <Glyph>☷</Glyph>
             </div>
             <div className="session-list" role="listbox" aria-label="Connected repositories">
               {sessions.map((session) => (
@@ -144,26 +146,28 @@ export default function Home() {
               </button>
             </div>
             <div className="lineage-title">
-              GIT DAG LINEAGE <code>HEAD: 89b21e</code>
+              GIT DAG LINEAGE (STATIC PREVIEW) <code>HEAD: 89b21e (PREVIEW)</code>
             </div>
             <div className="lineage">
               <div className="commit">
                 <i />
-                <code>a4f81c</code>
-                <span>origin/main</span>
-                <small>feat: token schema</small>
+                <code>a4f81c (PREVIEW)</code>
+                <span>origin/main (PREVIEW)</span>
+                <small>feat: token schema (PREVIEW)</small>
               </div>
               <div className="commit current">
                 <i />
-                <code>89b21e</code>
-                <em>HEAD</em>
-                <small>draft: storage contract</small>
+                <code>89b21e (PREVIEW)</code>
+                <em>HEAD (PREVIEW)</em>
+                <small>draft: storage contract (PREVIEW)</small>
               </div>
             </div>
             <div className="revision-card">
-              <b>● &nbsp; REV 1</b>
-              <span>SANDBOX</span>
-              <strong>TokenStore uncommitted</strong>
+              <b>
+                <Glyph>●</Glyph> &nbsp; REV 1 (PREVIEW)
+              </b>
+              <span>SANDBOX (PREVIEW)</span>
+              <strong>TokenStore uncommitted (PREVIEW)</strong>
             </div>
             <div className="sandbox-card">
               <b>
@@ -172,7 +176,7 @@ export default function Home() {
               <StatusDot />
               <small>/tmp/surgeon-sandbox-89b2 (illustrative path)</small>
               <span>
-                NETWORK: OFF <i /> COW-VFS: RDWR (STATIC PREVIEW)
+                NETWORK: OFF <i aria-hidden="true" /> COW-VFS: RDWR (STATIC PREVIEW)
               </span>
             </div>
             <div className="section-kicker context-kicker">
@@ -204,12 +208,14 @@ export default function Home() {
               <div>
                 <dt>Tests</dt>
                 <dd>
-                  pytest <StatusDot />
+                  pytest <StatusDot /> (PREVIEW)
                 </dd>
               </div>
               <div>
                 <dt>Vector Index</dt>
-                <dd>pgvector ✓</dd>
+                <dd>
+                  pgvector <Glyph>✓</Glyph> (PREVIEW)
+                </dd>
               </div>
             </dl>
           </section>
@@ -242,18 +248,20 @@ export default function Home() {
                   <Glyph>▹</Glyph>
                   <code>{item.tool}</code>
                   <span className="activity-detail">{item.detail}</span>
-                  <strong>✓ {item.result}</strong>
+                  <strong>
+                    <Glyph>✓</Glyph> {item.result} (PREVIEW)
+                  </strong>
                   <small>{item.time}</small>
                 </div>
               ))}
             </div>
             <p className="agent-message finding">
               Found the coupling in <a href="#diff">auth/session.py:52</a>. Drafted a patch and
-              verified test suite in Sandbox #89b2. See the diff in the staging chamber on the right
-              →
+              verified test suite in Sandbox #89b2 (static preview). See the diff in the staging
+              chamber on the right <Glyph>→</Glyph>
             </p>
             <div className="pending-trace">
-              proposing patch revision 1, awaiting your approval...
+              proposing patch revision 1, awaiting your approval (STATIC PREVIEW)...
             </div>
           </div>
           <form className="composer" onSubmit={(event) => event.preventDefault()}>
@@ -265,15 +273,20 @@ export default function Home() {
             </div>
             <textarea
               aria-label="Agent instruction"
+              aria-describedby="composer-preview-note"
+              readOnly
               placeholder="Instruct agent or type '/' for surgical tools..."
             />
+            <p className="sr-only" id="composer-preview-note">
+              Preview only. This field is read-only and cannot send instructions.
+            </p>
             <div className="composer-controls">
               <button
                 type="button"
                 disabled
                 aria-label="Model selector unavailable in static preview"
               >
-                <Glyph>●</Glyph> Claude 3.7 Sonnet (Local Agent)⌄
+                <Glyph>●</Glyph> Claude 3.7 Sonnet (Local Agent) <Glyph>⌄</Glyph>
               </button>
               <button className="abort" type="button" disabled>
                 <Glyph>⊘</Glyph> Abort [Esc]
@@ -305,10 +318,10 @@ export default function Home() {
                 className="tab-selected"
                 disabled
               >
-                <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
+                <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING (PREVIEW)</span>
               </button>
               <button type="button" role="tab" aria-selected="false" disabled>
-                <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS</span>
+                <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS (PREVIEW)</span>
               </button>
             </div>
             <span>
@@ -319,10 +332,10 @@ export default function Home() {
             <strong>
               <Glyph>▤</Glyph> &nbsp; auth/session.py
             </strong>
-            <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
+            <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644 (STATIC PREVIEW)</span>
           </div>
           <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
-          <div className="diff-code" aria-label="Proposed code diff">
+          <div className="diff-code" aria-label="Proposed code diff, illustrative static preview">
             <div className="code-line">
               <span>48&nbsp;&nbsp; 48</span>
               <code>def __init__(self, ttl_seconds: int = 3600) -&gt; None:</code>
@@ -373,7 +386,10 @@ export default function Home() {
             </div>
           </div>
           <div className="test-result">
-            <span className="test-dot" /> <strong>Sandbox Tests: 14 passing → 14 passing</strong>
+            <span className="test-dot" aria-hidden="true" />{' '}
+            <strong>
+              Sandbox Tests: 14 passing <Glyph>→</Glyph> 14 passing (STATIC PREVIEW)
+            </strong>
             <span>
               Illustrative static preview: 0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem:
               64MB &nbsp; EXIT: 0
@@ -382,7 +398,7 @@ export default function Home() {
           <div className="approval-panel">
             <p className="approval-status">
               <Glyph>⚠</Glyph> WRITE PENDING (STATIC PREVIEW) - proposal has NOT touched local
-              repository disk. &nbsp; <small>REV 1 · SHA256: 4f8e...9a21</small>
+              repository disk. &nbsp; <small>REV 1 · SHA256: 4f8e...9a21 (STATIC PREVIEW)</small>
             </p>
             <div className="approval-actions">
               <button type="button" disabled>
