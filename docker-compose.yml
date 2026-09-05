@@ -1,0 +1,24 @@
+services:
+  postgres:
+    image: postgres:18.6
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-repo_surgeon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-repo_surgeon_local_only}
+      POSTGRES_DB: ${POSTGRES_DB:-repo_surgeon}
+      PGDATA: /var/lib/postgresql/18/docker
+    ports:
+      - host_ip: 127.0.0.1
+        published: "5432"
+        target: 5432
+        protocol: tcp
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  postgres_data:
