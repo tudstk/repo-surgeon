@@ -1,3 +1,5 @@
+'use client';
+
 const sessions = [
   { name: 'payments-api', active: true },
   { name: 'web-dashboard', active: false },
@@ -11,6 +13,10 @@ const activity = [
 
 function StatusDot({ tone = 'green' }: { tone?: 'green' | 'violet' }) {
   return <span className={`status-dot status-dot-${tone}`} aria-hidden="true" />;
+}
+
+function Glyph({ children }: { children: React.ReactNode }) {
+  return <span aria-hidden="true">{children}</span>;
 }
 
 function PanelHeading({ number, children }: { number: number; children: React.ReactNode }) {
@@ -27,11 +33,13 @@ export default function Home() {
     <main className="workspace-shell">
       <header className="global-bar">
         <div className="brand-lockup">
-          <span className="brand-mark">⚒</span>
+          <span className="brand-mark">
+            <Glyph>⚒</Glyph>
+          </span>
           <span className="brand-name">Repo Surgeon</span>
           <span className="bar-divider" />
-          <button className="repo-switcher" type="button" aria-label="Switch repository">
-            ▣ &nbsp; acme/payments-api⌄
+          <button className="repo-switcher" type="button" aria-label="Switch repository" disabled>
+            <Glyph>▣</Glyph> &nbsp; acme/payments-api⌄
           </button>
           <span className="branch-context">
             ⑂ &nbsp; main <b>3 behind</b> &nbsp;→&nbsp; <strong>fix/session-token-store</strong>
@@ -46,11 +54,11 @@ export default function Home() {
           <span className="read-only-badge">
             <StatusDot /> READ-ONLY (SAFE SANDBOX)
           </span>
-          <button className="compact-button" type="button">
-            ▣ Audit Log&nbsp; ⌘K
+          <button className="compact-button" type="button" disabled>
+            <Glyph>▣</Glyph> Audit Log&nbsp; <Glyph>⌘K</Glyph>
           </button>
-          <button className="avatar" type="button" aria-label="Open account menu">
-            ♙
+          <button className="avatar" type="button" aria-label="Open account menu" disabled>
+            <Glyph>♙</Glyph>
           </button>
         </div>
       </header>
@@ -59,20 +67,20 @@ export default function Home() {
           <div className="rail-label">WORKSPACE MAP</div>
           <div className="rail-health">HEALTHY</div>
           <div className="rail-items">
-            <button type="button">
-              ✣ <span>Git Graph &amp; Staging</span>
+            <button type="button" disabled>
+              <Glyph>✣</Glyph> <span>Git Graph &amp; Staging</span>
             </button>
-            <button type="button">
-              ▣ <span>Agent Traces &amp; Stream</span>
+            <button type="button" disabled>
+              <Glyph>▣</Glyph> <span>Agent Traces &amp; Stream</span>
             </button>
-            <button className="rail-active" type="button">
-              ♟ <span>Staging Chamber</span>
+            <button className="rail-active" type="button" aria-current="page" disabled>
+              <Glyph>♟</Glyph> <span>Staging Chamber</span>
             </button>
-            <button type="button">
-              ◈ <span>Worktrees &amp; Locks</span>
+            <button type="button" disabled>
+              <Glyph>◈</Glyph> <span>Worktrees &amp; Locks</span>
             </button>
-            <button type="button">
-              ◷ <span>Audit Ledger</span>
+            <button type="button" disabled>
+              <Glyph>◷</Glyph> <span>Audit Ledger</span>
             </button>
           </div>
           <div className="rail-footer">
@@ -80,7 +88,9 @@ export default function Home() {
             <strong>ONLINE</strong>
             <span>Sandbox HEAD</span>
             <code>9b4ec8f</code>
-            <span>▣ &nbsp; STRICT LOCAL CONFINEMENT</span>
+            <span>
+              <Glyph>▣</Glyph> &nbsp; STRICT LOCAL CONFINEMENT
+            </span>
           </div>
         </nav>
         <aside className="repo-panel" aria-label="Repositories and Git lineage">
@@ -95,14 +105,15 @@ export default function Home() {
                   className={`session-row ${session.active ? 'session-active' : ''}`}
                   key={session.name}
                   type="button"
+                  disabled
                 >
-                  <span>{session.active ? '☑' : '□'}</span>
+                  <span aria-hidden="true">{session.active ? '☑' : '□'}</span>
                   <span>{session.name}</span>
                   {session.active && <StatusDot />}
                 </button>
               ))}
-              <button className="connect-row" type="button">
-                ＋ Connect a repo...
+              <button className="connect-row" type="button" disabled>
+                <Glyph>＋</Glyph> Connect a repo...
               </button>
             </div>
             <div className="lineage-title">
@@ -128,7 +139,9 @@ export default function Home() {
               <strong>TokenStore uncommitted</strong>
             </div>
             <div className="sandbox-card">
-              <b>♙ Sandbox Jail #89b2</b>
+              <b>
+                <Glyph>♙</Glyph> Sandbox Jail #89b2
+              </b>
               <StatusDot />
               <small>/tmp/surgeon-sandbox-89b2</small>
               <span>
@@ -193,7 +206,7 @@ export default function Home() {
             <div className="activity-list" aria-label="Agent activity">
               {activity.map((item) => (
                 <div className="activity-row" key={item.tool}>
-                  <span>▹</span>
+                  <Glyph>▹</Glyph>
                   <code>{item.tool}</code>
                   <span className="activity-detail">{item.detail}</span>
                   <strong>✓ {item.result}</strong>
@@ -210,7 +223,7 @@ export default function Home() {
               proposing patch revision 1, awaiting your approval...
             </div>
           </div>
-          <form className="composer">
+          <form className="composer" onSubmit={(event) => event.preventDefault()}>
             <div className="slash-hints">
               <kbd>/explain diff</kbd>
               <kbd>/run-fuzz-tests</kbd>
@@ -222,27 +235,47 @@ export default function Home() {
               placeholder="Instruct agent or type '/' for surgical tools..."
             />
             <div className="composer-controls">
-              <button type="button">● Claude 3.7 Sonnet (Local Agent)⌄</button>
-              <button className="abort" type="button">
-                ⊘ Abort [Esc]
+              <button
+                type="button"
+                disabled
+                aria-label="Model selector unavailable in static preview"
+              >
+                <Glyph>●</Glyph> Claude 3.7 Sonnet (Local Agent)⌄
               </button>
-              <button className="send" type="submit" aria-label="Send instruction">
-                ↑
+              <button className="abort" type="button" disabled>
+                <Glyph>⊘</Glyph> Abort [Esc]
+              </button>
+              <button
+                className="send"
+                type="submit"
+                aria-label="Send instruction (preview only)"
+                disabled
+              >
+                <Glyph>↑</Glyph>
               </button>
             </div>
           </form>
         </section>
         <section className="work-panel" aria-labelledby="work-panel-title">
+          <h2 className="sr-only" id="work-panel-title">
+            Work panel
+          </h2>
           <div className="work-toolbar">
             <div className="work-tabs" role="tablist" aria-label="Staging views">
-              <button type="button" role="tab" aria-selected="false">
-                ‹› Code
+              <button type="button" role="tab" aria-selected="false" disabled>
+                <Glyph>‹›</Glyph> Code
               </button>
-              <button type="button" role="tab" aria-selected="true" className="tab-selected">
-                ▣ Diff <span className="pending-pill">PENDING</span>
+              <button
+                type="button"
+                role="tab"
+                aria-selected="true"
+                className="tab-selected"
+                disabled
+              >
+                <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
               </button>
-              <button type="button" role="tab" aria-selected="false">
-                ▤ Tests <span className="pass-pill">14 PASS</span>
+              <button type="button" role="tab" aria-selected="false" disabled>
+                <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS</span>
               </button>
             </div>
             <span>
@@ -250,7 +283,9 @@ export default function Home() {
             </span>
           </div>
           <div className="file-heading" id="diff">
-            <strong>▤ &nbsp; auth/session.py</strong>
+            <strong>
+              <Glyph>▤</Glyph> &nbsp; auth/session.py
+            </strong>
             <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
           </div>
           <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
@@ -310,17 +345,21 @@ export default function Home() {
           </div>
           <div className="approval-panel">
             <p className="approval-status">
-              ⚠ WRITE PENDING - proposal has NOT touched local repository disk. &nbsp;{' '}
-              <small>REV 1 · SHA256: 4f8e...9a21</small>
+              <Glyph>⚠</Glyph> WRITE PENDING - proposal has NOT touched local repository disk.
+              &nbsp; <small>REV 1 · SHA256: 4f8e...9a21</small>
             </p>
             <div className="approval-actions">
-              <button type="button">ⓧ Reject</button>
-              <button type="button">☷ Request Changes</button>
-              <button type="button">
-                ↥ Apply to Branch <strong>fix/session-token-store</strong>
+              <button type="button" disabled>
+                <Glyph>ⓧ</Glyph> Reject
               </button>
-              <button type="button" className="approve-button">
-                ⚙ Approve &amp; Open PR
+              <button type="button" disabled>
+                <Glyph>☷</Glyph> Request Changes
+              </button>
+              <button type="button" disabled>
+                <Glyph>↥</Glyph> Apply to Branch <strong>fix/session-token-store</strong>
+              </button>
+              <button type="button" className="approve-button" disabled>
+                <Glyph>⚙</Glyph> Approve &amp; Open PR
               </button>
             </div>
           </div>

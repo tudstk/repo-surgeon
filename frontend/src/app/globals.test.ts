@@ -18,4 +18,12 @@ describe('viewport shell contract', () => {
     expect(shellRules).not.toMatch(/max-width:/);
     expect(gridRules).not.toMatch(/min-height:\s*730px/);
   });
+
+  it('keeps the four-panel grid within common desktop viewports', () => {
+    expect(gridRules).toMatch(/min-width:\s*0/);
+    expect(stylesheet).toMatch(/@media \(max-width: 1100px\)/);
+    expect(stylesheet).toMatch(
+      /grid-template-columns:\s*150px 210px minmax\(270px, 1fr\) minmax\(340px, 1fr\)/,
+    );
+  });
 });
