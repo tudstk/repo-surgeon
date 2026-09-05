@@ -68,7 +68,18 @@ describe('Home', () => {
 
   it('uses the stacked layout at the 960px tablet width', () => {
     const originalWidth = window.innerWidth;
+    const originalMatchMedia = window.matchMedia;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 960 });
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(max-width: 1024px)',
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
 
     render(<Home />);
 
@@ -78,5 +89,22 @@ describe('Home', () => {
     );
 
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
+    window.matchMedia = originalMatchMedia;
+  });
+
+  it('associates the complete workspace with its static-preview boundary', () => {
+    render(<Home />);
+
+    expect(screen.getByRole('main')).toHaveAccessibleDescription(
+      /entire workspace is an illustrative static preview/i,
+    );
+    expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByRole('option', { name: /Refactor session module/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
   });
 });

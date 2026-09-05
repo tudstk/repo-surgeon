@@ -26,4 +26,10 @@ describe('viewport shell contract', () => {
       /grid-template-columns:\s*150px 210px minmax\(270px, 1fr\) minmax\(340px, 1fr\)/,
     );
   });
+
+  it('fits the four-panel grid at the 1120px desktop boundary', () => {
+    expect(stylesheet).toMatch(
+      /@media \(max-width: 1200px\)[\s\S]*grid-template-columns:\s*160px 220px minmax\(280px, 1fr\) minmax\(360px, 1fr\)/,
+    );
+  });
 });

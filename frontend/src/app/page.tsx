@@ -33,9 +33,7 @@ function PanelHeading({ number, children }: { number: number; children: React.Re
 }
 
 function useStackedLayout() {
-  const [isStacked, setIsStacked] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth <= 1024 : false,
-  );
+  const [isStacked, setIsStacked] = useState(false);
 
   useEffect(() => {
     if (!window.matchMedia) return;
@@ -53,7 +51,7 @@ export default function Home() {
   const isStackedLayout = useStackedLayout();
 
   return (
-    <main className="workspace-shell">
+    <main className="workspace-shell" aria-describedby="workspace-preview-description">
       <header className="global-bar">
         <div className="brand-lockup">
           <span className="brand-mark">
@@ -418,7 +416,12 @@ export default function Home() {
         </section>
       </div>
       <h1 className="sr-only">Understand the code. Keep people in control.</h1>
-      <p className="sr-only">Apply by approval. Read-only sandbox with explicit human approval.</p>
+      <p className="sr-only" id="workspace-preview-description">
+        This entire workspace is an illustrative static preview. Repository, session, Git, sandbox,
+        telemetry, test, and approval values are representative only; disabled controls, timestamps,
+        and toolbar status do not describe live system state. The composer is read-only and cannot
+        send instructions.
+      </p>
     </main>
   );
 }
