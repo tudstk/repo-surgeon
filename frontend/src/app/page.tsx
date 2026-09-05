@@ -1,5 +1,9 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
+const STACKED_LAYOUT_QUERY = '(max-width: 1024px)';
+
 const sessions = [
   { name: 'payments-api', active: true },
   { name: 'web-dashboard', active: false },
@@ -28,7 +32,26 @@ function PanelHeading({ number, children }: { number: number; children: React.Re
   );
 }
 
+function useStackedLayout() {
+  const [isStacked, setIsStacked] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 1024 : false,
+  );
+
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mediaQuery = window.matchMedia(STACKED_LAYOUT_QUERY);
+    const updateLayout = () => setIsStacked(mediaQuery.matches);
+    updateLayout();
+    mediaQuery.addEventListener('change', updateLayout);
+    return () => mediaQuery.removeEventListener('change', updateLayout);
+  }, []);
+
+  return isStacked;
+}
+
 export default function Home() {
+  const isStackedLayout = useStackedLayout();
+
   return (
     <main className="workspace-shell">
       <header className="global-bar">
@@ -42,17 +65,18 @@ export default function Home() {
             <Glyph>▣</Glyph> &nbsp; acme/payments-api⌄
           </button>
           <span className="branch-context">
-            ⑂ &nbsp; main <b>3 behind</b> &nbsp;→&nbsp; <strong>fix/session-token-store</strong>
+            <Glyph>⑂</Glyph> &nbsp; main <b>3 behind</b> &nbsp;→&nbsp;{' '}
+            <strong>fix/session-token-store</strong>
           </span>
         </div>
         <div className="global-status">
           <span>
-            <StatusDot /> DAEMON: ACTIVE <small>pid: 40912</small>
+            <StatusDot /> DAEMON: ACTIVE (STATIC PREVIEW) <small>pid: 40912 (illustrative)</small>
           </span>
-          <span>♢ AIR-GAPPED VFS: ENFORCED</span>
-          <span className="churn">STAGING CHURN: +7 / -5</span>
+          <span>AIR-GAPPED VFS: ENFORCED (STATIC PREVIEW)</span>
+          <span className="churn">STAGING CHURN: +7 / -5 (STATIC PREVIEW)</span>
           <span className="read-only-badge">
-            <StatusDot /> READ-ONLY (SAFE SANDBOX)
+            <StatusDot /> READ-ONLY (SAFE SANDBOX) - STATIC PREVIEW
           </span>
           <button className="compact-button" type="button" disabled>
             <Glyph>▣</Glyph> Audit Log&nbsp; <Glyph>⌘K</Glyph>
@@ -62,7 +86,7 @@ export default function Home() {
           </button>
         </div>
       </header>
-      <div className="workspace-grid">
+      <div className="workspace-grid" data-layout={isStackedLayout ? 'stacked' : 'wide'}>
         <nav className="workspace-rail" aria-label="Workspace map">
           <div className="rail-label">WORKSPACE MAP</div>
           <div className="rail-health">HEALTHY</div>
@@ -84,12 +108,12 @@ export default function Home() {
             </button>
           </div>
           <div className="rail-footer">
-            <span>ENGINE DAEMON</span>
+            <span>ENGINE DAEMON (STATIC PREVIEW)</span>
             <strong>ONLINE</strong>
-            <span>Sandbox HEAD</span>
+            <span>Sandbox HEAD (STATIC PREVIEW)</span>
             <code>9b4ec8f</code>
             <span>
-              <Glyph>▣</Glyph> &nbsp; STRICT LOCAL CONFINEMENT
+              <Glyph>▣</Glyph> &nbsp; STRICT LOCAL CONFINEMENT (STATIC PREVIEW)
             </span>
           </div>
         </nav>
@@ -97,15 +121,18 @@ export default function Home() {
           <PanelHeading number={1}>Repos &amp; lineage</PanelHeading>
           <div className="repo-content">
             <div className="section-kicker">
-              CONNECTED REPOS <span>☷</span>
+              CONNECTED REPOS <Glyph>☷</Glyph>
             </div>
-            <div className="session-list">
+            <div className="session-list" role="listbox" aria-label="Connected repositories">
               {sessions.map((session) => (
                 <button
                   className={`session-row ${session.active ? 'session-active' : ''}`}
                   key={session.name}
                   type="button"
                   disabled
+                  aria-current={session.active ? 'true' : undefined}
+                  aria-selected={session.active}
+                  role="option"
                 >
                   <span aria-hidden="true">{session.active ? '☑' : '□'}</span>
                   <span>{session.name}</span>
@@ -140,19 +167,25 @@ export default function Home() {
             </div>
             <div className="sandbox-card">
               <b>
-                <Glyph>♙</Glyph> Sandbox Jail #89b2
+                <Glyph>♙</Glyph> Sandbox Jail #89b2 (STATIC PREVIEW)
               </b>
               <StatusDot />
-              <small>/tmp/surgeon-sandbox-89b2</small>
+              <small>/tmp/surgeon-sandbox-89b2 (illustrative path)</small>
               <span>
-                NETWORK: OFF <i /> COW-VFS: RDWR
+                NETWORK: OFF <i /> COW-VFS: RDWR (STATIC PREVIEW)
               </span>
             </div>
-            <div className="section-kicker context-kicker">THIS SESSION CONTEXT</div>
-            <div className="context-list">
-              <span>Where is auth handled?</span>
-              <span>Why do users get logged out?</span>
-              <b>
+            <div className="section-kicker context-kicker">
+              THIS SESSION CONTEXT (STATIC PREVIEW)
+            </div>
+            <div className="context-list" role="listbox" aria-label="Session context">
+              <span role="option" aria-selected="false">
+                Where is auth handled?
+              </span>
+              <span role="option" aria-selected="false">
+                Why do users get logged out?
+              </span>
+              <b role="option" aria-selected="true">
                 Refactor session module... <StatusDot tone="violet" />
               </b>
             </div>
@@ -185,7 +218,7 @@ export default function Home() {
           <PanelHeading number={2}>
             <span id="conversation-title">Conversation &amp; agent trace</span>
             <span className="stream-status">
-              <StatusDot /> STREAM ACTIVE
+              <StatusDot /> STREAM ACTIVE - STATIC PREVIEW
             </span>
           </PanelHeading>
           <div className="conversation-body">
@@ -341,12 +374,15 @@ export default function Home() {
           </div>
           <div className="test-result">
             <span className="test-dot" /> <strong>Sandbox Tests: 14 passing → 14 passing</strong>
-            <span>0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem: 64MB &nbsp; EXIT: 0</span>
+            <span>
+              Illustrative static preview: 0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem:
+              64MB &nbsp; EXIT: 0
+            </span>
           </div>
           <div className="approval-panel">
             <p className="approval-status">
-              <Glyph>⚠</Glyph> WRITE PENDING - proposal has NOT touched local repository disk.
-              &nbsp; <small>REV 1 · SHA256: 4f8e...9a21</small>
+              <Glyph>⚠</Glyph> WRITE PENDING (STATIC PREVIEW) - proposal has NOT touched local
+              repository disk. &nbsp; <small>REV 1 · SHA256: 4f8e...9a21</small>
             </p>
             <div className="approval-actions">
               <button type="button" disabled>

@@ -779,7 +779,7 @@ textarea:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   .workspace-shell {
     height: auto;
     min-height: 100dvh;

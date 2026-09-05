@@ -19,6 +19,14 @@ describe('Home', () => {
       'aria-current',
       'page',
     );
+    expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    expect(screen.getByRole('option', { name: /Refactor session module/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
     expect(screen.getByText(/WRITE PENDING/i)).toBeInTheDocument();
     expect(screen.getByText(/NOT touched local repository disk/i)).toBeInTheDocument();
     expect(screen.getByText(/Sandbox Tests: 14 passing/i)).toBeInTheDocument();
@@ -35,5 +43,19 @@ describe('Home', () => {
     const form = composer.closest('form');
     expect(form).not.toBeNull();
     fireEvent.submit(form!);
+  });
+
+  it('uses the stacked layout at the 960px tablet width', () => {
+    const originalWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 960 });
+
+    render(<Home />);
+
+    expect(screen.getByRole('main').querySelector('.workspace-grid')).toHaveAttribute(
+      'data-layout',
+      'stacked',
+    );
+
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
   });
 });
