@@ -18,6 +18,7 @@
 html,
 body {
   min-height: 100%;
+  height: 100%;
 }
 body {
   margin: 0;
@@ -37,12 +38,13 @@ a:focus-visible {
   outline-offset: 3px;
 }
 .workspace-shell {
-  min-height: 100vh;
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 34px 28px 56px;
+  min-height: 100dvh;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 .workspace-header {
+  flex: 0 0 auto;
   min-height: 62px;
   display: flex;
   align-items: center;
@@ -50,7 +52,7 @@ a:focus-visible {
   gap: 20px;
   padding: 0 20px;
   border: 1px solid var(--line);
-  border-radius: 14px 14px 0 0;
+  border-radius: 0;
   background: #11161d;
 }
 .brand-lockup,
@@ -113,8 +115,9 @@ a:focus-visible {
 }
 .workspace-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 23%) minmax(330px, 35%) minmax(420px, 42%);
-  min-height: 730px;
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-template-columns: minmax(220px, 23fr) minmax(330px, 35fr) minmax(420px, 42fr);
   border: 1px solid var(--line);
   border-top: 0;
   background: var(--panel);
@@ -123,7 +126,8 @@ a:focus-visible {
 .conversation,
 .work-panel {
   min-width: 0;
-  overflow: hidden;
+  min-height: 0;
+  overflow: auto;
 }
 .sidebar,
 .conversation {
@@ -462,9 +466,6 @@ a:focus-visible {
   border: 0;
 }
 @media (max-width: 900px) {
-  .workspace-shell {
-    padding: 16px 10px 30px;
-  }
   .workspace-header {
     align-items: flex-start;
     flex-direction: column;
@@ -483,6 +484,7 @@ a:focus-visible {
   }
   .workspace-grid {
     grid-template-columns: 1fr;
+    flex: 0 0 auto;
   }
   .sidebar,
   .conversation {
@@ -501,9 +503,6 @@ a:focus-visible {
   .branch-name,
   .header-separator {
     display: none;
-  }
-  .workspace-grid {
-    min-width: 0;
   }
   .activity-row {
     grid-template-columns: 12px max-content minmax(0, 1fr);
