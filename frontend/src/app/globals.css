@@ -754,11 +754,15 @@ textarea:focus-visible {
   white-space: nowrap;
   border: 0;
 }
-@media (max-width: 1260px) {
+/* Keep the priority header controls visible while compacting telemetry before
+   the full status row can collide with the repository context. */
+@media (max-width: 1500px) {
   .global-status > span:not(.read-only-badge),
   .branch-context {
     display: none;
   }
+}
+@media (max-width: 1260px) {
   .workspace-grid {
     grid-template-columns: 160px 220px minmax(280px, 1fr) minmax(360px, 1fr);
   }

@@ -33,6 +33,15 @@ describe('viewport shell contract', () => {
     );
   });
 
+  it('compacts the global header before the 1261px transition can clip it', () => {
+    const compactHeaderRules =
+      stylesheet.match(/@media \(max-width: 1500px\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+
+    expect(compactHeaderRules).toMatch(/\.global-status > span:not\(\.read-only-badge\)/);
+    expect(compactHeaderRules).toMatch(/\.branch-context/);
+    expect(compactHeaderRules.match(/display:\s*none/g)).toHaveLength(1);
+  });
+
   it('keeps the compact grid within the 1220px viewport', () => {
     const compactMinimums = 160 + 220 + 280 + 360;
 

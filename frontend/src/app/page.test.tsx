@@ -20,8 +20,11 @@ describe('Home', () => {
       'page',
     );
     expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
-      'aria-current',
+      'aria-selected',
       'true',
+    );
+    expect(screen.getByRole('option', { name: 'payments-api' })).not.toHaveAttribute(
+      'aria-current',
     );
     expect(screen.getByRole('option', { name: /Refactor session module/ })).toHaveAttribute(
       'aria-selected',

@@ -130,7 +130,6 @@ export default function Home() {
                   key={session.name}
                   type="button"
                   disabled
-                  aria-current={session.active ? 'true' : undefined}
                   aria-selected={session.active}
                   role="option"
                 >
