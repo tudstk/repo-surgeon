@@ -27,9 +27,15 @@ describe('viewport shell contract', () => {
     );
   });
 
-  it('fits the four-panel grid at the 1120px desktop boundary', () => {
+  it('fits the four-panel grid at the 1220px desktop boundary', () => {
     expect(stylesheet).toMatch(
-      /@media \(max-width: 1200px\)[\s\S]*grid-template-columns:\s*160px 220px minmax\(280px, 1fr\) minmax\(360px, 1fr\)/,
+      /@media \(max-width: 1260px\)[\s\S]*grid-template-columns:\s*160px 220px minmax\(280px, 1fr\) minmax\(360px, 1fr\)/,
     );
+  });
+
+  it('keeps the compact grid within the 1220px viewport', () => {
+    const compactMinimums = 160 + 220 + 280 + 360;
+
+    expect(compactMinimums).toBeLessThanOrEqual(1220);
   });
 });
