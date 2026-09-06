@@ -17,6 +17,7 @@ const activity = [
 
 const SEPARATOR_SIZE = 8;
 const DEFAULT_PANE_WIDTHS = [200, 260, 400, 556];
+const DEFAULT_PANE_MINIMUMS = [180, 220, 320, 400];
 const PANE_LABELS = [
   'Workspace map',
   'Repositories and Git lineage',
@@ -32,8 +33,7 @@ function paneMinimums(viewportWidth: number) {
   return [180, 220, 320, 400];
 }
 
-function fitPaneWidths(widths: number[], availableWidth: number) {
-  const minimums = paneMinimums(availableWidth);
+function fitPaneWidths(widths: number[], availableWidth: number, minimums: number[]) {
   const availablePanes = Math.max(
     minimums.reduce((sum, width) => sum + width, 0),
     availableWidth - SEPARATOR_SIZE * 3,
@@ -90,17 +90,18 @@ function useStackedLayout() {
 function PaneSeparator({
   index,
   widths,
+  minimums,
   setWidths,
 }: {
   index: number;
   widths: number[] | null;
+  minimums: number[];
   setWidths: (index: number, delta: number) => void;
 }) {
   const dragStart = useRef<{ x: number } | null>(null);
   const stopDraggingRef = useRef<() => void>(() => undefined);
   const label = `Resize ${PANE_LABELS[index]} and ${PANE_LABELS[index + 1]}`;
   const currentWidths = widths ?? DEFAULT_PANE_WIDTHS;
-  const minimums = paneMinimums(typeof window === 'undefined' ? 1440 : window.innerWidth);
   const available = Math.max(
     minimums[index] + minimums[index + 1],
     currentWidths[index] + currentWidths[index + 1],
@@ -177,15 +178,20 @@ export default function Home() {
   const isStackedLayout = useStackedLayout();
   const gridRef = useRef<HTMLDivElement>(null);
   const [paneWidths, setPaneWidths] = useState<number[] | null>(null);
+  const [paneMinimumBands, setPaneMinimumBands] = useState(DEFAULT_PANE_MINIMUMS);
 
   useEffect(() => {
     const grid = gridRef.current;
     if (!grid) return;
 
     const syncWidths = () => {
+      const nextMinimums = paneMinimums(window.innerWidth);
+      setPaneMinimumBands(nextMinimums);
       const availableWidth = grid.getBoundingClientRect().width;
       if (!availableWidth || isStackedLayout) return;
-      setPaneWidths((current) => fitPaneWidths(current ?? DEFAULT_PANE_WIDTHS, availableWidth));
+      setPaneWidths((current) =>
+        fitPaneWidths(current ?? DEFAULT_PANE_WIDTHS, availableWidth, nextMinimums),
+      );
     };
 
     syncWidths();
@@ -195,19 +201,20 @@ export default function Home() {
     return () => observer.disconnect();
   }, [isStackedLayout]);
 
-  const resizePanes = useCallback((index: number, delta: number) => {
-    setPaneWidths((current) => {
-      const next = [...(current ?? DEFAULT_PANE_WIDTHS)];
-      const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth;
-      const minimums = paneMinimums(viewportWidth);
-      const maxDelta = next[index + 1] - minimums[index + 1];
-      const minDelta = minimums[index] - next[index];
-      const boundedDelta = Math.max(minDelta, Math.min(maxDelta, delta));
-      next[index] += boundedDelta;
-      next[index + 1] -= boundedDelta;
-      return next;
-    });
-  }, []);
+  const resizePanes = useCallback(
+    (index: number, delta: number) => {
+      setPaneWidths((current) => {
+        const next = [...(current ?? DEFAULT_PANE_WIDTHS)];
+        const maxDelta = next[index + 1] - paneMinimumBands[index + 1];
+        const minDelta = paneMinimumBands[index] - next[index];
+        const boundedDelta = Math.max(minDelta, Math.min(maxDelta, delta));
+        next[index] += boundedDelta;
+        next[index + 1] -= boundedDelta;
+        return next;
+      });
+    },
+    [paneMinimumBands],
+  );
 
   const gridStyle = paneWidths
     ? {
@@ -294,7 +301,12 @@ export default function Home() {
           </div>
         </nav>
         {!isStackedLayout && (
-          <PaneSeparator index={0} widths={paneWidths} setWidths={resizePanes} />
+          <PaneSeparator
+            index={0}
+            widths={paneWidths}
+            minimums={paneMinimumBands}
+            setWidths={resizePanes}
+          />
         )}
         <aside className="repo-panel" aria-label="Repositories and Git lineage">
           <PanelHeading number={1}>Repos &amp; lineage</PanelHeading>
@@ -397,7 +409,12 @@ export default function Home() {
           </section>
         </aside>
         {!isStackedLayout && (
-          <PaneSeparator index={1} widths={paneWidths} setWidths={resizePanes} />
+          <PaneSeparator
+            index={1}
+            widths={paneWidths}
+            minimums={paneMinimumBands}
+            setWidths={resizePanes}
+          />
         )}
         <section className="conversation" aria-labelledby="conversation-title">
           <PanelHeading number={2}>
@@ -482,7 +499,12 @@ export default function Home() {
           </form>
         </section>
         {!isStackedLayout && (
-          <PaneSeparator index={2} widths={paneWidths} setWidths={resizePanes} />
+          <PaneSeparator
+            index={2}
+            widths={paneWidths}
+            minimums={paneMinimumBands}
+            setWidths={resizePanes}
+          />
         )}
         <section className="work-panel" aria-labelledby="work-panel-title">
           <h2 className="sr-only" id="work-panel-title">

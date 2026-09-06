@@ -1,4 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { hydrateRoot } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 
 import Home from './page';
 
@@ -199,4 +201,45 @@ describe('Home', () => {
       'true',
     );
   });
+
+  it.each([1025, 1100, 1101, 1284, 1440])(
+    'hydrates without changing separator markup at %dpx before layout synchronization',
+    async (viewportWidth) => {
+      const originalWidth = window.innerWidth;
+      const originalMatchMedia = window.matchMedia;
+      const originalError = console.error;
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+      window.matchMedia = ((query: string) => ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        dispatchEvent: () => false,
+      })) as typeof window.matchMedia;
+      const errors: unknown[] = [];
+      console.error = (...args: unknown[]) => errors.push(args);
+
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      const serverMarkup = renderToString(<Home />);
+      expect(serverMarkup).toContain('role="separator"');
+      container.innerHTML = serverMarkup;
+      let root: ReturnType<typeof hydrateRoot>;
+      await act(async () => {
+        root = hydrateRoot(container, <Home />);
+        await Promise.resolve();
+      });
+
+      expect(errors).toEqual([]);
+      expect(container.querySelectorAll('[role="separator"]')).toHaveLength(3);
+      root!.unmount();
+      container.remove();
+      console.error = originalError;
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
+      window.matchMedia = originalMatchMedia;
+    },
+  );
 });
