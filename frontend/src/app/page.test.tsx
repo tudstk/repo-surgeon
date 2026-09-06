@@ -127,6 +127,63 @@ describe('Home', () => {
     );
   });
 
+  it.each([1285, 1440])(
+    'keeps all three separators interactive at %dpx and conserves each adjacent pair',
+    (viewportWidth) => {
+      const originalWidth = window.innerWidth;
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: viewportWidth });
+      render(<Home />);
+
+      const separators = screen.getAllByRole('separator');
+      expect(separators).toHaveLength(3);
+
+      for (const separator of separators) {
+        const min = Number(separator.getAttribute('aria-valuemin'));
+        const max = Number(separator.getAttribute('aria-valuemax'));
+        expect(max).toBeGreaterThan(min);
+
+        const initial = Number(separator.getAttribute('aria-valuenow'));
+        fireEvent.keyDown(separator, { key: 'ArrowRight' });
+        expect(Number(separator.getAttribute('aria-valuenow'))).toBeGreaterThan(initial);
+
+        fireEvent.keyDown(separator, { key: 'Home' });
+        expect(separator).toHaveAttribute('aria-valuenow', String(min));
+        fireEvent.keyDown(separator, { key: 'End' });
+        expect(separator).toHaveAttribute('aria-valuenow', String(max));
+
+        const beforeDrag = Number(separator.getAttribute('aria-valuenow'));
+        fireEvent.pointerDown(separator, { clientX: 400 });
+        fireEvent.pointerMove(window, { clientX: 420 });
+        fireEvent.pointerUp(window);
+        expect(Number(separator.getAttribute('aria-valuenow'))).toBeGreaterThanOrEqual(beforeDrag);
+        expect(Number(separator.getAttribute('aria-valuenow'))).toBeLessThanOrEqual(max);
+      }
+
+      for (const separator of separators) {
+        const current = Number(separator.getAttribute('aria-valuenow'));
+        expect(current).toBeGreaterThanOrEqual(Number(separator.getAttribute('aria-valuemin')));
+        expect(current).toBeLessThanOrEqual(Number(separator.getAttribute('aria-valuemax')));
+      }
+
+      Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
+    },
+  );
+
+  it('cleans pointer listeners on cancellation and unmount', () => {
+    const { unmount } = render(<Home />);
+    const separator = screen.getAllByRole('separator')[0];
+
+    fireEvent.pointerDown(separator, { clientX: 100 });
+    fireEvent.pointerCancel(window);
+    fireEvent.pointerMove(window, { clientX: 500 });
+    expect(separator).toHaveAttribute('aria-valuenow', '200');
+
+    fireEvent.pointerDown(separator, { clientX: 100 });
+    unmount();
+    fireEvent.pointerMove(window, { clientX: 500 });
+    fireEvent.pointerUp(window);
+  });
+
   it('associates the complete workspace with its static-preview boundary', () => {
     render(<Home />);
 

@@ -61,4 +61,8 @@ describe('viewport shell contract', () => {
       /@media \(max-width: 1024px\)[\s\S]*\.pane-separator\s*\{[\s\S]*display:\s*none/,
     );
   });
+
+  it('keeps wide desktop pane minimums movable at the 1285px boundary', () => {
+    expect(180 + 220 + 320 + 400 + 8 * 3).toBeLessThanOrEqual(1285);
+  });
 });

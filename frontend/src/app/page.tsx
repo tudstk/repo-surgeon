@@ -27,7 +27,9 @@ const PANE_LABELS = [
 function paneMinimums(viewportWidth: number) {
   if (viewportWidth <= 1100) return [150, 210, 270, 340];
   if (viewportWidth <= 1284) return [160, 220, 280, 360];
-  return [200, 260, 360, 440];
+  // Leave enough surplus at wide desktop sizes for every adjacent pair to
+  // resize, while keeping the conversation and diff panes readable.
+  return [180, 220, 320, 400];
 }
 
 function fitPaneWidths(widths: number[], availableWidth: number) {
@@ -95,6 +97,7 @@ function PaneSeparator({
   setWidths: (index: number, delta: number) => void;
 }) {
   const dragStart = useRef<{ x: number } | null>(null);
+  const stopDraggingRef = useRef<() => void>(() => undefined);
   const label = `Resize ${PANE_LABELS[index]} and ${PANE_LABELS[index + 1]}`;
   const currentWidths = widths ?? DEFAULT_PANE_WIDTHS;
   const minimums = paneMinimums(typeof window === 'undefined' ? 1440 : window.innerWidth);
@@ -115,6 +118,23 @@ function PaneSeparator({
     },
     [index, setWidths],
   );
+
+  const stopDragging = useCallback(() => {
+    dragStart.current = null;
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', stopDraggingRef.current);
+    window.removeEventListener('pointercancel', stopDraggingRef.current);
+  }, [onPointerMove]);
+
+  useEffect(() => {
+    stopDraggingRef.current = stopDragging;
+    return () => {
+      dragStart.current = null;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', stopDragging);
+      window.removeEventListener('pointercancel', stopDragging);
+    };
+  }, [onPointerMove, stopDragging]);
 
   return (
     <div
@@ -143,16 +163,11 @@ function PaneSeparator({
       }}
       onPointerDown={(event) => {
         event.preventDefault();
+        stopDragging();
         dragStart.current = { x: event.clientX };
         window.addEventListener('pointermove', onPointerMove);
-        window.addEventListener(
-          'pointerup',
-          () => {
-            dragStart.current = null;
-            window.removeEventListener('pointermove', onPointerMove);
-          },
-          { once: true },
-        );
+        window.addEventListener('pointerup', stopDragging);
+        window.addEventListener('pointercancel', stopDragging);
       }}
     />
   );
