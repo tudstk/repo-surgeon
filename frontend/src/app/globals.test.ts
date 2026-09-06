@@ -23,13 +23,13 @@ describe('viewport shell contract', () => {
     expect(gridRules).toMatch(/min-width:\s*0/);
     expect(stylesheet).toMatch(/@media \(max-width: 1100px\)/);
     expect(stylesheet).toMatch(
-      /grid-template-columns:\s*150px 210px minmax\(270px, 1fr\) minmax\(340px, 1fr\)/,
+      /grid-template-columns:\s*150px 8px 210px 8px minmax\(270px, 1fr\) 8px minmax\(340px, 1fr\)/,
     );
   });
 
   it('fits the four-panel grid at the 1220px desktop boundary', () => {
     expect(stylesheet).toMatch(
-      /@media \(max-width: 1260px\)[\s\S]*grid-template-columns:\s*160px 220px minmax\(280px, 1fr\) minmax\(360px, 1fr\)/,
+      /@media \(max-width: 1284px\)[\s\S]*grid-template-columns:\s*160px 8px 220px 8px minmax\(280px, 1fr\) 8px minmax\(360px, 1fr\)/,
     );
   });
 
@@ -51,6 +51,14 @@ describe('viewport shell contract', () => {
   it('contains the work toolbar and file metadata in the narrow desktop band', () => {
     expect(stylesheet).toMatch(
       /@media \(min-width: 1025px\) and \(max-width: 1100px\)[\s\S]*\.work-toolbar[\s\S]*flex-wrap:\s*wrap[\s\S]*\.work-tabs[\s\S]*overflow-x:\s*auto[\s\S]*\.work-toolbar > span[\s\S]*white-space:\s*normal[\s\S]*\.file-heading[\s\S]*flex-wrap:\s*wrap[\s\S]*\.file-heading span[\s\S]*overflow-wrap:\s*anywhere/,
+    );
+  });
+
+  it('reserves bounded splitter tracks only for the desktop layout', () => {
+    expect(stylesheet).toMatch(/grid-template-columns:\s*200px 8px 260px 8px/);
+    expect(stylesheet).toMatch(/\.pane-separator[\s\S]*touch-action:\s*none/);
+    expect(stylesheet).toMatch(
+      /@media \(max-width: 1024px\)[\s\S]*\.pane-separator\s*\{[\s\S]*display:\s*none/,
     );
   });
 });

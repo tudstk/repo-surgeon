@@ -101,9 +101,30 @@ describe('Home', () => {
       'data-layout',
       'stacked',
     );
+    expect(screen.queryAllByRole('separator')).toHaveLength(0);
 
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
     window.matchMedia = originalMatchMedia;
+  });
+
+  it('resizes adjacent panes with bounded pointer and keyboard input', () => {
+    render(<Home />);
+
+    const firstSeparator = screen.getByRole('separator', {
+      name: 'Resize Workspace map and Repositories and Git lineage',
+    });
+    expect(firstSeparator).toHaveAttribute('aria-valuenow', '200');
+
+    fireEvent.keyDown(firstSeparator, { key: 'ArrowRight' });
+    expect(firstSeparator).toHaveAttribute('aria-valuenow', '216');
+
+    fireEvent.pointerDown(firstSeparator, { clientX: 100 });
+    fireEvent.pointerMove(window, { clientX: 500 });
+    fireEvent.pointerUp(window);
+    expect(firstSeparator).toHaveAttribute('aria-valuenow', '250');
+    expect(Number(firstSeparator.getAttribute('aria-valuenow'))).toBeLessThanOrEqual(
+      Number(firstSeparator.getAttribute('aria-valuemax')),
+    );
   });
 
   it('associates the complete workspace with its static-preview boundary', () => {

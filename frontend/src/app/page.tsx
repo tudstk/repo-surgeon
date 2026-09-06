@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const STACKED_LAYOUT_QUERY = '(max-width: 1024px)';
 
@@ -14,6 +14,44 @@ const activity = [
   { tool: 'read_file', detail: 'auth/session.py:40–118', result: '78 LOC', time: '12ms' },
   { tool: 'run_tests', detail: 'pytest tests/test_session.py', result: '14 pass', time: '2.4s' },
 ] as const;
+
+const SEPARATOR_SIZE = 8;
+const DEFAULT_PANE_WIDTHS = [200, 260, 400, 556];
+const PANE_LABELS = [
+  'Workspace map',
+  'Repositories and Git lineage',
+  'Conversation and agent trace',
+  'Work panel',
+];
+
+function paneMinimums(viewportWidth: number) {
+  if (viewportWidth <= 1100) return [150, 210, 270, 340];
+  if (viewportWidth <= 1284) return [160, 220, 280, 360];
+  return [200, 260, 360, 440];
+}
+
+function fitPaneWidths(widths: number[], availableWidth: number) {
+  const minimums = paneMinimums(availableWidth);
+  const availablePanes = Math.max(
+    minimums.reduce((sum, width) => sum + width, 0),
+    availableWidth - SEPARATOR_SIZE * 3,
+  );
+  const desired = widths.map((width, index) => Math.max(width, minimums[index]));
+  const desiredTotal = desired.reduce((sum, width) => sum + width, 0);
+
+  if (desiredTotal <= availablePanes) {
+    desired[3] += availablePanes - desiredTotal;
+    return desired;
+  }
+
+  const reducible = desired.map((width, index) => width - minimums[index]);
+  const reduction = desiredTotal - availablePanes;
+  const reducibleTotal = reducible.reduce((sum, width) => sum + width, 0);
+  return desired.map(
+    (width, index) =>
+      width - (reducibleTotal ? (reducible[index] / reducibleTotal) * reduction : 0),
+  );
+}
 
 function StatusDot({ tone = 'green' }: { tone?: 'green' | 'violet' }) {
   return <span className={`status-dot status-dot-${tone}`} aria-hidden="true" />;
@@ -47,8 +85,126 @@ function useStackedLayout() {
   return isStacked;
 }
 
+function PaneSeparator({
+  index,
+  widths,
+  setWidths,
+}: {
+  index: number;
+  widths: number[] | null;
+  setWidths: (index: number, delta: number) => void;
+}) {
+  const dragStart = useRef<{ x: number } | null>(null);
+  const label = `Resize ${PANE_LABELS[index]} and ${PANE_LABELS[index + 1]}`;
+  const currentWidths = widths ?? DEFAULT_PANE_WIDTHS;
+  const minimums = paneMinimums(typeof window === 'undefined' ? 1440 : window.innerWidth);
+  const available = Math.max(
+    minimums[index] + minimums[index + 1],
+    currentWidths[index] + currentWidths[index + 1],
+  );
+  const value = Math.round(currentWidths[index]);
+  const min = minimums[index];
+  const max = Math.max(min, Math.round(available - minimums[index + 1]));
+
+  const onPointerMove = useCallback(
+    (event: PointerEvent) => {
+      if (!dragStart.current) return;
+      const delta = event.clientX - dragStart.current.x;
+      dragStart.current.x = event.clientX;
+      setWidths(index, delta);
+    },
+    [index, setWidths],
+  );
+
+  return (
+    <div
+      className="pane-separator"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={value}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowLeft') {
+          event.preventDefault();
+          setWidths(index, -16);
+        } else if (event.key === 'ArrowRight') {
+          event.preventDefault();
+          setWidths(index, 16);
+        } else if (event.key === 'Home') {
+          event.preventDefault();
+          setWidths(index, min - value);
+        } else if (event.key === 'End') {
+          event.preventDefault();
+          setWidths(index, max - value);
+        }
+      }}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        dragStart.current = { x: event.clientX };
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener(
+          'pointerup',
+          () => {
+            dragStart.current = null;
+            window.removeEventListener('pointermove', onPointerMove);
+          },
+          { once: true },
+        );
+      }}
+    />
+  );
+}
+
 export default function Home() {
   const isStackedLayout = useStackedLayout();
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [paneWidths, setPaneWidths] = useState<number[] | null>(null);
+
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    const syncWidths = () => {
+      const availableWidth = grid.getBoundingClientRect().width;
+      if (!availableWidth || isStackedLayout) return;
+      setPaneWidths((current) => fitPaneWidths(current ?? DEFAULT_PANE_WIDTHS, availableWidth));
+    };
+
+    syncWidths();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(syncWidths);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [isStackedLayout]);
+
+  const resizePanes = useCallback((index: number, delta: number) => {
+    setPaneWidths((current) => {
+      const next = [...(current ?? DEFAULT_PANE_WIDTHS)];
+      const viewportWidth = typeof window === 'undefined' ? 1440 : window.innerWidth;
+      const minimums = paneMinimums(viewportWidth);
+      const maxDelta = next[index + 1] - minimums[index + 1];
+      const minDelta = minimums[index] - next[index];
+      const boundedDelta = Math.max(minDelta, Math.min(maxDelta, delta));
+      next[index] += boundedDelta;
+      next[index + 1] -= boundedDelta;
+      return next;
+    });
+  }, []);
+
+  const gridStyle = paneWidths
+    ? {
+        gridTemplateColumns: paneWidths
+          .flatMap((width, index) =>
+            index === paneWidths.length - 1
+              ? [`${width}px`]
+              : [`${width}px`, `${SEPARATOR_SIZE}px`],
+          )
+          .join(' '),
+      }
+    : undefined;
 
   return (
     <main className="workspace-shell" aria-describedby="workspace-preview-description">
@@ -84,7 +240,12 @@ export default function Home() {
           </button>
         </div>
       </header>
-      <div className="workspace-grid" data-layout={isStackedLayout ? 'stacked' : 'wide'}>
+      <div
+        className="workspace-grid"
+        data-layout={isStackedLayout ? 'stacked' : 'wide'}
+        ref={gridRef}
+        style={gridStyle}
+      >
         <nav className="workspace-rail" aria-label="Workspace map">
           <div className="rail-label">WORKSPACE MAP</div>
           <div className="rail-health" aria-label="Health: illustrative static preview">
@@ -117,6 +278,9 @@ export default function Home() {
             </span>
           </div>
         </nav>
+        {!isStackedLayout && (
+          <PaneSeparator index={0} widths={paneWidths} setWidths={resizePanes} />
+        )}
         <aside className="repo-panel" aria-label="Repositories and Git lineage">
           <PanelHeading number={1}>Repos &amp; lineage</PanelHeading>
           <div className="repo-content">
@@ -217,6 +381,9 @@ export default function Home() {
             </dl>
           </section>
         </aside>
+        {!isStackedLayout && (
+          <PaneSeparator index={1} widths={paneWidths} setWidths={resizePanes} />
+        )}
         <section className="conversation" aria-labelledby="conversation-title">
           <PanelHeading number={2}>
             <span id="conversation-title">Conversation &amp; agent trace</span>
@@ -299,6 +466,9 @@ export default function Home() {
             </div>
           </form>
         </section>
+        {!isStackedLayout && (
+          <PaneSeparator index={2} widths={paneWidths} setWidths={resizePanes} />
+        )}
         <section className="work-panel" aria-labelledby="work-panel-title">
           <h2 className="sr-only" id="work-panel-title">
             Work panel
