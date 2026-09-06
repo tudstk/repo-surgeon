@@ -47,4 +47,10 @@ describe('viewport shell contract', () => {
 
     expect(compactMinimums).toBeLessThanOrEqual(1220);
   });
+
+  it('contains the work toolbar and file metadata in the narrow desktop band', () => {
+    expect(stylesheet).toMatch(
+      /@media \(min-width: 1025px\) and \(max-width: 1100px\)[\s\S]*\.work-toolbar[\s\S]*flex-wrap:\s*wrap[\s\S]*\.work-tabs[\s\S]*overflow-x:\s*auto[\s\S]*\.work-toolbar > span[\s\S]*white-space:\s*normal[\s\S]*\.file-heading[\s\S]*flex-wrap:\s*wrap[\s\S]*\.file-heading span[\s\S]*overflow-wrap:\s*anywhere/,
+    );
+  });
 });

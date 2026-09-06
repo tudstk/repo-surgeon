@@ -69,6 +69,17 @@ describe('Home', () => {
     expect(screen.getByText(/Sandbox Tests: 14 passing/)).toHaveTextContent('STATIC PREVIEW');
   });
 
+  it('hides commit nodes from assistive technology because they are decorative', () => {
+    render(<Home />);
+
+    expect(
+      screen
+        .getAllByRole('generic', { hidden: true })
+        .filter((element) => element.matches('.commit > i')),
+    ).toHaveLength(2);
+    expect(document.querySelectorAll('.commit > i[aria-hidden="true"]')).toHaveLength(2);
+  });
+
   it('uses the stacked layout at the 960px tablet width', () => {
     const originalWidth = window.innerWidth;
     const originalMatchMedia = window.matchMedia;

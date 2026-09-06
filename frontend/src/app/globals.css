@@ -784,6 +784,41 @@ textarea:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+/* The work panel is the narrowest desktop track in this band. Let its
+   navigation and file metadata form deliberate secondary rows instead of
+   clipping their labels behind the panel boundary. */
+@media (min-width: 1025px) and (max-width: 1100px) {
+  .work-toolbar {
+    height: auto;
+    min-height: 34px;
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+  .work-tabs {
+    flex: 1 1 100%;
+    min-width: 0;
+    overflow-x: auto;
+  }
+  .work-toolbar > span {
+    flex: 1 1 100%;
+    min-width: 0;
+    padding: 5px 10px;
+    text-align: right;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .file-heading {
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    overflow-wrap: anywhere;
+  }
+  .file-heading span {
+    flex: 1 1 100%;
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
 @media (max-width: 1024px) {
   .workspace-shell {
     height: auto;

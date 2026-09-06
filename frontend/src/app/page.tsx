@@ -147,13 +147,13 @@ export default function Home() {
             </div>
             <div className="lineage">
               <div className="commit">
-                <i />
+                <i aria-hidden="true" />
                 <code>a4f81c (PREVIEW)</code>
                 <span>origin/main (PREVIEW)</span>
                 <small>feat: token schema (PREVIEW)</small>
               </div>
               <div className="commit current">
-                <i />
+                <i aria-hidden="true" />
                 <code>89b21e (PREVIEW)</code>
                 <em>HEAD (PREVIEW)</em>
                 <small>draft: storage contract (PREVIEW)</small>
