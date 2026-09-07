@@ -1,5 +1,32 @@
 # repo-surgeon
 
+## Quality checks
+
+GitHub Actions runs the backend and frontend quality gates independently on every
+push and pull request. The checks use the committed lockfiles and do not require a
+model API key or external services.
+
+Run the same checks locally from each project directory:
+
+```sh
+cd backend
+uv sync --locked
+uv run ruff format --check .
+uv run ruff check .
+uv run mypy src tests
+uv run pytest
+```
+
+```sh
+cd frontend
+pnpm install --frozen-lockfile
+pnpm format:check
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
 ## Local PostgreSQL
 
 The development database runs in Docker Compose with a named volume and is bound to
