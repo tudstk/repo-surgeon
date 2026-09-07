@@ -12,6 +12,15 @@ const shellRules = stylesheet.match(/\.workspace-shell\s*\{([^}]*)\}/)?.[1] ?? '
 const gridRules = stylesheet.match(/\.workspace-grid\s*\{([^}]*)\}/)?.[1] ?? '';
 
 describe('viewport shell contract', () => {
+  it('polishes enabled controls while preserving reduced-motion behavior', () => {
+    expect(stylesheet).toMatch(/button:not\(:disabled\),\s*a\s*\{[\s\S]*transition:/);
+    expect(stylesheet).toMatch(/@media \(prefers-reduced-motion: reduce\)/);
+    expect(stylesheet).toMatch(
+      /button:not\(:disabled\):hover,[\s\S]*transform: translateY\(-1px\)/,
+    );
+    expect(stylesheet).toMatch(/button:disabled\s*\{[\s\S]*cursor: default/);
+  });
+
   it('keeps the application shell free of screenshot-frame constraints', () => {
     expect(shellRules).toMatch(/min-height:\s*100dvh/);
     expect(shellRules).toMatch(/height:\s*100%/);

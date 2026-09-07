@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 const STACKED_LAYOUT_QUERY = '(max-width: 1024px)';
@@ -229,7 +230,7 @@ export default function Home() {
     : undefined;
 
   return (
-    <main className="workspace-shell" aria-describedby="workspace-preview-description">
+    <main className="workspace-shell">
       <header className="global-bar">
         <div className="brand-lockup">
           <span className="brand-mark">
@@ -241,18 +242,18 @@ export default function Home() {
             <Glyph>▣</Glyph> &nbsp; acme/payments-api <Glyph>⌄</Glyph>
           </button>
           <span className="branch-context">
-            <Glyph>⑂</Glyph> &nbsp; main <b>3 behind (PREVIEW)</b> &nbsp;<Glyph>→</Glyph>&nbsp;{' '}
+            <Glyph>⑂</Glyph> &nbsp; main <b>3 behind</b> &nbsp;<Glyph>→</Glyph>&nbsp;{' '}
             <strong>fix/session-token-store</strong>
           </span>
         </div>
         <div className="global-status">
           <span>
-            <StatusDot /> DAEMON: ACTIVE (STATIC PREVIEW) <small>pid: 40912 (illustrative)</small>
+            <StatusDot /> DAEMON: ACTIVE <small>pid: 40912</small>
           </span>
-          <span>AIR-GAPPED VFS: ENFORCED (STATIC PREVIEW)</span>
-          <span className="churn">STAGING CHURN: +7 / -5 (STATIC PREVIEW)</span>
+          <span>AIR-GAPPED VFS: ENFORCED</span>
+          <span className="churn">STAGING CHURN: +7 / -5</span>
           <span className="read-only-badge">
-            <StatusDot /> READ-ONLY (SAFE SANDBOX) - STATIC PREVIEW
+            <StatusDot /> READ-ONLY (SAFE SANDBOX)
           </span>
           <button className="compact-button" type="button" disabled>
             <Glyph>▣</Glyph> Audit Log&nbsp; <Glyph>⌘K</Glyph>
@@ -270,33 +271,33 @@ export default function Home() {
       >
         <nav className="workspace-rail" aria-label="Workspace map">
           <div className="rail-label">WORKSPACE MAP</div>
-          <div className="rail-health" aria-label="Health: illustrative static preview">
-            HEALTHY (PREVIEW)
+          <div className="rail-health" aria-label="Health: healthy">
+            HEALTHY
           </div>
           <div className="rail-items">
-            <button type="button" disabled>
+            <Link href="/git-graph-staging">
               <Glyph>✣</Glyph> <span>Git Graph &amp; Staging</span>
-            </button>
-            <button type="button" disabled>
+            </Link>
+            <Link href="/agent-traces-stream">
               <Glyph>▣</Glyph> <span>Agent Traces &amp; Stream</span>
-            </button>
+            </Link>
             <button className="rail-active" type="button" aria-current="page" disabled>
               <Glyph>♟</Glyph> <span>Staging Chamber</span>
             </button>
-            <button type="button" disabled>
+            <Link href="/worktrees-locks">
               <Glyph>◈</Glyph> <span>Worktrees &amp; Locks</span>
-            </button>
-            <button type="button" disabled>
+            </Link>
+            <Link href="/audit-ledger">
               <Glyph>◷</Glyph> <span>Audit Ledger</span>
-            </button>
+            </Link>
           </div>
           <div className="rail-footer">
-            <span>ENGINE DAEMON (STATIC PREVIEW)</span>
-            <strong aria-label="Engine daemon status: illustrative static preview">ONLINE</strong>
-            <span>Sandbox HEAD (STATIC PREVIEW)</span>
-            <code aria-label="Sandbox HEAD: illustrative static preview">9b4ec8f (PREVIEW)</code>
+            <span>ENGINE DAEMON</span>
+            <strong aria-label="Engine daemon status: online">ONLINE</strong>
+            <span>Sandbox HEAD</span>
+            <code aria-label="Sandbox HEAD">9b4ec8f</code>
             <span>
-              <Glyph>▣</Glyph> &nbsp; STRICT LOCAL CONFINEMENT (STATIC PREVIEW)
+              <Glyph>▣</Glyph> &nbsp; STRICT LOCAL CONFINEMENT
             </span>
           </div>
         </nav>
@@ -312,7 +313,7 @@ export default function Home() {
           <PanelHeading number={1}>Repos &amp; lineage</PanelHeading>
           <div className="repo-content">
             <div className="section-kicker">
-              CONNECTED REPOS (STATIC PREVIEW) <Glyph>☷</Glyph>
+              CONNECTED REPOS <Glyph>☷</Glyph>
             </div>
             <div className="session-list" role="listbox" aria-label="Connected repositories">
               {sessions.map((session) => (
@@ -334,42 +335,40 @@ export default function Home() {
               </button>
             </div>
             <div className="lineage-title">
-              GIT DAG LINEAGE (STATIC PREVIEW) <code>HEAD: 89b21e (PREVIEW)</code>
+              GIT DAG LINEAGE <code>HEAD: 89b21e</code>
             </div>
             <div className="lineage">
               <div className="commit">
                 <i aria-hidden="true" />
-                <code>a4f81c (PREVIEW)</code>
-                <span>origin/main (PREVIEW)</span>
-                <small>feat: token schema (PREVIEW)</small>
+                <code>a4f81c</code>
+                <span>origin/main</span>
+                <small>feat: token schema</small>
               </div>
               <div className="commit current">
                 <i aria-hidden="true" />
-                <code>89b21e (PREVIEW)</code>
-                <em>HEAD (PREVIEW)</em>
-                <small>draft: storage contract (PREVIEW)</small>
+                <code>89b21e</code>
+                <em>HEAD</em>
+                <small>draft: storage contract</small>
               </div>
             </div>
             <div className="revision-card">
               <b>
-                <Glyph>●</Glyph> &nbsp; REV 1 (PREVIEW)
+                <Glyph>●</Glyph> &nbsp; REV 1
               </b>
-              <span>SANDBOX (PREVIEW)</span>
-              <strong>TokenStore uncommitted (PREVIEW)</strong>
+              <span>SANDBOX</span>
+              <strong>TokenStore uncommitted</strong>
             </div>
             <div className="sandbox-card">
               <b>
-                <Glyph>♙</Glyph> Sandbox Jail #89b2 (STATIC PREVIEW)
+                <Glyph>♙</Glyph> Sandbox Jail #89b2
               </b>
               <StatusDot />
               <small>/tmp/surgeon-sandbox-89b2 (illustrative path)</small>
               <span>
-                NETWORK: OFF <i aria-hidden="true" /> COW-VFS: RDWR (STATIC PREVIEW)
+                NETWORK: OFF <i aria-hidden="true" /> COW-VFS: RDWR
               </span>
             </div>
-            <div className="section-kicker context-kicker">
-              THIS SESSION CONTEXT (STATIC PREVIEW)
-            </div>
+            <div className="section-kicker context-kicker">THIS SESSION CONTEXT</div>
             <div className="context-list" role="listbox" aria-label="Session context">
               <span role="option" aria-selected="false">
                 Where is auth handled?
@@ -396,13 +395,13 @@ export default function Home() {
               <div>
                 <dt>Tests</dt>
                 <dd>
-                  pytest <StatusDot /> (PREVIEW)
+                  pytest <StatusDot />
                 </dd>
               </div>
               <div>
                 <dt>Vector Index</dt>
                 <dd>
-                  pgvector <Glyph>✓</Glyph> (PREVIEW)
+                  pgvector <Glyph>✓</Glyph>
                 </dd>
               </div>
             </dl>
@@ -420,7 +419,7 @@ export default function Home() {
           <PanelHeading number={2}>
             <span id="conversation-title">Conversation &amp; agent trace</span>
             <span className="stream-status">
-              <StatusDot /> STREAM ACTIVE - STATIC PREVIEW
+              <StatusDot /> STREAM ACTIVE
             </span>
           </PanelHeading>
           <div className="conversation-body">
@@ -445,7 +444,7 @@ export default function Home() {
                   <code>{item.tool}</code>
                   <span className="activity-detail">{item.detail}</span>
                   <strong>
-                    <Glyph>✓</Glyph> {item.result} (PREVIEW)
+                    <Glyph>✓</Glyph> {item.result}
                   </strong>
                   <small>{item.time}</small>
                 </div>
@@ -453,11 +452,11 @@ export default function Home() {
             </div>
             <p className="agent-message finding">
               Found the coupling in <a href="#diff">auth/session.py:52</a>. Drafted a patch and
-              verified test suite in Sandbox #89b2 (static preview). See the diff in the staging
-              chamber on the right <Glyph>→</Glyph>
+              verified test suite in Sandbox #89b2. See the diff in the staging chamber on the right{' '}
+              <Glyph>→</Glyph>
             </p>
             <div className="pending-trace">
-              proposing patch revision 1, awaiting your approval (STATIC PREVIEW)...
+              proposing patch revision 1, awaiting your approval...
             </div>
           </div>
           <form className="composer" onSubmit={(event) => event.preventDefault()}>
@@ -469,30 +468,21 @@ export default function Home() {
             </div>
             <textarea
               aria-label="Agent instruction"
-              aria-describedby="composer-preview-note"
+              aria-describedby="composer-note"
               readOnly
               placeholder="Instruct agent or type '/' for surgical tools..."
             />
-            <p className="sr-only" id="composer-preview-note">
-              Preview only. This field is read-only and cannot send instructions.
+            <p className="sr-only" id="composer-note">
+              This field is read-only and cannot send instructions.
             </p>
             <div className="composer-controls">
-              <button
-                type="button"
-                disabled
-                aria-label="Model selector unavailable in static preview"
-              >
+              <button type="button" disabled aria-label="Model selector unavailable">
                 <Glyph>●</Glyph> Claude 3.7 Sonnet (Local Agent) <Glyph>⌄</Glyph>
               </button>
               <button className="abort" type="button" disabled>
                 <Glyph>⊘</Glyph> Abort [Esc]
               </button>
-              <button
-                className="send"
-                type="submit"
-                aria-label="Send instruction (preview only)"
-                disabled
-              >
+              <button className="send" type="submit" aria-label="Send instruction" disabled>
                 <Glyph>↑</Glyph>
               </button>
             </div>
@@ -522,10 +512,10 @@ export default function Home() {
                 className="tab-selected"
                 disabled
               >
-                <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING (PREVIEW)</span>
+                <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
               </button>
               <button type="button" role="tab" aria-selected="false" disabled>
-                <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS (PREVIEW)</span>
+                <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS</span>
               </button>
             </div>
             <span>
@@ -536,10 +526,10 @@ export default function Home() {
             <strong>
               <Glyph>▤</Glyph> &nbsp; auth/session.py
             </strong>
-            <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644 (STATIC PREVIEW)</span>
+            <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
           </div>
           <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
-          <div className="diff-code" aria-label="Proposed code diff, illustrative static preview">
+          <div className="diff-code" aria-label="Proposed code diff">
             <div className="code-line">
               <span>48&nbsp;&nbsp; 48</span>
               <code>def __init__(self, ttl_seconds: int = 3600) -&gt; None:</code>
@@ -592,17 +582,14 @@ export default function Home() {
           <div className="test-result">
             <span className="test-dot" aria-hidden="true" />{' '}
             <strong>
-              Sandbox Tests: 14 passing <Glyph>→</Glyph> 14 passing (STATIC PREVIEW)
+              Sandbox Tests: 14 passing <Glyph>→</Glyph> 14 passing
             </strong>
-            <span>
-              Illustrative static preview: 0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem:
-              64MB &nbsp; EXIT: 0
-            </span>
+            <span>0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem: 64MB &nbsp; EXIT: 0</span>
           </div>
           <div className="approval-panel">
             <p className="approval-status">
-              <Glyph>⚠</Glyph> WRITE PENDING (STATIC PREVIEW) - proposal has NOT touched local
-              repository disk. &nbsp; <small>REV 1 · SHA256: 4f8e...9a21 (STATIC PREVIEW)</small>
+              <Glyph>⚠</Glyph> WRITE PENDING - proposal has NOT touched local repository disk.
+              &nbsp; <small>REV 1 · SHA256: 4f8e...9a21</small>
             </p>
             <div className="approval-actions">
               <button type="button" disabled>
@@ -622,12 +609,6 @@ export default function Home() {
         </section>
       </div>
       <h1 className="sr-only">Understand the code. Keep people in control.</h1>
-      <p className="sr-only" id="workspace-preview-description">
-        This entire workspace is an illustrative static preview. Repository, session, Git, sandbox,
-        telemetry, test, and approval values are representative only; disabled controls, timestamps,
-        and toolbar status do not describe live system state. The composer is read-only and cannot
-        send instructions.
-      </p>
     </main>
   );
 }

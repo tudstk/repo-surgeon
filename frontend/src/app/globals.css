@@ -39,6 +39,28 @@ button:disabled {
   cursor: default;
   opacity: 1;
 }
+button:not(:disabled),
+a {
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+button:not(:disabled):hover,
+a:hover {
+  transform: translateY(-1px);
+}
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled),
+  a {
+    transition: none;
+  }
+  button:not(:disabled):hover,
+  a:hover {
+    transform: none;
+  }
+}
 button:focus-visible,
 a:focus-visible,
 textarea:focus-visible {
@@ -155,6 +177,25 @@ textarea:focus-visible {
   min-width: 0;
   overflow: hidden;
 }
+.placeholder-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.placeholder-content {
+  min-width: 0;
+  min-height: 0;
+  padding: 32px;
+  background: #111722;
+}
+.placeholder-content h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 600;
+}
 .pane-separator {
   position: relative;
   z-index: 2;
@@ -229,7 +270,8 @@ textarea:focus-visible {
   display: grid;
   gap: 2px;
 }
-.rail-items button {
+.rail-items button,
+.rail-items a {
   display: flex;
   gap: 10px;
   align-items: center;
@@ -240,15 +282,21 @@ textarea:focus-visible {
   text-align: left;
   font-size: 14px;
 }
-.rail-items button:first-child {
+.rail-items a {
+  text-decoration: none;
+}
+.rail-items button:first-child,
+.rail-items a:first-child {
   color: #bfc7d3;
 }
-.rail-items .rail-active {
+.rail-items .rail-active,
+.rail-items a[aria-current='page'] {
   border-left: 2px solid var(--violet);
   background: #20243e;
   color: #b5b7ff;
 }
-.rail-items button[aria-current='page'] {
+.rail-items button[aria-current='page'],
+.rail-items a[aria-current='page'] {
   font-weight: 700;
 }
 .rail-footer {
@@ -805,6 +853,11 @@ textarea:focus-visible {
     padding-inline: 9px;
     font-size: 12px;
   }
+  .rail-items a {
+    gap: 7px;
+    padding-inline: 9px;
+    font-size: 12px;
+  }
   .repo-content,
   .repo-summary {
     padding-inline: 9px;
@@ -862,6 +915,15 @@ textarea:focus-visible {
   }
   .workspace-grid {
     grid-template-columns: 1fr;
+  }
+  .placeholder-layout {
+    grid-template-columns: 1fr;
+  }
+  .placeholder-shell .workspace-rail {
+    min-height: 220px;
+  }
+  .placeholder-content {
+    min-height: 500px;
   }
   .pane-separator {
     display: none;

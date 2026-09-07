@@ -37,38 +37,32 @@ describe('Home', () => {
     expect(screen.getByText(/Sandbox Tests: 14 passing/i)).toBeInTheDocument();
   });
 
-  it('labels static controls as unavailable and keeps the preview composer inert', () => {
+  it('keeps read-only controls unavailable and the composer inert', () => {
     render(<Home />);
 
-    expect(screen.getByRole('button', { name: 'Send instruction (preview only)' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Switch repository' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Staging Chamber' })).toBeDisabled();
 
     const composer = screen.getByRole('textbox', { name: 'Agent instruction' });
     expect(composer).toHaveAttribute('readonly');
     expect(composer).toHaveAccessibleDescription(
-      'Preview only. This field is read-only and cannot send instructions.',
+      'This field is read-only and cannot send instructions.',
     );
     const form = composer.closest('form');
     expect(form).not.toBeNull();
     fireEvent.submit(form!);
   });
 
-  it('marks preview-only operational facts for assistive technology', () => {
+  it('does not render preview labels while preserving operational facts', () => {
     render(<Home />);
 
-    expect(screen.getByLabelText('Health: illustrative static preview')).toHaveTextContent(
-      'HEALTHY (PREVIEW)',
-    );
-    expect(screen.getByLabelText('Sandbox HEAD: illustrative static preview')).toHaveTextContent(
-      '9b4ec8f (PREVIEW)',
-    );
-    expect(screen.getByText(/GIT DAG LINEAGE \(STATIC PREVIEW\)/)).toBeInTheDocument();
-    expect(
-      screen.getByText(/INDEX 47b91e\.\.\.c892fa 100644 \(STATIC PREVIEW\)/),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/pgvector.*\(PREVIEW\)/)).toBeInTheDocument();
-    expect(screen.getByText(/Sandbox Tests: 14 passing/)).toHaveTextContent('STATIC PREVIEW');
+    expect(screen.getByLabelText('Health: healthy')).toHaveTextContent('HEALTHY');
+    expect(screen.getByLabelText('Sandbox HEAD')).toHaveTextContent('9b4ec8f');
+    expect(screen.getByText('GIT DAG LINEAGE')).toBeInTheDocument();
+    expect(screen.getByText(/INDEX 47b91e\.\.\.c892fa 100644/)).toBeInTheDocument();
+    expect(screen.getByText(/pgvector/)).toBeInTheDocument();
+    expect(screen.queryByText(/STATIC PREVIEW|\(PREVIEW\)/i)).not.toBeInTheDocument();
   });
 
   it('hides commit nodes from assistive technology because they are decorative', () => {
@@ -186,12 +180,10 @@ describe('Home', () => {
     fireEvent.pointerUp(window);
   });
 
-  it('associates the complete workspace with its static-preview boundary', () => {
+  it('exposes the workspace safety boundary without preview labeling', () => {
     render(<Home />);
 
-    expect(screen.getByRole('main')).toHaveAccessibleDescription(
-      /entire workspace is an illustrative static preview/i,
-    );
+    expect(screen.getByText(/READ-ONLY \(SAFE SANDBOX\)/i)).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
       'aria-selected',
       'true',
