@@ -67,7 +67,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22.12.0
+          # jsdom@30.0.1 requires Node 22.22.2 or newer in the 22.x line.
+          node-version: '22.22.2'
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
 
