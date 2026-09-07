@@ -1,22 +1,67 @@
+'use client';
+
+import Link from 'next/link';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+const STACKED_LAYOUT_QUERY = '(max-width: 1024px)';
+
 const sessions = [
   { name: 'payments-api', active: true },
   { name: 'web-dashboard', active: false },
 ] as const;
 
-const questions = [
-  'Where is auth handled?',
-  'Why do users get logged out?',
-  'Refactor session module...',
+const activity = [
+  { tool: 'search_code', detail: '"SessionManager"', result: '6 hits', time: '38ms' },
+  { tool: 'read_file', detail: 'auth/session.py:40–118', result: '78 LOC', time: '12ms' },
+  { tool: 'run_tests', detail: 'pytest tests/test_session.py', result: '14 pass', time: '2.4s' },
 ] as const;
 
-const activity = [
-  { tool: 'search_code', detail: '"SessionManage...', result: '6 hits' },
-  { tool: 'read_file', detail: 'auth/session.py:40–118', result: 'done' },
-  { tool: 'run_tests', detail: 'pytest tests/auth...', result: '14 pass' },
-] as const;
+const SEPARATOR_SIZE = 8;
+const DEFAULT_PANE_WIDTHS = [200, 260, 400, 556];
+const DEFAULT_PANE_MINIMUMS = [180, 220, 320, 400];
+const PANE_LABELS = [
+  'Workspace map',
+  'Repositories and Git lineage',
+  'Conversation and agent trace',
+  'Work panel',
+];
+
+function paneMinimums(viewportWidth: number) {
+  if (viewportWidth <= 1100) return [150, 210, 270, 340];
+  if (viewportWidth <= 1284) return [160, 220, 280, 360];
+  // Leave enough surplus at wide desktop sizes for every adjacent pair to
+  // resize, while keeping the conversation and diff panes readable.
+  return [180, 220, 320, 400];
+}
+
+function fitPaneWidths(widths: number[], availableWidth: number, minimums: number[]) {
+  const availablePanes = Math.max(
+    minimums.reduce((sum, width) => sum + width, 0),
+    availableWidth - SEPARATOR_SIZE * 3,
+  );
+  const desired = widths.map((width, index) => Math.max(width, minimums[index]));
+  const desiredTotal = desired.reduce((sum, width) => sum + width, 0);
+
+  if (desiredTotal <= availablePanes) {
+    desired[3] += availablePanes - desiredTotal;
+    return desired;
+  }
+
+  const reducible = desired.map((width, index) => width - minimums[index]);
+  const reduction = desiredTotal - availablePanes;
+  const reducibleTotal = reducible.reduce((sum, width) => sum + width, 0);
+  return desired.map(
+    (width, index) =>
+      width - (reducibleTotal ? (reducible[index] / reducibleTotal) * reduction : 0),
+  );
+}
 
 function StatusDot({ tone = 'green' }: { tone?: 'green' | 'violet' }) {
   return <span className={`status-dot status-dot-${tone}`} aria-hidden="true" />;
+}
+
+function Glyph({ children }: { children: React.ReactNode }) {
+  return <span aria-hidden="true">{children}</span>;
 }
 
 function PanelHeading({ number, children }: { number: number; children: React.ReactNode }) {
@@ -28,207 +73,542 @@ function PanelHeading({ number, children }: { number: number; children: React.Re
   );
 }
 
+function useStackedLayout() {
+  const [isStacked, setIsStacked] = useState(false);
+
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mediaQuery = window.matchMedia(STACKED_LAYOUT_QUERY);
+    const updateLayout = () => setIsStacked(mediaQuery.matches);
+    updateLayout();
+    mediaQuery.addEventListener('change', updateLayout);
+    return () => mediaQuery.removeEventListener('change', updateLayout);
+  }, []);
+
+  return isStacked;
+}
+
+function PaneSeparator({
+  index,
+  widths,
+  minimums,
+  setWidths,
+}: {
+  index: number;
+  widths: number[] | null;
+  minimums: number[];
+  setWidths: (index: number, delta: number) => void;
+}) {
+  const dragStart = useRef<{ x: number } | null>(null);
+  const stopDraggingRef = useRef<() => void>(() => undefined);
+  const label = `Resize ${PANE_LABELS[index]} and ${PANE_LABELS[index + 1]}`;
+  const currentWidths = widths ?? DEFAULT_PANE_WIDTHS;
+  const available = Math.max(
+    minimums[index] + minimums[index + 1],
+    currentWidths[index] + currentWidths[index + 1],
+  );
+  const value = Math.round(currentWidths[index]);
+  const min = minimums[index];
+  const max = Math.max(min, Math.round(available - minimums[index + 1]));
+
+  const onPointerMove = useCallback(
+    (event: PointerEvent) => {
+      if (!dragStart.current) return;
+      const delta = event.clientX - dragStart.current.x;
+      dragStart.current.x = event.clientX;
+      setWidths(index, delta);
+    },
+    [index, setWidths],
+  );
+
+  const stopDragging = useCallback(() => {
+    dragStart.current = null;
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', stopDraggingRef.current);
+    window.removeEventListener('pointercancel', stopDraggingRef.current);
+  }, [onPointerMove]);
+
+  useEffect(() => {
+    stopDraggingRef.current = stopDragging;
+    return () => {
+      dragStart.current = null;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', stopDragging);
+      window.removeEventListener('pointercancel', stopDragging);
+    };
+  }, [onPointerMove, stopDragging]);
+
+  return (
+    <div
+      className="pane-separator"
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={label}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      aria-valuenow={value}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === 'ArrowLeft') {
+          event.preventDefault();
+          setWidths(index, -16);
+        } else if (event.key === 'ArrowRight') {
+          event.preventDefault();
+          setWidths(index, 16);
+        } else if (event.key === 'Home') {
+          event.preventDefault();
+          setWidths(index, min - value);
+        } else if (event.key === 'End') {
+          event.preventDefault();
+          setWidths(index, max - value);
+        }
+      }}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        stopDragging();
+        dragStart.current = { x: event.clientX };
+        window.addEventListener('pointermove', onPointerMove);
+        window.addEventListener('pointerup', stopDragging);
+        window.addEventListener('pointercancel', stopDragging);
+      }}
+    />
+  );
+}
+
 export default function Home() {
+  const isStackedLayout = useStackedLayout();
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [paneWidths, setPaneWidths] = useState<number[] | null>(null);
+  const [paneMinimumBands, setPaneMinimumBands] = useState(DEFAULT_PANE_MINIMUMS);
+
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+
+    const syncWidths = () => {
+      const nextMinimums = paneMinimums(window.innerWidth);
+      setPaneMinimumBands(nextMinimums);
+      const availableWidth = grid.getBoundingClientRect().width;
+      if (!availableWidth || isStackedLayout) return;
+      setPaneWidths((current) =>
+        fitPaneWidths(current ?? DEFAULT_PANE_WIDTHS, availableWidth, nextMinimums),
+      );
+    };
+
+    syncWidths();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(syncWidths);
+    observer.observe(grid);
+    return () => observer.disconnect();
+  }, [isStackedLayout]);
+
+  const resizePanes = useCallback(
+    (index: number, delta: number) => {
+      setPaneWidths((current) => {
+        const next = [...(current ?? DEFAULT_PANE_WIDTHS)];
+        const maxDelta = next[index + 1] - paneMinimumBands[index + 1];
+        const minDelta = paneMinimumBands[index] - next[index];
+        const boundedDelta = Math.max(minDelta, Math.min(maxDelta, delta));
+        next[index] += boundedDelta;
+        next[index + 1] -= boundedDelta;
+        return next;
+      });
+    },
+    [paneMinimumBands],
+  );
+
+  const gridStyle = paneWidths
+    ? {
+        gridTemplateColumns: paneWidths
+          .flatMap((width, index) =>
+            index === paneWidths.length - 1
+              ? [`${width}px`]
+              : [`${width}px`, `${SEPARATOR_SIZE}px`],
+          )
+          .join(' '),
+      }
+    : undefined;
+
   return (
     <main className="workspace-shell">
-      <header className="workspace-header">
+      <header className="global-bar">
         <div className="brand-lockup">
-          <StatusDot tone="violet" />
+          <span className="brand-mark">
+            <Glyph>⚒</Glyph>
+          </span>
           <span className="brand-name">Repo Surgeon</span>
-          <span className="repo-name">acme/payments-api</span>
-          <span className="header-separator">·</span>
-          <span className="branch-name">
-            branch <strong>fix/session-token-store</strong>
+          <span className="bar-divider" />
+          <button className="repo-switcher" type="button" aria-label="Switch repository" disabled>
+            <Glyph>▣</Glyph> &nbsp; acme/payments-api <Glyph>⌄</Glyph>
+          </button>
+          <span className="branch-context">
+            <Glyph>⑂</Glyph> &nbsp; main <b>3 behind</b> &nbsp;<Glyph>→</Glyph>&nbsp;{' '}
+            <strong>fix/session-token-store</strong>
           </span>
         </div>
-        <div className="header-actions">
-          <span className="read-only-badge">
-            <StatusDot />
-            Read-only
+        <div className="global-status">
+          <span>
+            <StatusDot /> DAEMON: ACTIVE <small>pid: 40912</small>
           </span>
-          <button className="audit-button" type="button" aria-label="Open audit log">
-            <span aria-hidden="true">⇱</span> Audit log
+          <span>AIR-GAPPED VFS: ENFORCED</span>
+          <span className="churn">STAGING CHURN: +7 / -5</span>
+          <span className="read-only-badge">
+            <StatusDot /> READ-ONLY (SAFE SANDBOX)
+          </span>
+          <button className="compact-button" type="button" disabled>
+            <Glyph>▣</Glyph> Audit Log&nbsp; <Glyph>⌘K</Glyph>
+          </button>
+          <button className="avatar" type="button" aria-label="Open account menu" disabled>
+            <Glyph>♙</Glyph>
           </button>
         </div>
       </header>
-
-      <div className="workspace-grid">
-        <aside className="sidebar" aria-label="Repositories and sessions">
-          <PanelHeading number={1}>Repos &amp; sessions</PanelHeading>
-          <div className="sidebar-content">
-            <p className="eyebrow">Connected</p>
-            <nav aria-label="Connected repositories" className="session-list">
+      <div
+        className="workspace-grid"
+        data-layout={isStackedLayout ? 'stacked' : 'wide'}
+        ref={gridRef}
+        style={gridStyle}
+      >
+        <nav className="workspace-rail" aria-label="Workspace map">
+          <div className="rail-label">WORKSPACE MAP</div>
+          <div className="rail-health" aria-label="Health: healthy">
+            HEALTHY
+          </div>
+          <div className="rail-items">
+            <Link href="/git-graph-staging">
+              <Glyph>✣</Glyph> <span>Git Graph &amp; Staging</span>
+            </Link>
+            <Link href="/agent-traces-stream">
+              <Glyph>▣</Glyph> <span>Agent Traces &amp; Stream</span>
+            </Link>
+            <button className="rail-active" type="button" aria-current="page" disabled>
+              <Glyph>♟</Glyph> <span>Staging Chamber</span>
+            </button>
+            <Link href="/worktrees-locks">
+              <Glyph>◈</Glyph> <span>Worktrees &amp; Locks</span>
+            </Link>
+            <Link href="/audit-ledger">
+              <Glyph>◷</Glyph> <span>Audit Ledger</span>
+            </Link>
+          </div>
+          <div className="rail-footer">
+            <span>ENGINE DAEMON</span>
+            <strong aria-label="Engine daemon status: online">ONLINE</strong>
+            <span>Sandbox HEAD</span>
+            <code aria-label="Sandbox HEAD">9b4ec8f</code>
+            <span>
+              <Glyph>▣</Glyph> &nbsp; STRICT LOCAL CONFINEMENT
+            </span>
+          </div>
+        </nav>
+        {!isStackedLayout && (
+          <PaneSeparator
+            index={0}
+            widths={paneWidths}
+            minimums={paneMinimumBands}
+            setWidths={resizePanes}
+          />
+        )}
+        <aside className="repo-panel" aria-label="Repositories and Git lineage">
+          <PanelHeading number={1}>Repos &amp; lineage</PanelHeading>
+          <div className="repo-content">
+            <div className="section-kicker">
+              CONNECTED REPOS <Glyph>☷</Glyph>
+            </div>
+            <div className="session-list" role="listbox" aria-label="Connected repositories">
               {sessions.map((session) => (
                 <button
                   className={`session-row ${session.active ? 'session-active' : ''}`}
                   key={session.name}
                   type="button"
+                  disabled
+                  aria-selected={session.active}
+                  role="option"
                 >
-                  <span
-                    className={`repo-icon ${session.active ? 'repo-icon-active' : ''}`}
-                    aria-hidden="true"
-                  >
-                    □
-                  </span>
+                  <span aria-hidden="true">{session.active ? '☑' : '□'}</span>
                   <span>{session.name}</span>
+                  {session.active && <StatusDot />}
                 </button>
               ))}
-              <button className="session-row connect-row" type="button">
-                <span aria-hidden="true">＋</span> Connect a repo...
+              <button className="connect-row" type="button" disabled>
+                <Glyph>＋</Glyph> Connect a repo...
               </button>
-            </nav>
-            <p className="eyebrow session-eyebrow">This session</p>
-            <nav aria-label="Session questions" className="question-list">
-              {questions.map((question, index) => (
-                <button
-                  className={`question-row ${index === 2 ? 'question-active' : ''}`}
-                  key={question}
-                  type="button"
-                >
-                  {question}
-                </button>
-              ))}
-            </nav>
-            <section className="repo-summary" aria-labelledby="repo-summary-title">
-              <h2 id="repo-summary-title">Repo summary</h2>
-              <dl>
-                <div>
-                  <dt>Language</dt>
-                  <dd>Python 3.11</dd>
-                </div>
-                <div>
-                  <dt>Size</dt>
-                  <dd>342 files · 28k LOC</dd>
-                </div>
-                <div>
-                  <dt>Tests</dt>
-                  <dd>pytest</dd>
-                </div>
-                <div>
-                  <dt>Index</dt>
-                  <dd>pgvector ✓</dd>
-                </div>
-              </dl>
-            </section>
+            </div>
+            <div className="lineage-title">
+              GIT DAG LINEAGE <code>HEAD: 89b21e</code>
+            </div>
+            <div className="lineage">
+              <div className="commit">
+                <i aria-hidden="true" />
+                <code>a4f81c</code>
+                <span>origin/main</span>
+                <small>feat: token schema</small>
+              </div>
+              <div className="commit current">
+                <i aria-hidden="true" />
+                <code>89b21e</code>
+                <em>HEAD</em>
+                <small>draft: storage contract</small>
+              </div>
+            </div>
+            <div className="revision-card">
+              <b>
+                <Glyph>●</Glyph> &nbsp; REV 1
+              </b>
+              <span>SANDBOX</span>
+              <strong>TokenStore uncommitted</strong>
+            </div>
+            <div className="sandbox-card">
+              <b>
+                <Glyph>♙</Glyph> Sandbox Jail #89b2
+              </b>
+              <StatusDot />
+              <small>/tmp/surgeon-sandbox-89b2 (illustrative path)</small>
+              <span>
+                NETWORK: OFF <i aria-hidden="true" /> COW-VFS: RDWR
+              </span>
+            </div>
+            <div className="section-kicker context-kicker">THIS SESSION CONTEXT</div>
+            <div className="context-list" role="listbox" aria-label="Session context">
+              <span role="option" aria-selected="false">
+                Where is auth handled?
+              </span>
+              <span role="option" aria-selected="false">
+                Why do users get logged out?
+              </span>
+              <b role="option" aria-selected="true">
+                Refactor session module... <StatusDot tone="violet" />
+              </b>
+            </div>
           </div>
+          <section className="repo-summary" aria-labelledby="repo-summary-title">
+            <h2 id="repo-summary-title">REPO SUMMARY</h2>
+            <dl>
+              <div>
+                <dt>Language</dt>
+                <dd>Python 3.11</dd>
+              </div>
+              <div>
+                <dt>Size</dt>
+                <dd>342 files · 28k LOC</dd>
+              </div>
+              <div>
+                <dt>Tests</dt>
+                <dd>
+                  pytest <StatusDot />
+                </dd>
+              </div>
+              <div>
+                <dt>Vector Index</dt>
+                <dd>
+                  pgvector <Glyph>✓</Glyph>
+                </dd>
+              </div>
+            </dl>
+          </section>
         </aside>
-
+        {!isStackedLayout && (
+          <PaneSeparator
+            index={1}
+            widths={paneWidths}
+            minimums={paneMinimumBands}
+            setWidths={resizePanes}
+          />
+        )}
         <section className="conversation" aria-labelledby="conversation-title">
           <PanelHeading number={2}>
             <span id="conversation-title">Conversation &amp; agent trace</span>
+            <span className="stream-status">
+              <StatusDot /> STREAM ACTIVE
+            </span>
           </PanelHeading>
-          <div className="conversation-content">
-            <p className="speaker-label">You</p>
+          <div className="conversation-body">
+            <div className="message-meta">
+              YOU <time>14:28:01</time>
+            </div>
             <div className="user-message">
               Refactor the session module to use the new token store, and keep tests green.
             </div>
-            <p className="speaker-label agent-label">Repo Surgeon</p>
+            <div className="message-meta agent-meta">
+              REPO SURGEON <span>sub-agent: refactor-core</span>
+              <time>14:28:04</time>
+            </div>
             <p className="agent-message">
-              I&apos;ll locate the session logic, draft the change, and verify tests before
-              proposing it.
+              I&apos;ll locate the session logic, draft the change in an isolated sandbox, and
+              verify tests before proposing it.
             </p>
             <div className="activity-list" aria-label="Agent activity">
               {activity.map((item) => (
                 <div className="activity-row" key={item.tool}>
-                  <span className="activity-caret" aria-hidden="true">
-                    ›
-                  </span>
+                  <Glyph>▹</Glyph>
                   <code>{item.tool}</code>
                   <span className="activity-detail">{item.detail}</span>
-                  <span className="activity-result">✓ {item.result}</span>
+                  <strong>
+                    <Glyph>✓</Glyph> {item.result}
+                  </strong>
+                  <small>{item.time}</small>
                 </div>
               ))}
             </div>
             <p className="agent-message finding">
               Found the coupling in <a href="#diff">auth/session.py:52</a>. Drafted a patch and
-              re-ran the suite. See the diff on the right <span aria-hidden="true">→</span>
+              verified test suite in Sandbox #89b2. See the diff in the staging chamber on the right{' '}
+              <Glyph>→</Glyph>
             </p>
             <div className="pending-trace">
-              <span className="trace-caret" aria-hidden="true" /> proposing patch, awaiting your
-              approval...
+              proposing patch revision 1, awaiting your approval...
             </div>
           </div>
+          <form className="composer" onSubmit={(event) => event.preventDefault()}>
+            <div className="slash-hints">
+              <kbd>/explain diff</kbd>
+              <kbd>/run-fuzz-tests</kbd>
+              <kbd>/revert-sandbox</kbd>
+              <kbd>/inspect-memory</kbd>
+            </div>
+            <textarea
+              aria-label="Agent instruction"
+              aria-describedby="composer-note"
+              readOnly
+              placeholder="Instruct agent or type '/' for surgical tools..."
+            />
+            <p className="sr-only" id="composer-note">
+              This field is read-only and cannot send instructions.
+            </p>
+            <div className="composer-controls">
+              <button type="button" disabled aria-label="Model selector unavailable">
+                <Glyph>●</Glyph> Claude 3.7 Sonnet (Local Agent) <Glyph>⌄</Glyph>
+              </button>
+              <button className="abort" type="button" disabled>
+                <Glyph>⊘</Glyph> Abort [Esc]
+              </button>
+              <button className="send" type="submit" aria-label="Send instruction" disabled>
+                <Glyph>↑</Glyph>
+              </button>
+            </div>
+          </form>
         </section>
-
+        {!isStackedLayout && (
+          <PaneSeparator
+            index={2}
+            widths={paneWidths}
+            minimums={paneMinimumBands}
+            setWidths={resizePanes}
+          />
+        )}
         <section className="work-panel" aria-labelledby="work-panel-title">
-          <PanelHeading number={3}>
-            <span id="work-panel-title">Work panel</span>
-          </PanelHeading>
-          <div className="work-tabs" role="tablist" aria-label="Work views">
-            <button type="button" role="tab" aria-selected="false">
-              Code
-            </button>
-            <button type="button" role="tab" aria-selected="true" className="tab-selected">
-              Diff <span className="pending-pill">Pending</span>
-            </button>
-            <button type="button" role="tab" aria-selected="false">
-              Tests
-            </button>
+          <h2 className="sr-only" id="work-panel-title">
+            Work panel
+          </h2>
+          <div className="work-toolbar">
+            <div className="work-tabs" role="tablist" aria-label="Staging views">
+              <button type="button" role="tab" aria-selected="false" disabled>
+                <Glyph>‹›</Glyph> Code
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected="true"
+                className="tab-selected"
+                disabled
+              >
+                <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
+              </button>
+              <button type="button" role="tab" aria-selected="false" disabled>
+                <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS</span>
+              </button>
+            </div>
+            <span>
+              +7 −5 &nbsp; <b>SPLIT</b> &nbsp; UNIFIED
+            </span>
           </div>
-          <div className="diff-summary" id="diff">
-            <strong>Proposed change.</strong> Replace in-memory session dict with{' '}
-            <code>TokenStore</code> in <code>auth/session.py</code> · 1 file, +7 −5.
+          <div className="file-heading" id="diff">
+            <strong>
+              <Glyph>▤</Glyph> &nbsp; auth/session.py
+            </strong>
+            <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
           </div>
-          <div className="file-label">auth/session.py</div>
+          <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
           <div className="diff-code" aria-label="Proposed code diff">
-            <div className="code-line context">
-              <span>51</span>
-              <code> def __init__(self):</code>
+            <div className="code-line">
+              <span>48&nbsp;&nbsp; 48</span>
+              <code>def __init__(self, ttl_seconds: int = 3600) -&gt; None:</code>
+            </div>
+            <div className="code-line">
+              <span>49&nbsp;&nbsp; 49</span>
+              <code> self._ttl = ttl_seconds</code>
             </div>
             <div className="code-line removed">
-              <span>52 −</span>
+              <span>50&nbsp;&nbsp; −</span>
               <code> self._sessions = {'{}'}</code>
             </div>
             <div className="code-line added">
-              <span>52 +</span>
-              <code> self._store = TokenStore()</code>
+              <span>50&nbsp;&nbsp; +</span>
+              <code> self._store = TokenStore(default_ttl=ttl_seconds)</code>
             </div>
-            <div className="code-line context">
-              <span>54</span>
-              <code> def get(self, token):</code>
+            <div className="code-line">
+              <span>51&nbsp;&nbsp; 51</span>
+              <code> self._lock = threading.RLock()</code>
             </div>
             <div className="code-line removed">
-              <span>55 −</span>
+              <span>52&nbsp;&nbsp; −</span>
+              <code>def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
+            </div>
+            <div className="code-line added">
+              <span>52&nbsp;&nbsp; +</span>
+              <code>async def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
+            </div>
+            <div className="code-line removed">
+              <span>53&nbsp;&nbsp; −</span>
               <code> return self._sessions.get(token)</code>
             </div>
             <div className="code-line added">
-              <span>55 +</span>
-              <code> return self._store.lookup(token)</code>
+              <span>53&nbsp;&nbsp; +</span>
+              <code> return await self._store.lookup(token)</code>
+            </div>
+            <div className="code-line">
+              <span>54&nbsp;&nbsp; 54</span>
+              <code>def invalidate(self, token: str) -&gt; bool:</code>
+            </div>
+            <div className="code-line removed">
+              <span>55&nbsp;&nbsp; −</span>
+              <code> return self._sessions.pop(token, None) is not None</code>
             </div>
             <div className="code-line added">
-              <span>56 +</span>
-              <code> def expire(self, token):</code>
-            </div>
-            <div className="code-line added">
-              <span>57 +</span>
-              <code> self._store.revoke(token)</code>
+              <span>55&nbsp;&nbsp; +</span>
+              <code> return self._store.revoke(token)</code>
             </div>
           </div>
           <div className="test-result">
             <span className="test-dot" aria-hidden="true" />{' '}
-            <strong>Tests: 14 passing → 14 passing</strong>
-            <span> sandbox · 2.4s</span>
+            <strong>
+              Sandbox Tests: 14 passing <Glyph>→</Glyph> 14 passing
+            </strong>
+            <span>0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem: 64MB &nbsp; EXIT: 0</span>
           </div>
           <div className="approval-panel">
             <p className="approval-status">
-              <span aria-hidden="true">⚠</span> Write pending - nothing applied yet
+              <Glyph>⚠</Glyph> WRITE PENDING - proposal has NOT touched local repository disk.
+              &nbsp; <small>REV 1 · SHA256: 4f8e...9a21</small>
             </p>
             <div className="approval-actions">
-              <button type="button">Reject</button>
-              <button type="button">Request changes</button>
-              <button type="button">Apply to branch</button>
-              <button type="button" className="approve-button">
-                Approve &amp; open PR
+              <button type="button" disabled>
+                <Glyph>ⓧ</Glyph> Reject
+              </button>
+              <button type="button" disabled>
+                <Glyph>☷</Glyph> Request Changes
+              </button>
+              <button type="button" disabled>
+                <Glyph>↥</Glyph> Apply to Branch <strong>fix/session-token-store</strong>
+              </button>
+              <button type="button" className="approve-button" disabled>
+                <Glyph>⚙</Glyph> Approve &amp; Open PR
               </button>
             </div>
           </div>
         </section>
       </div>
       <h1 className="sr-only">Understand the code. Keep people in control.</h1>
-      <p className="sr-only">
-        <span>Apply by approval</span> Foundation under construction. Repository connections, agent
-        runs, and write approvals are not available yet.
-      </p>
     </main>
   );
 }
