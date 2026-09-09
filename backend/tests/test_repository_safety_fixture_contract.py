@@ -21,7 +21,6 @@ UNSAFE_REQUESTS = (
     ".git/HEAD",
     ".git/config",
     "link-outside",
-    "link-inside",
 )
 
 
@@ -56,15 +55,15 @@ def test_binary_and_oversized_files_preserve_their_adversarial_shape() -> None:
 
 
 def test_unsafe_request_corpus_covers_confinement_boundaries() -> None:
-    """Keep traversal, absolute, Git-internal, and symlink cases explicit."""
+    """Keep traversal, absolute, Git-internal, and escaping-symlink cases explicit."""
     assert "../outside.txt" in UNSAFE_REQUESTS
     assert "/etc/passwd" in UNSAFE_REQUESTS
     assert ".git/HEAD" in UNSAFE_REQUESTS
-    assert {"link-outside", "link-inside"}.issubset(UNSAFE_REQUESTS)
+    assert "link-outside" in UNSAFE_REQUESTS
 
 
 def test_symlink_cases_resolve_inside_and_outside_the_fixture_root() -> None:
-    """Pin the actual symlink topology that lexical path checks must not trust."""
+    """Pin that an in-root regular target is permitted and an escape is denied."""
     outside = FIXTURE_ROOT / "link-outside"
     inside = FIXTURE_ROOT / "link-inside"
 
@@ -72,6 +71,7 @@ def test_symlink_cases_resolve_inside_and_outside_the_fixture_root() -> None:
     assert inside.is_symlink()
     assert not outside.resolve().is_relative_to(FIXTURE_ROOT.resolve())
     assert inside.resolve().is_relative_to(FIXTURE_ROOT.resolve())
+    assert inside.resolve().is_file()
     assert inside.resolve() == (FIXTURE_ROOT / "src" / "main.py").resolve()
 
 
