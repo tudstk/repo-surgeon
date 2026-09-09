@@ -4,11 +4,11 @@
 
 This is the reproducible acceptance record for Repo Surgeon's implemented Milestone 0 foundation.
 
-The target is `2f769da70881a78a5a253aad1bf1d568635ea9e6` on `origin/ci/quality-gates`, the remote default branch that contains the foundation commits.
+The clean-clone evidence target is `2f769da70881a78a5a253aad1bf1d568635ea9e6` on `origin/ci/quality-gates`.
 
-At the time of this record, `origin/main` is `4b6a7378e4210bc961d6cd1aea50caeb3280e935` and contains only the initial `README.md`.
+At the time of this record, `origin/main` is `4b6a7378e4210bc961d6cd1aea50caeb3280e935` and descends from the M0 foundation through merge commit `28649a4`.
 
-`origin/main` cannot satisfy this matrix until the foundation is integrated there.
+`origin/main` therefore includes the M0 foundation, plus its later README revision.
 
 Milestone 0 provides a pinned FastAPI service with deterministic health routes, a strict TypeScript Next.js workspace shell, a local PostgreSQL Compose definition, and independent backend and frontend CI quality gates.
 
@@ -30,10 +30,11 @@ No model API key or external service credential is required for the quality gate
 | --- | --- | --- | --- |
 | Clean checkout | `git status --short` | No output. | Commit SHA, status output, result. |
 | Backend dependencies and quality | In `backend`: `uv sync --locked`; `uv run ruff format --check .`; `uv run ruff check .`; `uv run mypy src tests`; `uv run pytest`. | Locked dependencies install without changing `uv.lock`; formatting, lint, strict typing, and tests exit 0. | uv and Python versions, command output, exit code, test count, result. |
-| Backend health | Start `uv run uvicorn repo_surgeon.main:app --host 127.0.0.1 --port 8000` in `backend`; then request `/health/live` and `/health/ready` with curl. | The response bodies are `{"status":"live"}` and `{"status":"ready"}`. | Command output, HTTP status, commit SHA, result. |
+| Backend health | Start `uv run uvicorn repo_surgeon.main:app --host 127.0.0.1 --port 8000` in `backend`; then request the application-defined routes `/health/live` and `/health/ready` with curl. | The application-defined response bodies are `{"status":"live"}` and `{"status":"ready"}`. | Command output, HTTP status, commit SHA, result. |
 | Frontend dependencies and quality | In `frontend`: `pnpm install --frozen-lockfile`; `pnpm format:check`; `pnpm lint`; `pnpm typecheck`; `pnpm test`; `pnpm build`. | Frozen dependencies install without lockfile changes; every quality command and production build exit 0. | Node and pnpm versions, command output, exit code, test count, build output, result. |
+| Frontend start | After a successful build, run `pnpm start` in `frontend`; request `http://127.0.0.1:3000/` with curl and open the same URL in a browser. | The HTTP request exits 0 and the browser renders the Repo Surgeon workspace shell without a Next.js error page. | Command output, HTTP status, captured title or visible heading, browser and viewport, result. |
 | Static workspace boundary | In `frontend`: `pnpm test`. | Tests show workspace landmarks and that the composer, repository switcher, and Send instruction control are disabled or read-only. | Test output, commit SHA, result. |
-| Local PostgreSQL definition | `cp .env.example .env`; `docker compose config --quiet`; `docker compose up --detach --wait postgres`; `docker compose ps`; then run the `pg_isready` and `SELECT 1` command in [README.md](../../README.md). | Compose validation exits 0, `postgres` is healthy, and SQL returns one row containing `1`. | Docker and Compose versions, image digest, `docker compose ps`, SQL output, result. |
+| Local PostgreSQL definition | `cp .env.example .env`; `docker compose config --quiet`; `docker compose pull postgres`; `docker image inspect postgres:18.6 --format '{{index .RepoDigests 0}}'`; `docker compose up --detach --wait postgres`; `docker compose ps`; then run the `pg_isready` and `SELECT 1` command in [README.md](../../README.md). | Compose validation exits 0, image inspection prints the pulled image digest, `postgres` is healthy, and SQL returns one row containing `1`. | Docker and Compose versions, image digest, `docker compose ps`, SQL output, result. |
 | CI wiring | Inspect [quality-gates.yml](../../.github/workflows/quality-gates.yml). | Push and pull-request workflows run the command groups above with pinned setup actions. | Workflow revision, CI run URL, both job conclusions, result. |
 
 ## Negative and boundary checks
@@ -41,7 +42,7 @@ No model API key or external service credential is required for the quality gate
 | Case | Command or observation | Expected result |
 | --- | --- | --- |
 | No model credential | Run both quality command groups with no model API key in the environment. | The checks do not request a model API key. |
-| Unimplemented product workflow | Inspect backend routes and frontend controls during the health and frontend checks. | Only `/health/live` and `/health/ready` are implemented, and visible workspace controls do not submit instructions or alter a repository. |
+| Unimplemented product workflow | Inspect application routes and frontend controls during the health and frontend checks. | The application defines only `/health/live` and `/health/ready` at M0, while FastAPI may also expose framework routes such as `/docs` and `/openapi.json`; visible workspace controls do not submit instructions or alter a repository. |
 | Locked dependency drift | Run `git diff -- backend/uv.lock frontend/pnpm-lock.yaml` after dependency installation. | No output. |
 | Unsupported runtime | Run the prerequisite version checks before dependency installation. | An out-of-range Python, Node, or pnpm version is an environment failure, not a passing result. |
 | Missing Docker access | Run `docker compose config --quiet` before `docker compose up`. | The configuration can be checked without a running daemon; inability to access the Docker socket blocks only the local PostgreSQL runtime check. |
@@ -70,8 +71,9 @@ The following evidence was captured on 2026-09-09 from a clean isolated clone of
 | Tool versions | Pass | uv `0.12.9`, Python `3.14.0`, Node `v26.8.1`, pnpm `10.8.0`, and Docker Compose `v5.5.0`. |
 | Backend dependency install and quality | Blocked | `uv sync --locked` required `ast-serialize==0.9.0`, but sandbox DNS could not resolve `files.pythonhosted.org`; no lint, type, test, or HTTP claim is made. |
 | Frontend dependency install and quality | Blocked | `pnpm install --frozen-lockfile` could not resolve `registry.npmjs.org`, including `next-16.3.4.tgz`; no formatting, lint, type, test, or build claim is made. |
+| Frontend start | Blocked | The prerequisite frozen dependency installation and production build did not complete because of the recorded DNS block; no HTTP or browser-start claim is made. |
 | Compose configuration | Pass | `docker compose config --quiet` exited 0. |
-| PostgreSQL runtime | Blocked | Docker access was denied at `unix:///Users/stroescu/.docker/run/docker.sock`; the image, health check, and SQL probe were not executed. |
+| PostgreSQL image and runtime | Blocked | Docker access was denied at `unix:///Users/stroescu/.docker/run/docker.sock`; image inspection, health check, and SQL probe were not executed. |
 | CI execution | Not inspected | This local record verifies workflow mapping only and does not claim a remote CI result. |
 
 The blocked checks are environmental limits, not passing results and not evidence of a product defect.
