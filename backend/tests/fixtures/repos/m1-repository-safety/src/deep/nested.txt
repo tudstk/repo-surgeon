@@ -1,0 +1,2 @@
+This nested, ordinary UTF-8 file must remain listable and readable.
+It lets the implementation prove that confinement does not reject safe descendants.
