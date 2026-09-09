@@ -11,6 +11,7 @@ class Settings(BaseSettings):
 
     app_name: str = "Repo Surgeon API"
     environment: Literal["development", "test", "production"] = "development"
+    database_url: str = "postgresql+asyncpg://repo_surgeon:repo_surgeon@127.0.0.1:5432/repo_surgeon"
 
     model_config = SettingsConfigDict(
         env_prefix="REPO_SURGEON_",
