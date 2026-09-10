@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -178,8 +178,8 @@ def create_mcp_server(store: RepositoryStore) -> Any:
         directory: str = ".",
         glob: str | None = None,
         max_results: int = 50,
-    ) -> ListFilesOutput | ToolErrorOutput:
-        return await tools.list_files(
+    ) -> dict[str, object]:
+        result = await tools.list_files(
             ListFilesInput(
                 repository_id=repository_id,
                 directory=directory,
@@ -187,6 +187,7 @@ def create_mcp_server(store: RepositoryStore) -> Any:
                 max_results=max_results,
             )
         )
+        return cast(dict[str, object], result.model_dump(mode="json"))
 
     @server.tool(name="read_file", description="Read bounded numbered UTF-8 lines from a safe file.")
     async def read_file(
@@ -194,8 +195,8 @@ def create_mcp_server(store: RepositoryStore) -> Any:
         path: str,
         start_line: int = 1,
         end_line: int | None = None,
-    ) -> ReadFileOutput | ToolErrorOutput:
-        return await tools.read_file(
+    ) -> dict[str, object]:
+        result = await tools.read_file(
             ReadFileInput(
                 repository_id=repository_id,
                 path=path,
@@ -203,5 +204,6 @@ def create_mcp_server(store: RepositoryStore) -> Any:
                 end_line=end_line,
             )
         )
+        return cast(dict[str, object], result.model_dump(mode="json"))
 
     return server

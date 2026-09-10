@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID, uuid4
@@ -11,6 +12,8 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
+from repo_surgeon.application.repositories import RepositoryStore
+from repo_surgeon.application.repository_files import ConfinedRepositoryFiles
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.mcp.file_tools import (
     ListFilesInput,
@@ -25,11 +28,17 @@ from repo_surgeon.mcp.file_tools import (
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "repos" / "m1-repository-safety"
 
 
-class MemoryRepositoryStore:
+class MemoryRepositoryStore(RepositoryStore):
     """Minimal application port fake used by the in-process tool client."""
 
     def __init__(self, repository: Repository) -> None:
         self._repository = repository
+
+    async def get_by_canonical_root(self, canonical_root: str) -> Repository | None:
+        return self._repository if canonical_root == self._repository.canonical_root else None
+
+    async def add_local(self, canonical_root: str) -> Repository:
+        raise AssertionError("The safe file tools must not register repositories.")
 
     async def get(self, repository_id: UUID) -> Repository | None:
         return self._repository if repository_id == self._repository.id else None
@@ -155,16 +164,20 @@ async def test_read_descriptor_rejects_a_symlink_swapped_after_resolution(tmp_pa
     outside = tmp_path.parent / "outside.txt"
     outside.write_text("outside\n", encoding="utf-8")
     client, repository_id = tool_client(tmp_path)
-    original = __import__("repo_surgeon.application.repository_files", fromlist=["x"]).ConfinedRepositoryFiles._resolve_file_candidate
+    original: Callable[[ConfinedRepositoryFiles, Path, str | None], tuple[Path, str]] = (
+        ConfinedRepositoryFiles._resolve_file_candidate
+    )
 
-    def swap_after_resolution(service: object, candidate: Path, requested_relative: str | None = None) -> tuple[Path, str]:
-        result = original(service, candidate, requested_relative)
+    def swap_after_resolution(
+        service: ConfinedRepositoryFiles, candidate: Path, requested_relative: str | None = None
+    ) -> tuple[Path, str]:
+        result: tuple[Path, str] = original(service, candidate, requested_relative)
         safe.unlink()
         safe.symlink_to(outside)
         return result
 
     with patch.object(
-        __import__("repo_surgeon.application.repository_files", fromlist=["x"]).ConfinedRepositoryFiles,
+        ConfinedRepositoryFiles,
         "_resolve_file_candidate",
         swap_after_resolution,
     ):
@@ -198,8 +211,9 @@ async def test_fastmcp_in_process_client_exposes_flat_schema_and_invokes_handler
 
 
 def test_pydantic_contracts_reject_unknown_fields_and_clamp_valid_bounds() -> None:
-    with pytest.raises(ValidationError):
-        ListFilesInput(repository_id=uuid4(), unexpected=True)
+    with pytest.raises(ValidationError) as error:
+        ListFilesInput.model_validate({"repository_id": uuid4(), "unexpected": True})
+    assert error.value.errors()[0]["type"] == "extra_forbidden"
     assert ListFilesInput(repository_id=uuid4(), max_results=999).max_results == 200
     assert ReadFileInput(repository_id=uuid4(), path="README.md", end_line=999).end_line == 200
     with pytest.raises(ValidationError, match="end_line must be greater"):
