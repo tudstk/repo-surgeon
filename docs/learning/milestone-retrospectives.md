@@ -71,3 +71,63 @@ Without agent assistance, add `GET /version` with an explicit response model and
 **Surprised:** Compose can establish local infrastructure without being an application runtime dependency.
 
 **Next:** add only safe repository registration with confinement tests. Do not make static UI content appear to be agent behavior.
+
+## Milestone 1: local repository registration
+
+### Outcome and boundary
+
+M1 adds a narrow durable capability: register an existing local Git working tree, persist its canonical root, and retrieve the resulting record. A registration validates the selected directory with Git and resolves symlinks before persistence. It does not read source files, index a repository, clone a URL, expose file tools, or mutate the connected working tree.
+
+### Concepts and C# bridge
+
+The implementation separates a domain `Repository` value from its SQLAlchemy `RepositoryRecord` and FastAPI request/response models. This is analogous to keeping an EF Core entity separate from a domain object and an ASP.NET Core DTO. `RegisterLocalRepository` is an application use case; its resolver and store are ports, while the Git subprocess and SQLAlchemy session are infrastructure adapters. Alembic migrations play the role of EF Core migrations, but are explicit Python modules applied with `alembic upgrade head`.
+
+### Request flow
+
+1. `POST /repositories` accepts an absolute candidate path.
+2. The Git resolver resolves symlinks, verifies the directory is inside a Git worktree, and returns Git's top-level root.
+3. The application use case returns an existing record for the same canonical root or asks the SQLAlchemy adapter to persist one.
+4. The API returns the typed record, or a stable `application/problem+json` error without exposing internal filesystem or database details.
+
+### Reliability and security invariants
+
+- Canonical roots, not client-provided spellings, determine identity and duplicate behavior.
+- Registration runs only Git's minimal worktree query. It does not enumerate or read repository files.
+- Repository registration is read-only with respect to the selected worktree.
+- Database schema is created only through the Alembic migration chain, including test setup.
+- Malformed registration requests and invalid repository IDs use the same stable problem-details shape as invalid roots.
+
+### Commands
+
+```sh
+docker compose up -d postgres
+cd backend
+uv sync --locked
+uv run alembic upgrade head
+uv run pytest
+```
+
+For the optional migration-backed PostgreSQL integration check, create a disposable database and point the test at it:
+
+```sh
+REPO_SURGEON_TEST_DATABASE_URL=postgresql+asyncpg://user:password@127.0.0.1:5432/repo_surgeon_test \
+  uv run pytest -m postgres
+```
+
+Never point that variable at the normal development database. The test intentionally rejects the default URL.
+
+### Read these files in order
+
+1. [`backend/src/repo_surgeon/domain/repositories.py`](../../backend/src/repo_surgeon/domain/repositories.py) - framework-free repository identity.
+2. [`backend/src/repo_surgeon/application/repositories.py`](../../backend/src/repo_surgeon/application/repositories.py) - use cases and persistence/resolver ports.
+3. [`backend/src/repo_surgeon/infrastructure/local_repository_root.py`](../../backend/src/repo_surgeon/infrastructure/local_repository_root.py) - minimal Git validation and canonicalization.
+4. [`backend/migrations/versions/20260909_0001_create_repositories.py`](../../backend/migrations/versions/20260909_0001_create_repositories.py) - durable schema evolution.
+5. [`backend/src/repo_surgeon/api/repositories.py`](../../backend/src/repo_surgeon/api/repositories.py) - typed HTTP boundary and stable errors.
+
+### Interview questions
+
+1. Why should the database constrain `canonical_root` even when the application checks for duplicates first?
+2. Why is resolving a path before storing it safer than preserving the original string?
+3. What boundary does Alembic preserve that `Base.metadata.create_all()` does not?
+4. Why is Git validation allowed here while arbitrary repository source reads are not?
+5. Why should API validation errors have a stable shape rather than exposing framework defaults?
