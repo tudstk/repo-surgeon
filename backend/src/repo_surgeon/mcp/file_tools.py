@@ -44,6 +44,8 @@ class ReadFileInput(BaseModel):
 
     @model_validator(mode="after")
     def clamp_line_range(self) -> ReadFileInput:
+        if self.end_line is not None and self.end_line < self.start_line:
+            raise ValueError("end_line must be greater than or equal to start_line")
         if self.end_line is not None:
             self.end_line = min(self.end_line, self.start_line + MAX_LINE_COUNT - 1)
         return self
@@ -171,11 +173,35 @@ def create_mcp_server(store: RepositoryStore) -> Any:
     server = FastMCP("Repo Surgeon")
 
     @server.tool(name="list_files", description="List bounded safe files in a registered repository.")
-    async def list_files(arguments: ListFilesInput) -> ListFilesOutput | ToolErrorOutput:
-        return await tools.list_files(arguments)
+    async def list_files(
+        repository_id: UUID,
+        directory: str = ".",
+        glob: str | None = None,
+        max_results: int = 50,
+    ) -> ListFilesOutput | ToolErrorOutput:
+        return await tools.list_files(
+            ListFilesInput(
+                repository_id=repository_id,
+                directory=directory,
+                glob=glob,
+                max_results=max_results,
+            )
+        )
 
     @server.tool(name="read_file", description="Read bounded numbered UTF-8 lines from a safe file.")
-    async def read_file(arguments: ReadFileInput) -> ReadFileOutput | ToolErrorOutput:
-        return await tools.read_file(arguments)
+    async def read_file(
+        repository_id: UUID,
+        path: str,
+        start_line: int = 1,
+        end_line: int | None = None,
+    ) -> ReadFileOutput | ToolErrorOutput:
+        return await tools.read_file(
+            ReadFileInput(
+                repository_id=repository_id,
+                path=path,
+                start_line=start_line,
+                end_line=end_line,
+            )
+        )
 
     return server

@@ -118,21 +118,11 @@ class ConfinedRepositoryFiles:
     def read_file(
         self, path: str, start_line: int = 1, end_line: int | None = None
     ) -> FileRead:
-        """Read a UTF-8 regular file after all safety checks pass."""
+        """Read from a root-anchored descriptor after canonical policy checks."""
         candidate, relative = self._resolve_requested_path(path)
         resolved, relative = self._resolve_file_candidate(candidate, relative)
-        try:
-            file_stat = resolved.stat()
-        except OSError as error:
-            raise RepositoryFileError("file_not_found", "The requested file was not found.") from error
-        if not stat.S_ISREG(file_stat.st_mode):
-            raise RepositoryFileError("unsafe_path", "The requested path is not a regular file.")
-        if file_stat.st_size > MAX_FILE_BYTES:
-            raise RepositoryFileError("file_too_large", "The requested file exceeds the read limit.")
-        try:
-            payload = resolved.read_bytes()
-        except OSError as error:
-            raise RepositoryFileError("file_not_found", "The requested file was not found.") from error
+        resolved_relative = resolved.relative_to(self._root)
+        payload = self._read_descriptor_relative(resolved_relative)
         if b"\x00" in payload:
             raise RepositoryFileError("binary_file", "The requested file is binary.")
         try:
@@ -157,6 +147,48 @@ class ConfinedRepositoryFiles:
             truncated=requested_end > selected_end,
             content_sha256=hashlib.sha256(payload).hexdigest(),
         )
+
+    def _read_descriptor_relative(self, relative: Path) -> bytes:
+        """Open a pre-resolved child below the root without following any link.
+
+        The initial resolve detects a symlink escape.  This descriptor walk then
+        closes the time-of-check/time-of-use window: each component is opened
+        beneath the original root descriptor with ``O_NOFOLLOW``, and the final
+        regular-file check happens after the descriptor is open.
+        """
+        directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        root_fd = os.open(self._root, directory_flags)
+        descriptors = [root_fd]
+        try:
+            parts = relative.parts
+            for component in parts[:-1]:
+                descriptors.append(os.open(component, directory_flags, dir_fd=descriptors[-1]))
+            file_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+            file_fd = os.open(parts[-1], file_flags, dir_fd=descriptors[-1])
+            descriptors.append(file_fd)
+            opened = os.fstat(file_fd)
+            if not stat.S_ISREG(opened.st_mode):
+                raise RepositoryFileError("unsafe_path", "The requested path is not a regular file.")
+            if opened.st_size > MAX_FILE_BYTES:
+                raise RepositoryFileError("file_too_large", "The requested file exceeds the read limit.")
+            payload = b""
+            while len(payload) <= MAX_FILE_BYTES:
+                chunk = os.read(file_fd, min(8192, MAX_FILE_BYTES + 1 - len(payload)))
+                if not chunk:
+                    break
+                payload += chunk
+            if len(payload) > MAX_FILE_BYTES:
+                raise RepositoryFileError("file_too_large", "The requested file exceeds the read limit.")
+            return payload
+        except RepositoryFileError:
+            raise
+        except FileNotFoundError as error:
+            raise RepositoryFileError("file_not_found", "The requested file was not found.") from error
+        except OSError as error:
+            raise RepositoryFileError("unsafe_path", "The requested path cannot be inspected safely.") from error
+        finally:
+            for descriptor in reversed(descriptors):
+                os.close(descriptor)
 
     def _resolve_directory(self, directory: str) -> tuple[Path, str]:
         candidate, relative = self._resolve_requested_path(directory)

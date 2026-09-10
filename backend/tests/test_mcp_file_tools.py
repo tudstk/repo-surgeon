@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -145,8 +146,61 @@ async def test_special_files_are_denied_without_opening_them(tmp_path: Path) -> 
     assert result.code == "unsafe_path"
 
 
+
+@pytest.mark.anyio
+async def test_read_descriptor_rejects_a_symlink_swapped_after_resolution(tmp_path: Path) -> None:
+    """A path swap between canonical resolution and open cannot escape the root."""
+    safe = tmp_path / "safe.txt"
+    safe.write_text("safe\n", encoding="utf-8")
+    outside = tmp_path.parent / "outside.txt"
+    outside.write_text("outside\n", encoding="utf-8")
+    client, repository_id = tool_client(tmp_path)
+    original = __import__("repo_surgeon.application.repository_files", fromlist=["x"]).ConfinedRepositoryFiles._resolve_file_candidate
+
+    def swap_after_resolution(service: object, candidate: Path, requested_relative: str | None = None) -> tuple[Path, str]:
+        result = original(service, candidate, requested_relative)
+        safe.unlink()
+        safe.symlink_to(outside)
+        return result
+
+    with patch.object(
+        __import__("repo_surgeon.application.repository_files", fromlist=["x"]).ConfinedRepositoryFiles,
+        "_resolve_file_candidate",
+        swap_after_resolution,
+    ):
+        result = await client.read_file(ReadFileInput(repository_id=repository_id, path="safe.txt"))
+
+    assert isinstance(result, ToolErrorOutput)
+    assert result.code == "unsafe_path"
+
+
+
+@pytest.mark.anyio
+async def test_fastmcp_in_process_client_exposes_flat_schema_and_invokes_handler() -> None:
+    """Verify the actual MCP surface, rather than only calling the adapter directly."""
+    fastmcp = pytest.importorskip("fastmcp")
+    from repo_surgeon.mcp.file_tools import create_mcp_server
+
+    client, repository_id = tool_client()
+    server = create_mcp_server(client._store)
+    async with fastmcp.Client(server) as mcp_client:
+        tools = {tool.name: tool for tool in await mcp_client.list_tools()}
+        assert {"repository_id", "path", "start_line", "end_line"} <= set(
+            tools["read_file"].inputSchema["properties"]
+        )
+        result = await mcp_client.call_tool(
+            "read_file", {"repository_id": str(repository_id), "path": "README.md"}
+        )
+
+    assert result.is_error is False
+    assert result.structured_content is not None
+    assert result.structured_content["path"] == "README.md"
+
+
 def test_pydantic_contracts_reject_unknown_fields_and_clamp_valid_bounds() -> None:
     with pytest.raises(ValidationError):
         ListFilesInput(repository_id=uuid4(), unexpected=True)
     assert ListFilesInput(repository_id=uuid4(), max_results=999).max_results == 200
     assert ReadFileInput(repository_id=uuid4(), path="README.md", end_line=999).end_line == 200
+    with pytest.raises(ValidationError, match="end_line must be greater"):
+        ReadFileInput(repository_id=uuid4(), path="README.md", start_line=3, end_line=2)
