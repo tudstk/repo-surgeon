@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).parent
 BINARY_BYTES = bytes(range(256)) * 16
 OVERSIZED_BYTES = (b"0123456789abcdef" * 8 + b"\n") * 1024
