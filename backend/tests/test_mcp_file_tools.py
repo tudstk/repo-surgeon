@@ -69,7 +69,9 @@ async def test_list_files_and_read_file_return_typed_bounded_results() -> None:
     assert len(listing.entries) <= 200
 
     result = await client.read_file(
-        ReadFileInput(repository_id=repository_id, path="docs/many-lines.txt", start_line=1, end_line=999)
+        ReadFileInput(
+            repository_id=repository_id, path="docs/many-lines.txt", start_line=1, end_line=999
+        )
     )
     assert isinstance(result, ReadFileOutput)
     assert [line.number for line in result.lines] == list(range(1, 21))
@@ -108,7 +110,8 @@ async def test_attacker_visible_unsafe_paths_have_one_stable_content_free_error(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    ("path", "code"), [("binary.dat", "binary_file"), ("oversized.txt", "file_too_large")])
+    ("path", "code"), [("binary.dat", "binary_file"), ("oversized.txt", "file_too_large")]
+)
 async def test_binary_and_oversized_content_are_denied_before_a_read(path: str, code: str) -> None:
     client, repository_id = tool_client()
 
@@ -155,7 +158,6 @@ async def test_special_files_are_denied_without_opening_them(tmp_path: Path) -> 
     assert result.code == "unsafe_path"
 
 
-
 @pytest.mark.anyio
 async def test_read_descriptor_rejects_a_symlink_swapped_after_resolution(tmp_path: Path) -> None:
     """A path swap between canonical resolution and open cannot escape the root."""
@@ -185,7 +187,6 @@ async def test_read_descriptor_rejects_a_symlink_swapped_after_resolution(tmp_pa
 
     assert isinstance(result, ToolErrorOutput)
     assert result.code == "unsafe_path"
-
 
 
 @pytest.mark.anyio

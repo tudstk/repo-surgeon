@@ -12,7 +12,6 @@ from pathlib import Path
 
 import pytest
 
-
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "repos" / "m1-repository-safety"
 UNSAFE_REQUESTS = (
     "../outside.txt",
@@ -28,8 +27,10 @@ def test_safe_fixture_files_have_expected_content_shape() -> None:
     """Keep normal and nested reads available to future confinement tests."""
     assert (FIXTURE_ROOT / "README.md").is_file()
     assert (FIXTURE_ROOT / "src" / "main.py").is_file()
-    assert (FIXTURE_ROOT / "src" / "deep" / "nested.txt").read_text(encoding="utf-8").startswith(
-        "This nested"
+    assert (
+        (FIXTURE_ROOT / "src" / "deep" / "nested.txt")
+        .read_text(encoding="utf-8")
+        .startswith("This nested")
     )
 
 

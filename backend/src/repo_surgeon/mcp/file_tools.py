@@ -69,7 +69,9 @@ class ListFilesOutput(BaseModel):
         return cls(
             directory=listing.directory,
             entries=tuple(
-                FileEntryOutput(path=item.path, entry_type=item.entry_type, size_bytes=item.size_bytes)
+                FileEntryOutput(
+                    path=item.path, entry_type=item.entry_type, size_bytes=item.size_bytes
+                )
                 for item in listing.entries
             ),
             truncated=listing.truncated,
@@ -97,7 +99,9 @@ class ReadFileOutput(BaseModel):
             path=read.path,
             start_line=read.start_line,
             end_line=read.end_line,
-            lines=tuple(NumberedLineOutput(number=item.number, text=item.text) for item in read.lines),
+            lines=tuple(
+                NumberedLineOutput(number=item.number, text=item.text) for item in read.lines
+            ),
             truncated=read.truncated,
             content_sha256=read.content_sha256,
         )
@@ -123,7 +127,9 @@ class McpFileTools:
     async def list_files(self, arguments: ListFilesInput) -> ListFilesOutput | ToolErrorOutput:
         repository = await self._store.get(arguments.repository_id)
         if repository is None:
-            return ToolErrorOutput(code="repository_not_found", detail="The requested repository was not found.")
+            return ToolErrorOutput(
+                code="repository_not_found", detail="The requested repository was not found."
+            )
         try:
             result = ConfinedRepositoryFiles(repository.canonical_root).list_files(
                 arguments.directory, arguments.glob, arguments.max_results
@@ -135,7 +141,9 @@ class McpFileTools:
     async def read_file(self, arguments: ReadFileInput) -> ReadFileOutput | ToolErrorOutput:
         repository = await self._store.get(arguments.repository_id)
         if repository is None:
-            return ToolErrorOutput(code="repository_not_found", detail="The requested repository was not found.")
+            return ToolErrorOutput(
+                code="repository_not_found", detail="The requested repository was not found."
+            )
         try:
             result = ConfinedRepositoryFiles(repository.canonical_root).read_file(
                 arguments.path, arguments.start_line, arguments.end_line
@@ -145,7 +153,9 @@ class McpFileTools:
         return ReadFileOutput.from_read(result)
 
 
-def tool_audit_summary(result: ListFilesOutput | ReadFileOutput | ToolErrorOutput) -> dict[str, Any]:
+def tool_audit_summary(
+    result: ListFilesOutput | ReadFileOutput | ToolErrorOutput,
+) -> dict[str, Any]:
     """Return a sanitized result summary with no file content or host paths."""
     if isinstance(result, ToolErrorOutput):
         return {"success": False, "code": result.code}
@@ -172,7 +182,9 @@ def create_mcp_server(store: RepositoryStore) -> Any:
     tools = McpFileTools(store)
     server = FastMCP("Repo Surgeon")
 
-    @server.tool(name="list_files", description="List bounded safe files in a registered repository.")
+    @server.tool(
+        name="list_files", description="List bounded safe files in a registered repository."
+    )
     async def list_files(
         repository_id: UUID,
         directory: str = ".",
@@ -189,7 +201,9 @@ def create_mcp_server(store: RepositoryStore) -> Any:
         )
         return cast(dict[str, object], result.model_dump(mode="json"))
 
-    @server.tool(name="read_file", description="Read bounded numbered UTF-8 lines from a safe file.")
+    @server.tool(
+        name="read_file", description="Read bounded numbered UTF-8 lines from a safe file."
+    )
     async def read_file(
         repository_id: UUID,
         path: str,
