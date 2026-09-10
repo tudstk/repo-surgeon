@@ -220,7 +220,7 @@ class ConfinedRepositoryFiles:
         filename = parts[-1] if parts else ""
         if ".git" in parts:
             raise RepositoryFileError("unsafe_path", "The requested path is not available.")
-        if filename in {".env", "id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}:
+        if filename.startswith(".env") or filename in {"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}:
             raise RepositoryFileError("unsafe_path", "The requested path is not available.")
-        if "credential" in filename or "secret" in filename or "token" in filename:
+        if any(marker in component for component in parts for marker in ("credential", "secret", "token")):
             raise RepositoryFileError("unsafe_path", "The requested path is not available.")
