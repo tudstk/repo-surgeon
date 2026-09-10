@@ -20,7 +20,7 @@ class GitLocalRepositoryRootResolver:
 
         try:
             resolved_candidate = candidate_path.resolve(strict=True)
-        except OSError, RuntimeError:
+        except (OSError, RuntimeError):
             raise RepositoryRegistrationError(
                 code="repository_path_invalid",
                 detail="Repository path does not exist or cannot be resolved.",
@@ -59,7 +59,7 @@ class GitLocalRepositoryRootResolver:
 
         try:
             return str(Path(completed.stdout.strip()).resolve(strict=True))
-        except OSError, RuntimeError:
+        except (OSError, RuntimeError):
             raise RepositoryRegistrationError(
                 code="repository_path_invalid",
                 detail="Repository root cannot be resolved.",
