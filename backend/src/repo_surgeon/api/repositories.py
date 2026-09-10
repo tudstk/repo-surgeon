@@ -1,5 +1,6 @@
 """Typed HTTP boundary for registering and retrieving local repositories."""
 
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
@@ -62,7 +63,7 @@ def _response(repository: Repository) -> RepositoryResponse:
     )
 
 
-async def get_session(request: Request) -> AsyncSession:
+async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
     """Obtain the per-request session factory installed by the application factory."""
     session_factory = request.app.state.session_factory
     async with session_factory() as session:

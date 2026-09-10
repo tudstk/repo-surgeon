@@ -4,10 +4,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from repo_surgeon.api.health import router as health_router
-from repo_surgeon.api.repositories import RepositoryProblem
+from repo_surgeon.api.repositories import ProblemDetail, RepositoryProblem
 from repo_surgeon.api.repositories import router as repositories_router
 from repo_surgeon.infrastructure.database import create_engine, create_session_factory
 from repo_surgeon.settings import Settings, get_settings
@@ -31,6 +32,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return JSONResponse(
             status_code=error.problem.status,
             content=error.problem.model_dump(mode="json"),
+            media_type="application/problem+json",
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_handler(_: Request, __: RequestValidationError) -> JSONResponse:
+        """Keep repository request validation failures in the public problem format."""
+        problem = ProblemDetail(
+            type="https://repo-surgeon.local/problems/request_validation_failed",
+            title="Request validation failed",
+            status=422,
+            detail="Request data does not match the required API contract.",
+            code="request_validation_failed",
+        )
+        return JSONResponse(
+            status_code=problem.status,
+            content=problem.model_dump(mode="json"),
             media_type="application/problem+json",
         )
 

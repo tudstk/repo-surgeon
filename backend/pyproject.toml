@@ -31,6 +31,9 @@ packages = ["src/repo_surgeon"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-ra", "--strict-config", "--strict-markers"]
+markers = [
+  "postgres: requires a disposable PostgreSQL database supplied by REPO_SURGEON_TEST_DATABASE_URL",
+]
 
 [tool.ruff]
 target-version = "py314"

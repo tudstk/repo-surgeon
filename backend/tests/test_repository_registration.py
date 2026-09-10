@@ -1,14 +1,17 @@
 """End-to-end HTTP coverage for local repository registration."""
 
+import asyncio
+import os
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import httpx
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from repo_surgeon.infrastructure.repository_models import Base
 from repo_surgeon.main import create_app
 from repo_surgeon.settings import Settings
 
@@ -20,20 +23,34 @@ def _initialize_git_repository(path: Path) -> Path:
     return path
 
 
+async def _upgrade_database(database_url: str) -> None:
+    """Apply the production migration chain without blocking an async test loop."""
+    configuration = Config(str(Path(__file__).parents[1] / "alembic.ini"))
+    configuration.set_main_option("sqlalchemy.url", database_url)
+    await asyncio.to_thread(command.upgrade, configuration, "head")
+
+
+async def _client_for_database(database_url: str) -> AsyncIterator[httpx.AsyncClient]:
+    """Yield an API client backed by a migrated database."""
+    app = create_app(Settings(database_url=database_url))
+    engine: AsyncEngine = app.state.engine
+    await _upgrade_database(database_url)
+    transport = httpx.ASGITransport(app=app)
+    try:
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://testserver"
+        ) as test_client:
+            yield test_client
+    finally:
+        await engine.dispose()
+
+
 @pytest.fixture
 async def client(tmp_path: Path) -> AsyncIterator[httpx.AsyncClient]:
-    """Provide an API client backed by a temporary SQLite database."""
+    """Provide an API client backed by a temporary migration-created database."""
     database_path = tmp_path / "repositories.sqlite3"
-    app = create_app(Settings(database_url=f"sqlite+aiosqlite:///{database_path}"))
-    engine: AsyncEngine = app.state.engine
-    async with engine.begin() as connection:
-        await connection.run_sync(Base.metadata.create_all)
-
-    transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as test_client:
+    async for test_client in _client_for_database(f"sqlite+aiosqlite:///{database_path}"):
         yield test_client
-
-    await engine.dispose()
 
 
 @pytest.mark.anyio
@@ -125,3 +142,46 @@ async def test_missing_repository_has_a_stable_problem(client: httpx.AsyncClient
 
     assert response.status_code == 404
     assert response.json()["code"] == "repository_not_found"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("method", "url", "payload"),
+    [
+        ("post", "/repositories", {}),
+        ("get", "/repositories/not-a-uuid", None),
+    ],
+)
+async def test_request_validation_uses_problem_details(
+    client: httpx.AsyncClient, method: str, url: str, payload: dict[str, str] | None
+) -> None:
+    """Malformed registration bodies and identifiers share the documented error contract."""
+    response = await client.request(method, url, json=payload)
+
+    assert response.status_code == 422
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert response.json() == {
+        "type": "https://repo-surgeon.local/problems/request_validation_failed",
+        "title": "Request validation failed",
+        "status": 422,
+        "detail": "Request data does not match the required API contract.",
+        "code": "request_validation_failed",
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.postgres
+async def test_postgresql_registration_uses_the_migration_chain(tmp_path: Path) -> None:
+    """Exercise registration through the Alembic migration on a disposable PostgreSQL database."""
+    database_url = os.environ.get("REPO_SURGEON_TEST_DATABASE_URL")
+    if database_url is None:
+        pytest.skip("set REPO_SURGEON_TEST_DATABASE_URL to run PostgreSQL integration coverage")
+    if database_url == Settings().database_url:
+        pytest.fail("REPO_SURGEON_TEST_DATABASE_URL must name a disposable database")
+
+    repository_root = _initialize_git_repository(tmp_path / "postgres-example")
+    async for test_client in _client_for_database(database_url):
+        response = await test_client.post("/repositories", json={"path": str(repository_root)})
+
+    assert response.status_code == 201
+    assert response.json()["canonical_root"] == str(repository_root.resolve())
