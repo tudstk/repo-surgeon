@@ -1,0 +1,2 @@
+This file deliberately sits outside the m1-repository-safety fixture root.
+It is the target of link-outside and must never be returned through that registered root.
