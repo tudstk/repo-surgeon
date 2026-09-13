@@ -165,16 +165,24 @@ async def run_turn(
                 return limited("repeated_tool_call_limit")
             tool_calls += 1
             generated_call_id += 1
+            valid_provider_id = isinstance(call.call_id, str) and len(call.call_id) <= 256
             call_id = call.call_id or f"generated-{generated_call_id}"
-            duplicate_call_id = call_id in response_call_ids
-            response_call_ids.add(call_id)
+            duplicate_call_id = valid_provider_id and call_id in response_call_ids
+            if valid_provider_id:
+                response_call_ids.add(call_id)
             result: object
             status: Literal["success", "error", "denied"]
             remaining_bytes = effective_limits.max_returned_bytes - returned_bytes
             minimum_result_bytes = len(_serialized(_validation_error(call.name)))
             if remaining_bytes < minimum_result_bytes:
                 return limited("returned_bytes_limit")
-            if duplicate_call_id:
+            if not valid_provider_id:
+                result = ToolErrorOutput(
+                    code="invalid_tool_call_id",
+                    detail="Tool call IDs must be strings of at most 256 characters.",
+                )
+                status = "error"
+            elif duplicate_call_id:
                 result = ToolErrorOutput(
                     code="duplicate_tool_call_id",
                     detail="Tool call IDs must be unique within a provider response.",
