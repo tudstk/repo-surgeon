@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 from typing import Any, cast
 from uuid import UUID
 
@@ -113,6 +115,45 @@ class ToolErrorOutput(BaseModel):
     detail: str
 
 
+def _serialized_size(value: BaseModel) -> int:
+    return len(
+        json.dumps(value.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode()
+    )
+
+
+def _budget_error() -> ToolErrorOutput:
+    return ToolErrorOutput(
+        code="returned_bytes_limit", detail="The tool result exceeds the remaining turn budget."
+    )
+
+
+def _bound_list_result(
+    result: ListFilesOutput, max_bytes: int | None
+) -> ListFilesOutput | ToolErrorOutput:
+    if max_bytes is None or _serialized_size(result) <= max_bytes:
+        return result
+    for count in range(len(result.entries) - 1, -1, -1):
+        candidate = result.model_copy(update={"entries": result.entries[:count], "truncated": True})
+        if _serialized_size(candidate) <= max_bytes:
+            return candidate
+    return _budget_error()
+
+
+def _bound_read_result(
+    result: ReadFileOutput, max_bytes: int | None
+) -> ReadFileOutput | ToolErrorOutput:
+    if max_bytes is None or _serialized_size(result) <= max_bytes:
+        return result
+    for count in range(len(result.lines) - 1, -1, -1):
+        last_line = result.lines[count - 1].number if count else result.start_line - 1
+        candidate = result.model_copy(
+            update={"lines": result.lines[:count], "end_line": last_line, "truncated": True}
+        )
+        if _serialized_size(candidate) <= max_bytes:
+            return candidate
+    return _budget_error()
+
+
 class McpFileTools:
     """Thin in-process adapter ready for registration with FastMCP.
 
@@ -127,44 +168,42 @@ class McpFileTools:
     async def list_files(
         self, arguments: ListFilesInput, max_bytes: int | None = None
     ) -> ListFilesOutput | ToolErrorOutput:
-        if max_bytes is not None and max_bytes < 512:
-            return ToolErrorOutput(
-                code="returned_bytes_limit",
-                detail="The tool result exceeds the remaining turn budget.",
-            )
         repository = await self._store.get(arguments.repository_id)
         if repository is None:
             return ToolErrorOutput(
                 code="repository_not_found", detail="The requested repository was not found."
             )
         try:
-            result = ConfinedRepositoryFiles(repository.canonical_root).list_files(
-                arguments.directory, arguments.glob, arguments.max_results
+            listing = await asyncio.to_thread(
+                ConfinedRepositoryFiles(repository.canonical_root).list_files,
+                arguments.directory,
+                arguments.glob,
+                arguments.max_results,
             )
         except RepositoryFileError as error:
             return ToolErrorOutput(code=error.code, detail=error.detail)
-        return ListFilesOutput.from_listing(result)
+        result = ListFilesOutput.from_listing(listing)
+        return _bound_list_result(result, max_bytes)
 
     async def read_file(
         self, arguments: ReadFileInput, max_bytes: int | None = None
     ) -> ReadFileOutput | ToolErrorOutput:
-        if max_bytes is not None and max_bytes < 1024:
-            return ToolErrorOutput(
-                code="returned_bytes_limit",
-                detail="The tool result exceeds the remaining turn budget.",
-            )
         repository = await self._store.get(arguments.repository_id)
         if repository is None:
             return ToolErrorOutput(
                 code="repository_not_found", detail="The requested repository was not found."
             )
         try:
-            result = ConfinedRepositoryFiles(repository.canonical_root).read_file(
-                arguments.path, arguments.start_line, arguments.end_line
+            read = await asyncio.to_thread(
+                ConfinedRepositoryFiles(repository.canonical_root).read_file,
+                arguments.path,
+                arguments.start_line,
+                arguments.end_line,
             )
         except RepositoryFileError as error:
             return ToolErrorOutput(code=error.code, detail=error.detail)
-        return ReadFileOutput.from_read(result)
+        result = ReadFileOutput.from_read(read)
+        return _bound_read_result(result, max_bytes)
 
 
 def tool_audit_summary(

@@ -1,6 +1,8 @@
 """Test-first scenarios for the bounded repository-summary turn."""
 
 import asyncio
+import json
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -17,12 +19,15 @@ from repo_surgeon.agent import (
     ModelToolCall,
     run_turn,
 )
+from repo_surgeon.application.repository_files import ConfinedRepositoryFiles
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.mcp.file_tools import (
     FileEntryOutput,
     ListFilesInput,
     ListFilesOutput,
     McpFileTools,
+    ReadFileInput,
+    ReadFileOutput,
     ToolErrorOutput,
 )
 
@@ -360,3 +365,55 @@ async def test_cancelled_provider_call_propagates_cancellation() -> None:
 
     with pytest.raises(asyncio.CancelledError):
         await run_turn(CancelledProvider(), tools, repository_id, "Summarize")
+
+
+@pytest.mark.anyio
+async def test_real_tool_results_fit_exact_remaining_byte_budget() -> None:
+    tools, repository_id = tool_client()
+    list_result = await tools.list_files(ListFilesInput(repository_id=repository_id))
+    assert isinstance(list_result, ListFilesOutput)
+    list_size = len(json.dumps(list_result.model_dump(mode="json"), separators=(",", ":")).encode())
+    bounded_list = await tools.list_files(
+        ListFilesInput(repository_id=repository_id), max_bytes=list_size
+    )
+    assert isinstance(bounded_list, ListFilesOutput)
+    assert (
+        len(json.dumps(bounded_list.model_dump(mode="json"), separators=(",", ":")).encode())
+        <= list_size
+    )
+
+    read_result = await tools.read_file(
+        ReadFileInput(repository_id=repository_id, path="README.md")
+    )
+    assert isinstance(read_result, ReadFileOutput)
+    read_size = len(json.dumps(read_result.model_dump(mode="json"), separators=(",", ":")).encode())
+    bounded_read = await tools.read_file(
+        ReadFileInput(repository_id=repository_id, path="README.md"), max_bytes=read_size
+    )
+    assert isinstance(bounded_read, ReadFileOutput)
+    assert (
+        len(json.dumps(bounded_read.model_dump(mode="json"), separators=(",", ":")).encode())
+        <= read_size
+    )
+
+
+@pytest.mark.anyio
+async def test_blocking_filesystem_work_does_not_block_turn_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tools, repository_id = tool_client()
+    original_list = ConfinedRepositoryFiles.list_files
+
+    def blocked_list(*args: object, **kwargs: object) -> object:
+        time.sleep(0.2)
+        return original_list(ConfinedRepositoryFiles(str(FIXTURE_ROOT)))
+
+    monkeypatch.setattr(ConfinedRepositoryFiles, "list_files", blocked_list)
+    provider = FakeModelProvider([ModelResponse("Partial", (ModelToolCall("list_files", {}),))])
+    started = time.monotonic()
+    result = await run_turn(
+        provider, tools, repository_id, "Summarize", AgentLimits(max_duration_seconds=0.01)
+    )
+
+    assert result.stop_reason == "duration_limit"
+    assert time.monotonic() - started < 0.1

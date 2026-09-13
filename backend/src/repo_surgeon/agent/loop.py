@@ -166,10 +166,13 @@ async def run_turn(
             tool_calls += 1
             generated_call_id += 1
             valid_provider_id = isinstance(call.call_id, str) and len(call.call_id) <= 256
-            call_id = call.call_id or f"generated-{generated_call_id}"
-            duplicate_call_id = valid_provider_id and call_id in response_call_ids
-            if valid_provider_id:
-                response_call_ids.add(call_id)
+            requested_call_id = call.call_id if valid_provider_id else ""
+            duplicate_call_id = bool(requested_call_id) and requested_call_id in response_call_ids
+            call_id = requested_call_id if requested_call_id and not duplicate_call_id else ""
+            while not call_id or call_id in response_call_ids:
+                call_id = f"generated-{generated_call_id}"
+                generated_call_id += 1
+            response_call_ids.add(call_id)
             result: object
             status: Literal["success", "error", "denied"]
             remaining_bytes = effective_limits.max_returned_bytes - returned_bytes
