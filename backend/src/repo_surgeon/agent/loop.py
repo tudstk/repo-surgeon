@@ -13,7 +13,13 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
-from repo_surgeon.agent.provider import ModelProvider, ModelRequest, ModelResponse, ModelToolCall
+from repo_surgeon.agent.provider import (
+    UNTRUSTED_DATA_POLICY,
+    ModelProvider,
+    ModelRequest,
+    ModelResponse,
+    ModelToolCall,
+)
 from repo_surgeon.mcp.file_tools import (
     ListFilesInput,
     McpFileTools,
@@ -39,6 +45,7 @@ class ToolEvent:
 
     name: str
     status: Literal["success", "error", "denied"]
+    call_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,8 +67,19 @@ def _serialized(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def _call_key(call: ModelToolCall) -> str:
-    return json.dumps({"name": call.name, "arguments": call.arguments}, sort_keys=True)
+def _json_arguments(arguments: object) -> str | None:
+    if not isinstance(arguments, dict):
+        return None
+    try:
+        return json.dumps(arguments, sort_keys=True, separators=(",", ":"))
+    except TypeError, ValueError:
+        return None
+
+
+def _call_key(call: ModelToolCall, serialized_arguments: str | None) -> str:
+    if serialized_arguments is None:
+        return f"invalid-arguments:{call.name}"
+    return json.dumps({"name": call.name, "arguments": serialized_arguments}, sort_keys=True)
 
 
 def _validation_error(name: str) -> ToolErrorOutput:
@@ -79,7 +97,10 @@ async def run_turn(
     """Run a model turn while keeping all authorization and bounds deterministic."""
     effective_limits = limits or AgentLimits()
     started = clock()
-    messages: list[dict[str, str]] = [{"role": "user", "content": question}]
+    messages: list[dict[str, object]] = [
+        {"role": "system", "content": UNTRUSTED_DATA_POLICY},
+        {"role": "user", "content": question},
+    ]
     events: list[ToolEvent] = []
     repeated: Counter[str] = Counter()
     model_calls = tool_calls = returned_bytes = 0
@@ -105,9 +126,12 @@ async def run_turn(
         remaining = effective_limits.max_duration_seconds - (clock() - started)
         model_calls += 1
         try:
-            response: ModelResponse = await asyncio.wait_for(
-                provider.complete(ModelRequest(tuple(messages))), timeout=max(remaining, 0.001)
-            )
+            try:
+                response: ModelResponse = await asyncio.wait_for(
+                    provider.complete(ModelRequest(tuple(messages))), timeout=max(remaining, 0.001)
+                )
+            except asyncio.CancelledError:
+                raise
         except TimeoutError:
             return limited("duration_limit")
         answer = response.text
@@ -127,14 +151,23 @@ async def run_turn(
                 return limited("duration_limit")
             if tool_calls >= effective_limits.max_tool_calls:
                 return limited("tool_call_limit")
-            key = _call_key(call)
+            serialized_arguments = _json_arguments(call.arguments)
+            key = _call_key(call, serialized_arguments)
             repeated[key] += 1
             if repeated[key] > effective_limits.max_repeated_tool_calls:
                 return limited("repeated_tool_call_limit")
             tool_calls += 1
+            call_id = call.call_id or f"generated-{model_calls}-{tool_calls}"
             result: object
             status: Literal["success", "error", "denied"]
-            if call.name not in {"list_files", "read_file"}:
+            remaining_bytes = effective_limits.max_returned_bytes - returned_bytes
+            minimum_result_bytes = len(_serialized(_validation_error(call.name)))
+            if remaining_bytes < minimum_result_bytes:
+                return limited("returned_bytes_limit")
+            if serialized_arguments is None:
+                result = _validation_error(call.name)
+                status = "error"
+            elif call.name not in {"list_files", "read_file"}:
                 result = ToolErrorOutput(
                     code="write_operation_denied"
                     if call.name.startswith("write")
@@ -150,6 +183,8 @@ async def run_turn(
                     else:
                         result = await tools.read_file(ReadFileInput.model_validate(arguments))
                     status = "error" if isinstance(result, ToolErrorOutput) else "success"
+                except asyncio.CancelledError:
+                    raise
                 except TypeError, ValidationError:
                     result = _validation_error(call.name)
                     status = "error"
@@ -157,6 +192,16 @@ async def run_turn(
             if returned_bytes + len(payload) > effective_limits.max_returned_bytes:
                 return limited("returned_bytes_limit")
             returned_bytes += len(payload)
-            events.append(ToolEvent(call.name, status))
-            messages.append({"role": "assistant", "content": call.name})
-            messages.append({"role": "tool", "content": payload.decode("utf-8")})
+            events.append(ToolEvent(call.name, status, call_id))
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": call.name,
+                    "tool_call_id": call_id,
+                }
+            )
+            messages.append(
+                {"role": "tool", "tool_call_id": call_id, "content": result.model_dump(mode="json")}
+                if hasattr(result, "model_dump")
+                else {"role": "tool", "tool_call_id": call_id, "content": result}
+            )

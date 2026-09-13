@@ -2,6 +2,7 @@
 
 from repo_surgeon.agent.loop import AgentLimits, AgentTurn, run_turn
 from repo_surgeon.agent.provider import (
+    UNTRUSTED_DATA_POLICY,
     FakeModelProvider,
     ModelProvider,
     ModelRequest,
@@ -17,5 +18,6 @@ __all__ = [
     "ModelRequest",
     "ModelResponse",
     "ModelToolCall",
+    "UNTRUSTED_DATA_POLICY",
     "run_turn",
 ]
