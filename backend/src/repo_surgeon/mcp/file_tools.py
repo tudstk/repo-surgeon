@@ -124,7 +124,14 @@ class McpFileTools:
     def __init__(self, store: RepositoryStore) -> None:
         self._store = store
 
-    async def list_files(self, arguments: ListFilesInput) -> ListFilesOutput | ToolErrorOutput:
+    async def list_files(
+        self, arguments: ListFilesInput, max_bytes: int | None = None
+    ) -> ListFilesOutput | ToolErrorOutput:
+        if max_bytes is not None and max_bytes < 512:
+            return ToolErrorOutput(
+                code="returned_bytes_limit",
+                detail="The tool result exceeds the remaining turn budget.",
+            )
         repository = await self._store.get(arguments.repository_id)
         if repository is None:
             return ToolErrorOutput(
@@ -138,7 +145,14 @@ class McpFileTools:
             return ToolErrorOutput(code=error.code, detail=error.detail)
         return ListFilesOutput.from_listing(result)
 
-    async def read_file(self, arguments: ReadFileInput) -> ReadFileOutput | ToolErrorOutput:
+    async def read_file(
+        self, arguments: ReadFileInput, max_bytes: int | None = None
+    ) -> ReadFileOutput | ToolErrorOutput:
+        if max_bytes is not None and max_bytes < 1024:
+            return ToolErrorOutput(
+                code="returned_bytes_limit",
+                detail="The tool result exceeds the remaining turn budget.",
+            )
         repository = await self._store.get(arguments.repository_id)
         if repository is None:
             return ToolErrorOutput(

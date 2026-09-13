@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import time
 from collections import Counter
@@ -64,14 +65,14 @@ class AgentTurn:
 def _serialized(value: object) -> bytes:
     if hasattr(value, "model_dump"):
         value = value.model_dump(mode="json")
-    return json.dumps(value, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return json.dumps(value, allow_nan=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
 def _json_arguments(arguments: object) -> str | None:
     if not isinstance(arguments, dict):
         return None
     try:
-        return json.dumps(arguments, sort_keys=True, separators=(",", ":"))
+        return json.dumps(arguments, allow_nan=False, sort_keys=True, separators=(",", ":"))
     except TypeError, ValueError:
         return None
 
@@ -105,6 +106,7 @@ async def run_turn(
     repeated: Counter[str] = Counter()
     model_calls = tool_calls = returned_bytes = 0
     answer = ""
+    generated_call_id = 0
 
     def limited(reason: str) -> AgentTurn:
         return AgentTurn(
@@ -126,9 +128,13 @@ async def run_turn(
         remaining = effective_limits.max_duration_seconds - (clock() - started)
         model_calls += 1
         try:
+            copied_messages: list[dict[str, object]] = copy.deepcopy(messages[1:])
+            request_messages: tuple[dict[str, object], ...] = tuple(
+                [{"role": "system", "content": UNTRUSTED_DATA_POLICY}, *copied_messages]
+            )
             try:
                 response: ModelResponse = await asyncio.wait_for(
-                    provider.complete(ModelRequest(tuple(messages))), timeout=max(remaining, 0.001)
+                    provider.complete(ModelRequest(request_messages)), timeout=max(remaining, 0.001)
                 )
             except asyncio.CancelledError:
                 raise
@@ -146,6 +152,7 @@ async def run_turn(
                 events=tuple(events),
             )
 
+        response_call_ids: set[str] = set()
         for call in response.tool_calls:
             if clock() - started >= effective_limits.max_duration_seconds:
                 return limited("duration_limit")
@@ -157,14 +164,23 @@ async def run_turn(
             if repeated[key] > effective_limits.max_repeated_tool_calls:
                 return limited("repeated_tool_call_limit")
             tool_calls += 1
-            call_id = call.call_id or f"generated-{model_calls}-{tool_calls}"
+            generated_call_id += 1
+            call_id = call.call_id or f"generated-{generated_call_id}"
+            duplicate_call_id = call_id in response_call_ids
+            response_call_ids.add(call_id)
             result: object
             status: Literal["success", "error", "denied"]
             remaining_bytes = effective_limits.max_returned_bytes - returned_bytes
             minimum_result_bytes = len(_serialized(_validation_error(call.name)))
             if remaining_bytes < minimum_result_bytes:
                 return limited("returned_bytes_limit")
-            if serialized_arguments is None:
+            if duplicate_call_id:
+                result = ToolErrorOutput(
+                    code="duplicate_tool_call_id",
+                    detail="Tool call IDs must be unique within a provider response.",
+                )
+                status = "error"
+            elif serialized_arguments is None:
                 result = _validation_error(call.name)
                 status = "error"
             elif call.name not in {"list_files", "read_file"}:
@@ -178,13 +194,27 @@ async def run_turn(
             else:
                 try:
                     arguments = {**call.arguments, "repository_id": repository_id}
+                    tool_remaining = effective_limits.max_duration_seconds - (clock() - started)
+                    tool_budget = effective_limits.max_returned_bytes - returned_bytes
                     if call.name == "list_files":
-                        result = await tools.list_files(ListFilesInput.model_validate(arguments))
+                        result = await asyncio.wait_for(
+                            tools.list_files(
+                                ListFilesInput.model_validate(arguments), max_bytes=tool_budget
+                            ),
+                            timeout=max(tool_remaining, 0.001),
+                        )
                     else:
-                        result = await tools.read_file(ReadFileInput.model_validate(arguments))
+                        result = await asyncio.wait_for(
+                            tools.read_file(
+                                ReadFileInput.model_validate(arguments), max_bytes=tool_budget
+                            ),
+                            timeout=max(tool_remaining, 0.001),
+                        )
                     status = "error" if isinstance(result, ToolErrorOutput) else "success"
                 except asyncio.CancelledError:
                     raise
+                except TimeoutError:
+                    return limited("duration_limit")
                 except TypeError, ValidationError:
                     result = _validation_error(call.name)
                     status = "error"
