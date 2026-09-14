@@ -29,11 +29,13 @@ serialized size fits the exact supplied budget. The agent loop repeats the same
 pre-dispatch check and replaces any nonconforming adapter result with the bounded
 error envelope.
 
-Equivalent-call accounting uses validated tool arguments after the application
-repository ID, schema defaults, and clamps are applied. Provider call IDs are
-first reserved across the complete response batch, then missing, invalid, or
-duplicate IDs receive bounded generated replacements without colliding with a
-later opaque provider ID.
+Equivalent-call accounting uses the effective tool operation after the
+application repository ID, schema defaults, numeric clamps, default read
+endpoint, and safe lexical path normalization are applied. This normalization
+does not resolve or inspect the filesystem. Provider call IDs are first reserved
+across the complete response batch, then missing, invalid, or duplicate IDs
+receive bounded generated replacements without colliding with a later opaque
+provider ID.
 
 This boundary deliberately does not include SSE, a real provider, persistence
 of turn traces, proposal generation, or repository writes. Those capabilities

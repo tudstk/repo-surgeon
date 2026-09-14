@@ -8,6 +8,7 @@ import json
 import time
 from collections import Counter
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Literal
 from uuid import UUID
@@ -19,6 +20,11 @@ from repo_surgeon.agent.provider import (
     ModelProvider,
     ModelRequest,
     ModelResponse,
+)
+from repo_surgeon.application.repository_files import (
+    MAX_LINE_COUNT,
+    RepositoryFileError,
+    normalize_repository_relative_path,
 )
 from repo_surgeon.mcp.file_tools import (
     MIN_TOOL_RESULT_BYTES,
@@ -79,8 +85,17 @@ def _json_arguments(arguments: object) -> str | None:
 
 
 def _normalized_call_key(name: str, arguments: ListFilesInput | ReadFileInput) -> str:
+    normalized_arguments = arguments.model_dump(mode="json")
+    path_field = "directory" if isinstance(arguments, ListFilesInput) else "path"
+    # Unsafe spellings stay distinct and are still rejected inside the worker.
+    with suppress(RepositoryFileError):
+        normalized_arguments[path_field] = normalize_repository_relative_path(
+            getattr(arguments, path_field)
+        )
+    if isinstance(arguments, ReadFileInput) and arguments.end_line is None:
+        normalized_arguments["end_line"] = arguments.start_line + MAX_LINE_COUNT - 1
     return _serialized(
-        {"kind": "execution", "name": name, "arguments": arguments.model_dump(mode="json")}
+        {"kind": "execution", "name": name, "arguments": normalized_arguments}
     ).decode()
 
 

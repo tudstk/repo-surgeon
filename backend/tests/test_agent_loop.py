@@ -354,24 +354,53 @@ async def test_generated_ids_reserve_later_valid_provider_ids() -> None:
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    ("first_arguments", "second_arguments"),
+    ("tool_name", "first_arguments", "second_arguments"),
     [
-        ({"repository_id": "ignored-a"}, {"repository_id": "ignored-b"}),
-        ({}, {"directory": ".", "glob": None, "max_results": 50}),
-        ({"max_results": MAX_FILE_COUNT + 1}, {"max_results": MAX_FILE_COUNT + 999}),
+        ("list_files", {"repository_id": "ignored-a"}, {"repository_id": "ignored-b"}),
+        ("list_files", {}, {"directory": ".", "glob": None, "max_results": 50}),
+        (
+            "list_files",
+            {"max_results": MAX_FILE_COUNT + 1},
+            {"max_results": MAX_FILE_COUNT + 999},
+        ),
+        ("read_file", {"path": "README.md"}, {"path": "README.md", "end_line": 200}),
+        ("read_file", {"path": "README.md"}, {"path": "./README.md"}),
+        ("list_files", {"directory": "src"}, {"directory": "./src"}),
     ],
 )
 async def test_repeat_limit_uses_normalized_application_arguments(
-    first_arguments: dict[str, object], second_arguments: dict[str, object]
+    tool_name: str,
+    first_arguments: dict[str, object],
+    second_arguments: dict[str, object],
 ) -> None:
     tools, repository_id = tool_client()
+    dispatches = 0
+    original_list_files = tools.list_files
+    original_read_file = tools.read_file
+
+    async def counted_list_files(
+        arguments: ListFilesInput, max_bytes: int | None = None
+    ) -> ListFilesOutput | ToolErrorOutput | None:
+        nonlocal dispatches
+        dispatches += 1
+        return await original_list_files(arguments, max_bytes)
+
+    async def counted_read_file(
+        arguments: ReadFileInput, max_bytes: int | None = None
+    ) -> ReadFileOutput | ToolErrorOutput | None:
+        nonlocal dispatches
+        dispatches += 1
+        return await original_read_file(arguments, max_bytes)
+
+    tools.list_files = counted_list_files  # type: ignore[method-assign]
+    tools.read_file = counted_read_file  # type: ignore[method-assign]
     provider = FakeModelProvider(
         [
             ModelResponse(
                 "Inspecting",
                 (
-                    ModelToolCall("list_files", first_arguments, "first"),
-                    ModelToolCall("list_files", second_arguments, "second"),
+                    ModelToolCall(tool_name, first_arguments, "first"),
+                    ModelToolCall(tool_name, second_arguments, "second"),
                 ),
             )
         ]
@@ -389,6 +418,7 @@ async def test_repeat_limit_uses_normalized_application_arguments(
     assert result.stop_reason == "repeated_tool_call_limit"
     assert result.tool_calls == 1
     assert len(result.events) == 1
+    assert dispatches == 1
 
 
 @pytest.mark.anyio

@@ -23,6 +23,16 @@ class RepositoryFileError(Exception):
     detail: str
 
 
+def normalize_repository_relative_path(request_path: str) -> str:
+    """Normalize a safe relative spelling without touching the filesystem."""
+    if "\0" in request_path:
+        raise RepositoryFileError("unsafe_path", "The requested path is outside the repository.")
+    supplied = PurePath(request_path)
+    if not request_path or supplied.is_absolute() or ".." in supplied.parts:
+        raise RepositoryFileError("unsafe_path", "The requested path is outside the repository.")
+    return Path(*supplied.parts).as_posix()
+
+
 @dataclass(frozen=True, slots=True)
 class FileEntry:
     path: str
@@ -213,17 +223,8 @@ class ConfinedRepositoryFiles:
         return resolved, relative
 
     def _resolve_requested_path(self, request_path: str) -> tuple[Path, str]:
-        if "\0" in request_path:
-            raise RepositoryFileError(
-                "unsafe_path", "The requested path is outside the repository."
-            )
-        supplied = PurePath(request_path)
-        if not request_path or supplied.is_absolute() or ".." in supplied.parts:
-            raise RepositoryFileError(
-                "unsafe_path", "The requested path is outside the repository."
-            )
-        relative = Path(*supplied.parts)
-        normalized = relative.as_posix()
+        normalized = normalize_repository_relative_path(request_path)
+        relative = Path(normalized)
         self._ensure_visible_relative(normalized)
         return self._root / relative, normalized
 
