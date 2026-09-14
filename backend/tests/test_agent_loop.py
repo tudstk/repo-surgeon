@@ -5,6 +5,8 @@ import json
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Event as ThreadEvent
+from threading import Lock
 from uuid import UUID, uuid4
 
 import pytest
@@ -22,6 +24,7 @@ from repo_surgeon.agent import (
 from repo_surgeon.application.repository_files import ConfinedRepositoryFiles
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.mcp.file_tools import (
+    MIN_TOOL_RESULT_BYTES,
     FileEntryOutput,
     ListFilesInput,
     ListFilesOutput,
@@ -29,6 +32,7 @@ from repo_surgeon.mcp.file_tools import (
     ReadFileInput,
     ReadFileOutput,
     ToolErrorOutput,
+    returned_bytes_limit_error,
 )
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "repos" / "m1-repository-safety"
@@ -40,6 +44,18 @@ def tool_client() -> tuple[McpFileTools, UUID]:
         repository_id, RepositorySource.LOCAL, str(FIXTURE_ROOT), datetime.now(UTC)
     )
     return McpFileTools(MemoryRepositoryStore(repository)), repository_id
+
+
+def serialized_size(value: object) -> int:
+    if hasattr(value, "model_dump"):
+        value = value.model_dump(mode="json")
+    return len(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
+
+
+async def wait_for_thread_event(event: ThreadEvent) -> None:
+    async with asyncio.timeout(1):
+        while not event.is_set():
+            await asyncio.sleep(0.001)
 
 
 @pytest.mark.anyio
@@ -145,7 +161,7 @@ async def test_low_byte_budget_denies_dispatch_before_tool_execution() -> None:
 
     async def should_not_run(
         arguments: ListFilesInput, max_bytes: int | None = None
-    ) -> ListFilesOutput | ToolErrorOutput:
+    ) -> ListFilesOutput | ToolErrorOutput | None:
         nonlocal calls
         calls += 1
         return await McpFileTools.list_files(tools, arguments)
@@ -179,7 +195,7 @@ async def test_over_budget_tool_result_is_not_returned_to_provider() -> None:
         if max_bytes is not None and max_bytes < 512:
             return ToolErrorOutput(
                 code="returned_bytes_limit",
-                detail="The tool result exceeds the remaining turn budget.",
+                detail="The tool result exceeds the budget.",
             )
         completed = True
         return ListFilesOutput(
@@ -291,7 +307,7 @@ async def test_slow_tool_is_cancelled_at_turn_deadline() -> None:
 
     async def slow_tool(
         arguments: ListFilesInput, max_bytes: int | None = None
-    ) -> ListFilesOutput | ToolErrorOutput:
+    ) -> ListFilesOutput | ToolErrorOutput | None:
         started.set()
         await asyncio.sleep(1)
         return await McpFileTools.list_files(tools, arguments)
@@ -313,7 +329,7 @@ async def test_active_tool_cancellation_propagates() -> None:
 
     async def cancellable_tool(
         arguments: ListFilesInput, max_bytes: int | None = None
-    ) -> ListFilesOutput | ToolErrorOutput:
+    ) -> ListFilesOutput | ToolErrorOutput | None:
         active.set()
         await asyncio.sleep(1)
         return await McpFileTools.list_files(tools, arguments)
@@ -398,22 +414,152 @@ async def test_real_tool_results_fit_exact_remaining_byte_budget() -> None:
 
 
 @pytest.mark.anyio
+async def test_tool_error_envelopes_have_exact_below_at_above_boundaries() -> None:
+    tools, repository_id = tool_client()
+    missing_repository_id = uuid4()
+    assert serialized_size(returned_bytes_limit_error()) == MIN_TOOL_RESULT_BYTES
+
+    list_arguments = ListFilesInput(repository_id=missing_repository_id)
+    assert await tools.list_files(list_arguments, max_bytes=MIN_TOOL_RESULT_BYTES - 1) is None
+    for budget in (MIN_TOOL_RESULT_BYTES, MIN_TOOL_RESULT_BYTES + 1):
+        list_result = await tools.list_files(list_arguments, max_bytes=budget)
+        assert isinstance(list_result, ToolErrorOutput)
+        assert list_result.code == "returned_bytes_limit"
+        assert serialized_size(list_result) <= budget
+
+    read_arguments = ReadFileInput(repository_id=missing_repository_id, path="README.md")
+    assert await tools.read_file(read_arguments, max_bytes=MIN_TOOL_RESULT_BYTES - 1) is None
+    for budget in (MIN_TOOL_RESULT_BYTES, MIN_TOOL_RESULT_BYTES + 1):
+        read_result = await tools.read_file(read_arguments, max_bytes=budget)
+        assert isinstance(read_result, ToolErrorOutput)
+        assert read_result.code == "returned_bytes_limit"
+        assert serialized_size(read_result) <= budget
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("tool_name", "arguments"),
+    [("list_files", {}), ("read_file", {"path": "README.md"})],
+)
+@pytest.mark.parametrize("budget_offset", [-1, 0, 1])
+async def test_run_turn_enforces_exact_result_envelope_boundary(
+    tool_name: str, arguments: dict[str, object], budget_offset: int
+) -> None:
+    tools, repository_id = tool_client()
+    budget = MIN_TOOL_RESULT_BYTES + budget_offset
+    responses = [ModelResponse("Partial", (ModelToolCall(tool_name, arguments),))]
+    if budget_offset >= 0:
+        responses.append(ModelResponse("Done"))
+    provider = FakeModelProvider(responses)
+
+    result = await run_turn(
+        provider,
+        tools,
+        repository_id,
+        "Summarize",
+        AgentLimits(max_returned_bytes=budget),
+    )
+
+    if budget_offset < 0:
+        assert result.stop_reason == "returned_bytes_limit"
+        assert result.returned_bytes == 0
+        assert len(provider.requests) == 1
+    else:
+        assert result.status == "complete"
+        assert 0 < result.returned_bytes <= budget
+        assert len(provider.requests) == 2
+        assert serialized_size(provider.requests[1].messages[-1]["content"]) <= budget
+
+
+@pytest.mark.anyio
 async def test_blocking_filesystem_work_does_not_block_turn_deadline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     tools, repository_id = tool_client()
     original_list = ConfinedRepositoryFiles.list_files
+    worker_started = ThreadEvent()
+    release_worker = ThreadEvent()
+    worker_finished = ThreadEvent()
 
     def blocked_list(*args: object, **kwargs: object) -> object:
-        time.sleep(0.2)
-        return original_list(ConfinedRepositoryFiles(str(FIXTURE_ROOT)))
+        worker_started.set()
+        release_worker.wait(timeout=1)
+        try:
+            return original_list(ConfinedRepositoryFiles(str(FIXTURE_ROOT)))
+        finally:
+            worker_finished.set()
 
     monkeypatch.setattr(ConfinedRepositoryFiles, "list_files", blocked_list)
     provider = FakeModelProvider([ModelResponse("Partial", (ModelToolCall("list_files", {}),))])
     started = time.monotonic()
-    result = await run_turn(
-        provider, tools, repository_id, "Summarize", AgentLimits(max_duration_seconds=0.01)
-    )
+    try:
+        result = await run_turn(
+            provider, tools, repository_id, "Summarize", AgentLimits(max_duration_seconds=0.01)
+        )
 
-    assert result.stop_reason == "duration_limit"
-    assert time.monotonic() - started < 0.1
+        assert result.stop_reason == "duration_limit"
+        assert time.monotonic() - started < 0.1
+        assert worker_started.is_set()
+        assert not worker_finished.is_set()
+    finally:
+        release_worker.set()
+        await wait_for_thread_event(worker_finished)
+
+
+@pytest.mark.anyio
+async def test_repeated_blocking_timeouts_use_one_bounded_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    active = 0
+    peak = 0
+    started = 0
+    completed = 0
+    counter_lock = Lock()
+    release_worker = ThreadEvent()
+    worker_finished = ThreadEvent()
+    original_list = ConfinedRepositoryFiles.list_files
+
+    def blocked_list(*args: object, **kwargs: object) -> object:
+        nonlocal active, peak, started, completed
+        with counter_lock:
+            active += 1
+            started += 1
+            peak = max(peak, active)
+        release_worker.wait(timeout=1)
+        try:
+            return original_list(ConfinedRepositoryFiles(str(FIXTURE_ROOT)))
+        finally:
+            with counter_lock:
+                active -= 1
+                completed += 1
+            worker_finished.set()
+
+    monkeypatch.setattr(ConfinedRepositoryFiles, "list_files", blocked_list)
+    try:
+        for _ in range(3):
+            tools, repository_id = tool_client()
+            provider = FakeModelProvider(
+                [ModelResponse("Partial", (ModelToolCall("list_files", {}),))]
+            )
+            result = await run_turn(
+                provider,
+                tools,
+                repository_id,
+                "Summarize",
+                AgentLimits(max_duration_seconds=0.005),
+            )
+            assert result.stop_reason == "duration_limit"
+
+        with counter_lock:
+            assert active == 1
+            assert started == 1
+            assert completed == 0
+            assert peak == 1
+    finally:
+        release_worker.set()
+        await wait_for_thread_event(worker_finished)
+
+    with counter_lock:
+        assert active == 0
+        assert started == completed == 1
+        assert peak == 1

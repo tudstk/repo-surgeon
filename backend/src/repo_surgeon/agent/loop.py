@@ -22,10 +22,12 @@ from repo_surgeon.agent.provider import (
     ModelToolCall,
 )
 from repo_surgeon.mcp.file_tools import (
+    MIN_TOOL_RESULT_BYTES,
     ListFilesInput,
     McpFileTools,
     ReadFileInput,
     ToolErrorOutput,
+    returned_bytes_limit_error,
 )
 
 
@@ -176,8 +178,7 @@ async def run_turn(
             result: object
             status: Literal["success", "error", "denied"]
             remaining_bytes = effective_limits.max_returned_bytes - returned_bytes
-            minimum_result_bytes = len(_serialized(_validation_error(call.name)))
-            if remaining_bytes < minimum_result_bytes:
+            if remaining_bytes < MIN_TOOL_RESULT_BYTES:
                 return limited("returned_bytes_limit")
             if not valid_provider_id:
                 result = ToolErrorOutput(
@@ -221,6 +222,8 @@ async def run_turn(
                             ),
                             timeout=max(tool_remaining, 0.001),
                         )
+                    if result is None:
+                        return limited("returned_bytes_limit")
                     status = "error" if isinstance(result, ToolErrorOutput) else "success"
                 except asyncio.CancelledError:
                     raise
@@ -230,8 +233,10 @@ async def run_turn(
                     result = _validation_error(call.name)
                     status = "error"
             payload = _serialized(result)
-            if returned_bytes + len(payload) > effective_limits.max_returned_bytes:
-                return limited("returned_bytes_limit")
+            if len(payload) > remaining_bytes:
+                result = returned_bytes_limit_error()
+                status = "error"
+                payload = _serialized(result)
             returned_bytes += len(payload)
             events.append(ToolEvent(call.name, status, call_id))
             messages.append(
