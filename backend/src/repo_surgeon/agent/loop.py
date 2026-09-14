@@ -19,7 +19,6 @@ from repo_surgeon.agent.provider import (
     ModelProvider,
     ModelRequest,
     ModelResponse,
-    ModelToolCall,
 )
 from repo_surgeon.mcp.file_tools import (
     MIN_TOOL_RESULT_BYTES,
@@ -79,10 +78,18 @@ def _json_arguments(arguments: object) -> str | None:
         return None
 
 
-def _call_key(call: ModelToolCall, serialized_arguments: str | None) -> str:
-    if serialized_arguments is None:
-        return f"invalid-arguments:{call.name}"
-    return json.dumps({"name": call.name, "arguments": serialized_arguments}, sort_keys=True)
+def _normalized_call_key(name: str, arguments: ListFilesInput | ReadFileInput) -> str:
+    return _serialized(
+        {"kind": "execution", "name": name, "arguments": arguments.model_dump(mode="json")}
+    ).decode()
+
+
+def _invalid_call_key(name: str) -> str:
+    return _serialized({"kind": "invalid_arguments", "name": name}).decode()
+
+
+def _denied_call_key(name: str, serialized_arguments: str) -> str:
+    return _serialized({"kind": "denied", "name": name, "arguments": serialized_arguments}).decode()
 
 
 def _validation_error(name: str) -> ToolErrorOutput:
@@ -154,27 +161,58 @@ async def run_turn(
                 events=tuple(events),
             )
 
-        response_call_ids: set[str] = set()
+        reserved_provider_ids = {
+            call.call_id
+            for call in response.tool_calls
+            if isinstance(call.call_id, str) and call.call_id and len(call.call_id) <= 256
+        }
+        seen_provider_ids: set[str] = set()
+        emitted_call_ids: set[str] = set()
         for call in response.tool_calls:
             if clock() - started >= effective_limits.max_duration_seconds:
                 return limited("duration_limit")
             if tool_calls >= effective_limits.max_tool_calls:
                 return limited("tool_call_limit")
             serialized_arguments = _json_arguments(call.arguments)
-            key = _call_key(call, serialized_arguments)
+            validated_arguments: ListFilesInput | ReadFileInput | None = None
+            invalid_arguments = serialized_arguments is None
+            if not invalid_arguments and call.name in {"list_files", "read_file"}:
+                try:
+                    arguments = {**call.arguments, "repository_id": repository_id}
+                    validated_arguments = (
+                        ListFilesInput.model_validate(arguments)
+                        if call.name == "list_files"
+                        else ReadFileInput.model_validate(arguments)
+                    )
+                except TypeError, ValidationError:
+                    invalid_arguments = True
+
+            if invalid_arguments:
+                key = _invalid_call_key(call.name)
+            elif validated_arguments is not None:
+                key = _normalized_call_key(call.name, validated_arguments)
+            else:
+                assert serialized_arguments is not None
+                key = _denied_call_key(call.name, serialized_arguments)
             repeated[key] += 1
             if repeated[key] > effective_limits.max_repeated_tool_calls:
                 return limited("repeated_tool_call_limit")
             tool_calls += 1
-            generated_call_id += 1
             valid_provider_id = isinstance(call.call_id, str) and len(call.call_id) <= 256
             requested_call_id = call.call_id if valid_provider_id else ""
-            duplicate_call_id = bool(requested_call_id) and requested_call_id in response_call_ids
+            duplicate_call_id = bool(requested_call_id) and requested_call_id in seen_provider_ids
+            if requested_call_id:
+                seen_provider_ids.add(requested_call_id)
             call_id = requested_call_id if requested_call_id and not duplicate_call_id else ""
-            while not call_id or call_id in response_call_ids:
-                call_id = f"generated-{generated_call_id}"
+            while not call_id:
                 generated_call_id += 1
-            response_call_ids.add(call_id)
+                candidate_call_id = f"generated-{generated_call_id}"
+                if (
+                    candidate_call_id not in reserved_provider_ids
+                    and candidate_call_id not in emitted_call_ids
+                ):
+                    call_id = candidate_call_id
+            emitted_call_ids.add(call_id)
             result: object
             status: Literal["success", "error", "denied"]
             remaining_bytes = effective_limits.max_returned_bytes - returned_bytes
@@ -192,10 +230,10 @@ async def run_turn(
                     detail="Tool call IDs must be unique within a provider response.",
                 )
                 status = "error"
-            elif serialized_arguments is None:
+            elif invalid_arguments:
                 result = _validation_error(call.name)
                 status = "error"
-            elif call.name not in {"list_files", "read_file"}:
+            elif validated_arguments is None:
                 result = ToolErrorOutput(
                     code="write_operation_denied"
                     if call.name.startswith("write")
@@ -205,21 +243,16 @@ async def run_turn(
                 status = "denied"
             else:
                 try:
-                    arguments = {**call.arguments, "repository_id": repository_id}
                     tool_remaining = effective_limits.max_duration_seconds - (clock() - started)
                     tool_budget = effective_limits.max_returned_bytes - returned_bytes
-                    if call.name == "list_files":
+                    if isinstance(validated_arguments, ListFilesInput):
                         result = await asyncio.wait_for(
-                            tools.list_files(
-                                ListFilesInput.model_validate(arguments), max_bytes=tool_budget
-                            ),
+                            tools.list_files(validated_arguments, max_bytes=tool_budget),
                             timeout=max(tool_remaining, 0.001),
                         )
                     else:
                         result = await asyncio.wait_for(
-                            tools.read_file(
-                                ReadFileInput.model_validate(arguments), max_bytes=tool_budget
-                            ),
+                            tools.read_file(validated_arguments, max_bytes=tool_budget),
                             timeout=max(tool_remaining, 0.001),
                         )
                     if result is None:
@@ -229,9 +262,6 @@ async def run_turn(
                     raise
                 except TimeoutError:
                     return limited("duration_limit")
-                except TypeError, ValidationError:
-                    result = _validation_error(call.name)
-                    status = "error"
             payload = _serialized(result)
             if len(payload) > remaining_bytes:
                 result = returned_bytes_limit_error()

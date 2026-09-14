@@ -10,7 +10,7 @@ from threading import BoundedSemaphore
 from typing import Any, cast
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from repo_surgeon.application.repositories import RepositoryStore
 from repo_surgeon.application.repository_files import (
@@ -32,6 +32,13 @@ class ListFilesInput(BaseModel):
     glob: str | None = Field(default=None, min_length=1, max_length=256)
     max_results: int = Field(default=50, ge=1)
 
+    @field_validator("directory", "glob")
+    @classmethod
+    def reject_nul_paths(cls, value: str | None) -> str | None:
+        if value is not None and "\0" in value:
+            raise ValueError("path values must not contain NUL characters")
+        return value
+
     @model_validator(mode="after")
     def clamp_max_results(self) -> ListFilesInput:
         self.max_results = min(self.max_results, MAX_FILE_COUNT)
@@ -46,6 +53,13 @@ class ReadFileInput(BaseModel):
     path: str = Field(min_length=1, max_length=4096)
     start_line: int = Field(default=1, ge=1)
     end_line: int | None = Field(default=None, ge=1)
+
+    @field_validator("path")
+    @classmethod
+    def reject_nul_path(cls, value: str) -> str:
+        if "\0" in value:
+            raise ValueError("path values must not contain NUL characters")
+        return value
 
     @model_validator(mode="after")
     def clamp_line_range(self) -> ReadFileInput:
@@ -174,6 +188,24 @@ _FILE_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix="repo-surgeo
 _FILE_WORKER_SLOT = BoundedSemaphore(value=1)
 
 
+def _list_repository_files(
+    canonical_root: str,
+    directory: str,
+    glob: str | None,
+    max_results: int,
+) -> FileListing:
+    return ConfinedRepositoryFiles(canonical_root).list_files(directory, glob, max_results)
+
+
+def _read_repository_file(
+    canonical_root: str,
+    path: str,
+    start_line: int,
+    end_line: int | None,
+) -> FileRead:
+    return ConfinedRepositoryFiles(canonical_root).read_file(path, start_line, end_line)
+
+
 async def _run_blocking[BlockingResult](
     function: Callable[..., BlockingResult], *args: object
 ) -> BlockingResult:
@@ -222,7 +254,8 @@ class McpFileTools:
             listing = cast(
                 FileListing,
                 await _run_blocking(
-                    ConfinedRepositoryFiles(repository.canonical_root).list_files,
+                    _list_repository_files,
+                    repository.canonical_root,
                     arguments.directory,
                     arguments.glob,
                     arguments.max_results,
@@ -251,7 +284,8 @@ class McpFileTools:
             read = cast(
                 FileRead,
                 await _run_blocking(
-                    ConfinedRepositoryFiles(repository.canonical_root).read_file,
+                    _read_repository_file,
+                    repository.canonical_root,
                     arguments.path,
                     arguments.start_line,
                     arguments.end_line,

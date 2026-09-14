@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from threading import Event as ThreadEvent
 from threading import Lock
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -21,7 +22,7 @@ from repo_surgeon.agent import (
     ModelToolCall,
     run_turn,
 )
-from repo_surgeon.application.repository_files import ConfinedRepositoryFiles
+from repo_surgeon.application.repository_files import MAX_FILE_COUNT, ConfinedRepositoryFiles
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.mcp.file_tools import (
     MIN_TOOL_RESULT_BYTES,
@@ -184,7 +185,7 @@ async def test_low_byte_budget_denies_dispatch_before_tool_execution() -> None:
 
 
 @pytest.mark.anyio
-async def test_over_budget_tool_result_is_not_returned_to_provider() -> None:
+async def test_nonconforming_over_budget_tool_result_is_replaced() -> None:
     tools, repository_id = tool_client()
     completed = False
 
@@ -192,11 +193,6 @@ async def test_over_budget_tool_result_is_not_returned_to_provider() -> None:
         arguments: ListFilesInput, max_bytes: int | None = None
     ) -> ListFilesOutput | ToolErrorOutput:
         nonlocal completed
-        if max_bytes is not None and max_bytes < 512:
-            return ToolErrorOutput(
-                code="returned_bytes_limit",
-                detail="The tool result exceeds the budget.",
-            )
         completed = True
         return ListFilesOutput(
             directory=".",
@@ -215,7 +211,7 @@ async def test_over_budget_tool_result_is_not_returned_to_provider() -> None:
         provider, tools, repository_id, "Summarize", AgentLimits(max_returned_bytes=100)
     )
 
-    assert not completed
+    assert completed
     assert result.status == "complete"
     assert result.returned_bytes > 0
     assert provider.requests[1].messages[-1]["content"]["code"] == "returned_bytes_limit"  # type: ignore[index]
@@ -251,6 +247,30 @@ async def test_non_standard_json_numbers_are_rejected(value: float) -> None:
     assert result.status == "complete"
     assert result.events[0].status == "error"
     assert provider.requests[1].messages[-1]["content"]["code"] == "invalid_tool_arguments"  # type: ignore[index]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("tool_name", "arguments"),
+    [("read_file", {"path": "src/\0.py"}), ("list_files", {"directory": "src/\0"})],
+)
+async def test_nul_paths_become_strict_json_bounded_tool_errors(
+    tool_name: str, arguments: dict[str, object]
+) -> None:
+    tools, repository_id = tool_client()
+    provider = FakeModelProvider(
+        [ModelResponse("", (ModelToolCall(tool_name, arguments),)), ModelResponse("Done")]
+    )
+
+    result = await run_turn(provider, tools, repository_id, "Summarize")
+
+    assert result.status == "complete"
+    assert result.events[0].status == "error"
+    content = provider.requests[1].messages[-1]["content"]
+    assert isinstance(content, dict)
+    assert content["code"] == "invalid_tool_arguments"
+    assert result.returned_bytes == serialized_size(content)
+    json.dumps(content, allow_nan=False)
 
 
 @pytest.mark.anyio
@@ -298,6 +318,77 @@ async def test_duplicate_provider_ids_are_rejected() -> None:
     assert result.status == "complete"
     assert [event.status for event in result.events] == ["success", "error"]
     assert provider.requests[1].messages[-1]["content"]["code"] == "duplicate_tool_call_id"  # type: ignore[index]
+
+
+@pytest.mark.anyio
+async def test_generated_ids_reserve_later_valid_provider_ids() -> None:
+    tools, repository_id = tool_client()
+    provider = FakeModelProvider(
+        [
+            ModelResponse(
+                "Inspecting",
+                (
+                    ModelToolCall("list_files", {}),
+                    ModelToolCall("list_files", {"directory": "src"}, cast(str, 123)),
+                    ModelToolCall("read_file", {"path": "README.md"}, "x" * 257),
+                    ModelToolCall("read_file", {"path": "src/main.py"}, "generated-1"),
+                ),
+            ),
+            ModelResponse("Done"),
+        ]
+    )
+
+    result = await run_turn(provider, tools, repository_id, "Summarize")
+
+    call_ids = [event.call_id for event in result.events]
+    assert result.status == "complete"
+    assert [event.status for event in result.events] == ["success", "error", "error", "success"]
+    assert call_ids[-1] == "generated-1"
+    assert len(call_ids) == len(set(call_ids))
+    assert all(isinstance(call_id, str) and len(call_id) <= 256 for call_id in call_ids)
+    tool_messages = [
+        message for message in provider.requests[1].messages if message["role"] == "tool"
+    ]
+    assert [message["tool_call_id"] for message in tool_messages] == call_ids
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("first_arguments", "second_arguments"),
+    [
+        ({"repository_id": "ignored-a"}, {"repository_id": "ignored-b"}),
+        ({}, {"directory": ".", "glob": None, "max_results": 50}),
+        ({"max_results": MAX_FILE_COUNT + 1}, {"max_results": MAX_FILE_COUNT + 999}),
+    ],
+)
+async def test_repeat_limit_uses_normalized_application_arguments(
+    first_arguments: dict[str, object], second_arguments: dict[str, object]
+) -> None:
+    tools, repository_id = tool_client()
+    provider = FakeModelProvider(
+        [
+            ModelResponse(
+                "Inspecting",
+                (
+                    ModelToolCall("list_files", first_arguments, "first"),
+                    ModelToolCall("list_files", second_arguments, "second"),
+                ),
+            )
+        ]
+    )
+
+    result = await run_turn(
+        provider,
+        tools,
+        repository_id,
+        "Summarize",
+        AgentLimits(max_repeated_tool_calls=1),
+    )
+
+    assert result.status == "limit_reached"
+    assert result.stop_reason == "repeated_tool_call_limit"
+    assert result.tool_calls == 1
+    assert len(result.events) == 1
 
 
 @pytest.mark.anyio
@@ -504,6 +595,90 @@ async def test_blocking_filesystem_work_does_not_block_turn_deadline(
     finally:
         release_worker.set()
         await wait_for_thread_event(worker_finished)
+
+
+@pytest.mark.anyio
+async def test_blocking_repository_construction_obeys_deadline_and_global_admission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    constructor_started = ThreadEvent()
+    release_constructor = ThreadEvent()
+    constructor_finished = ThreadEvent()
+    constructor_calls = 0
+    counter_lock = Lock()
+    original_init = ConfinedRepositoryFiles.__init__
+
+    def blocked_init(service: ConfinedRepositoryFiles, canonical_root: str) -> None:
+        nonlocal constructor_calls
+        with counter_lock:
+            constructor_calls += 1
+        constructor_started.set()
+        release_constructor.wait(timeout=1)
+        try:
+            original_init(service, canonical_root)
+        finally:
+            constructor_finished.set()
+
+    monkeypatch.setattr(ConfinedRepositoryFiles, "__init__", blocked_init)
+    tools, repository_id = tool_client()
+    provider = FakeModelProvider([ModelResponse("Partial", (ModelToolCall("list_files", {}),))])
+    started = time.monotonic()
+    try:
+        result = await run_turn(
+            provider,
+            tools,
+            repository_id,
+            "Summarize",
+            AgentLimits(max_duration_seconds=0.01),
+        )
+        assert result.stop_reason == "duration_limit"
+        assert time.monotonic() - started < 0.1
+        assert constructor_started.is_set()
+        assert not constructor_finished.is_set()
+
+        waiting_tools, waiting_repository_id = tool_client()
+        waiting_provider = FakeModelProvider(
+            [ModelResponse("Partial", (ModelToolCall("list_files", {}),))]
+        )
+        waiting_turn = asyncio.create_task(
+            run_turn(waiting_provider, waiting_tools, waiting_repository_id, "Summarize")
+        )
+        await asyncio.sleep(0.005)
+        waiting_turn.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await waiting_turn
+
+        timed_tools, timed_repository_id = tool_client()
+        timed_provider = FakeModelProvider(
+            [ModelResponse("Partial", (ModelToolCall("list_files", {}),))]
+        )
+        timed_result = await run_turn(
+            timed_provider,
+            timed_tools,
+            timed_repository_id,
+            "Summarize",
+            AgentLimits(max_duration_seconds=0.005),
+        )
+        assert timed_result.stop_reason == "duration_limit"
+        with counter_lock:
+            assert constructor_calls == 1
+    finally:
+        release_constructor.set()
+        await wait_for_thread_event(constructor_finished)
+
+    recovery_tools, recovery_repository_id = tool_client()
+    recovery_provider = FakeModelProvider(
+        [
+            ModelResponse("Inspecting", (ModelToolCall("list_files", {}),)),
+            ModelResponse("Done"),
+        ]
+    )
+    recovery_result = await run_turn(
+        recovery_provider, recovery_tools, recovery_repository_id, "Summarize"
+    )
+    assert recovery_result.status == "complete"
+    with counter_lock:
+        assert constructor_calls == 2
 
 
 @pytest.mark.anyio

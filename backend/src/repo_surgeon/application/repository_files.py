@@ -213,6 +213,10 @@ class ConfinedRepositoryFiles:
         return resolved, relative
 
     def _resolve_requested_path(self, request_path: str) -> tuple[Path, str]:
+        if "\0" in request_path:
+            raise RepositoryFileError(
+                "unsafe_path", "The requested path is outside the repository."
+            )
         supplied = PurePath(request_path)
         if not request_path or supplied.is_absolute() or ".." in supplied.parts:
             raise RepositoryFileError(
