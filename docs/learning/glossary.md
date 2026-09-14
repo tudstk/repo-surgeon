@@ -1,6 +1,6 @@
 # Glossary
 
-This glossary covers concepts implemented in M0. MCP, model providers, repository confinement, sandboxing, proposals, and approvals are roadmap-only.
+This glossary covers concepts implemented through Milestone 2. Sandboxing, proposals, and approvals remain roadmap-only.
 
 | Term | Meaning here | C#/.NET bridge |
 | --- | --- | --- |

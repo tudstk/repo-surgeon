@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
+from threading import BoundedSemaphore
 from typing import Any, cast
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from repo_surgeon.application.repositories import RepositoryStore
 from repo_surgeon.application.repository_files import (
@@ -27,6 +32,13 @@ class ListFilesInput(BaseModel):
     glob: str | None = Field(default=None, min_length=1, max_length=256)
     max_results: int = Field(default=50, ge=1)
 
+    @field_validator("directory", "glob")
+    @classmethod
+    def reject_nul_paths(cls, value: str | None) -> str | None:
+        if value is not None and "\0" in value:
+            raise ValueError("path values must not contain NUL characters")
+        return value
+
     @model_validator(mode="after")
     def clamp_max_results(self) -> ListFilesInput:
         self.max_results = min(self.max_results, MAX_FILE_COUNT)
@@ -41,6 +53,13 @@ class ReadFileInput(BaseModel):
     path: str = Field(min_length=1, max_length=4096)
     start_line: int = Field(default=1, ge=1)
     end_line: int | None = Field(default=None, ge=1)
+
+    @field_validator("path")
+    @classmethod
+    def reject_nul_path(cls, value: str) -> str:
+        if "\0" in value:
+            raise ValueError("path values must not contain NUL characters")
+        return value
 
     @model_validator(mode="after")
     def clamp_line_range(self) -> ReadFileInput:
@@ -113,6 +132,99 @@ class ToolErrorOutput(BaseModel):
     detail: str
 
 
+def _serialized_size(value: BaseModel) -> int:
+    return len(
+        json.dumps(value.model_dump(mode="json"), sort_keys=True, separators=(",", ":")).encode()
+    )
+
+
+def returned_bytes_limit_error() -> ToolErrorOutput:
+    """Return the smallest provider-facing result supported by the tool contract."""
+    return ToolErrorOutput(
+        code="returned_bytes_limit", detail="The tool result exceeds the budget."
+    )
+
+
+MIN_TOOL_RESULT_BYTES = _serialized_size(returned_bytes_limit_error())
+
+
+def _bound_error(result: ToolErrorOutput, max_bytes: int | None) -> ToolErrorOutput | None:
+    if max_bytes is None or _serialized_size(result) <= max_bytes:
+        return result
+    error = returned_bytes_limit_error()
+    return error if _serialized_size(error) <= max_bytes else None
+
+
+def _bound_list_result(
+    result: ListFilesOutput, max_bytes: int | None
+) -> ListFilesOutput | ToolErrorOutput | None:
+    if max_bytes is None or _serialized_size(result) <= max_bytes:
+        return result
+    for count in range(len(result.entries) - 1, -1, -1):
+        candidate = result.model_copy(update={"entries": result.entries[:count], "truncated": True})
+        if _serialized_size(candidate) <= max_bytes:
+            return candidate
+    error = returned_bytes_limit_error()
+    return error if _serialized_size(error) <= max_bytes else None
+
+
+def _bound_read_result(
+    result: ReadFileOutput, max_bytes: int | None
+) -> ReadFileOutput | ToolErrorOutput | None:
+    if max_bytes is None or _serialized_size(result) <= max_bytes:
+        return result
+    for count in range(len(result.lines) - 1, -1, -1):
+        last_line = result.lines[count - 1].number if count else result.start_line - 1
+        candidate = result.model_copy(
+            update={"lines": result.lines[:count], "end_line": last_line, "truncated": True}
+        )
+        if _serialized_size(candidate) <= max_bytes:
+            return candidate
+    error = returned_bytes_limit_error()
+    return error if _serialized_size(error) <= max_bytes else None
+
+
+_FILE_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix="repo-surgeon-files")
+_FILE_WORKER_SLOT = BoundedSemaphore(value=1)
+
+
+def _list_repository_files(
+    canonical_root: str,
+    directory: str,
+    glob: str | None,
+    max_results: int,
+) -> FileListing:
+    return ConfinedRepositoryFiles(canonical_root).list_files(directory, glob, max_results)
+
+
+def _read_repository_file(
+    canonical_root: str,
+    path: str,
+    start_line: int,
+    end_line: int | None,
+) -> FileRead:
+    return ConfinedRepositoryFiles(canonical_root).read_file(path, start_line, end_line)
+
+
+async def _run_blocking[BlockingResult](
+    function: Callable[..., BlockingResult], *args: object
+) -> BlockingResult:
+    while not _FILE_WORKER_SLOT.acquire(blocking=False):
+        await asyncio.sleep(0.001)
+
+    try:
+        worker = _FILE_WORKER.submit(function, *args)
+    except BaseException:
+        _FILE_WORKER_SLOT.release()
+        raise
+
+    def release_worker_slot(_: Future[BlockingResult]) -> None:
+        _FILE_WORKER_SLOT.release()
+
+    worker.add_done_callback(release_worker_slot)
+    return await asyncio.shield(asyncio.wrap_future(worker))
+
+
 class McpFileTools:
     """Thin in-process adapter ready for registration with FastMCP.
 
@@ -124,33 +236,65 @@ class McpFileTools:
     def __init__(self, store: RepositoryStore) -> None:
         self._store = store
 
-    async def list_files(self, arguments: ListFilesInput) -> ListFilesOutput | ToolErrorOutput:
+    async def list_files(
+        self, arguments: ListFilesInput, max_bytes: int | None = None
+    ) -> ListFilesOutput | ToolErrorOutput | None:
+        if max_bytes is not None and max_bytes < MIN_TOOL_RESULT_BYTES:
+            return None
         repository = await self._store.get(arguments.repository_id)
         if repository is None:
-            return ToolErrorOutput(
-                code="repository_not_found", detail="The requested repository was not found."
+            return _bound_error(
+                ToolErrorOutput(
+                    code="repository_not_found",
+                    detail="The requested repository was not found.",
+                ),
+                max_bytes,
             )
         try:
-            result = ConfinedRepositoryFiles(repository.canonical_root).list_files(
-                arguments.directory, arguments.glob, arguments.max_results
+            listing = cast(
+                FileListing,
+                await _run_blocking(
+                    _list_repository_files,
+                    repository.canonical_root,
+                    arguments.directory,
+                    arguments.glob,
+                    arguments.max_results,
+                ),
             )
         except RepositoryFileError as error:
-            return ToolErrorOutput(code=error.code, detail=error.detail)
-        return ListFilesOutput.from_listing(result)
+            return _bound_error(ToolErrorOutput(code=error.code, detail=error.detail), max_bytes)
+        result = ListFilesOutput.from_listing(listing)
+        return _bound_list_result(result, max_bytes)
 
-    async def read_file(self, arguments: ReadFileInput) -> ReadFileOutput | ToolErrorOutput:
+    async def read_file(
+        self, arguments: ReadFileInput, max_bytes: int | None = None
+    ) -> ReadFileOutput | ToolErrorOutput | None:
+        if max_bytes is not None and max_bytes < MIN_TOOL_RESULT_BYTES:
+            return None
         repository = await self._store.get(arguments.repository_id)
         if repository is None:
-            return ToolErrorOutput(
-                code="repository_not_found", detail="The requested repository was not found."
+            return _bound_error(
+                ToolErrorOutput(
+                    code="repository_not_found",
+                    detail="The requested repository was not found.",
+                ),
+                max_bytes,
             )
         try:
-            result = ConfinedRepositoryFiles(repository.canonical_root).read_file(
-                arguments.path, arguments.start_line, arguments.end_line
+            read = cast(
+                FileRead,
+                await _run_blocking(
+                    _read_repository_file,
+                    repository.canonical_root,
+                    arguments.path,
+                    arguments.start_line,
+                    arguments.end_line,
+                ),
             )
         except RepositoryFileError as error:
-            return ToolErrorOutput(code=error.code, detail=error.detail)
-        return ReadFileOutput.from_read(result)
+            return _bound_error(ToolErrorOutput(code=error.code, detail=error.detail), max_bytes)
+        result = ReadFileOutput.from_read(read)
+        return _bound_read_result(result, max_bytes)
 
 
 def tool_audit_summary(
@@ -199,6 +343,7 @@ def create_mcp_server(store: RepositoryStore) -> Any:
                 max_results=max_results,
             )
         )
+        assert result is not None
         return cast(dict[str, object], result.model_dump(mode="json"))
 
     @server.tool(
@@ -218,6 +363,7 @@ def create_mcp_server(store: RepositoryStore) -> Any:
                 end_line=end_line,
             )
         )
+        assert result is not None
         return cast(dict[str, object], result.model_dump(mode="json"))
 
     return server

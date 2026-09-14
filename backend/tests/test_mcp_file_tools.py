@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -16,6 +17,7 @@ from repo_surgeon.application.repositories import RepositoryStore
 from repo_surgeon.application.repository_files import ConfinedRepositoryFiles
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.mcp.file_tools import (
+    MIN_TOOL_RESULT_BYTES,
     ListFilesInput,
     ListFilesOutput,
     McpFileTools,
@@ -106,6 +108,41 @@ async def test_attacker_visible_unsafe_paths_have_one_stable_content_free_error(
     assert result.code == "unsafe_path"
     assert "fixture-not-a-real-api-key" not in result.detail
     assert "not-a-real-token" not in result.detail
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("tool_name", ["list_files", "read_file"])
+async def test_nul_paths_bypassing_input_validation_return_bounded_errors(tool_name: str) -> None:
+    client, repository_id = tool_client()
+    result: ListFilesOutput | ReadFileOutput | ToolErrorOutput | None
+    bounded_result: ListFilesOutput | ReadFileOutput | ToolErrorOutput | None
+    if tool_name == "list_files":
+        arguments = ListFilesInput.model_construct(
+            repository_id=repository_id,
+            directory="src/\0",
+            glob=None,
+            max_results=50,
+        )
+        result = await client.list_files(arguments)
+        bounded_result = await client.list_files(arguments, max_bytes=MIN_TOOL_RESULT_BYTES)
+    else:
+        read_arguments = ReadFileInput.model_construct(
+            repository_id=repository_id,
+            path="src/\0.py",
+            start_line=1,
+            end_line=None,
+        )
+        result = await client.read_file(read_arguments)
+        bounded_result = await client.read_file(read_arguments, max_bytes=MIN_TOOL_RESULT_BYTES)
+
+    assert isinstance(result, ToolErrorOutput)
+    assert result.code == "unsafe_path"
+    assert isinstance(bounded_result, ToolErrorOutput)
+    assert bounded_result.code == "returned_bytes_limit"
+    encoded = json.dumps(
+        bounded_result.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+    ).encode()
+    assert len(encoded) == MIN_TOOL_RESULT_BYTES
 
 
 @pytest.mark.anyio
@@ -219,3 +256,7 @@ def test_pydantic_contracts_reject_unknown_fields_and_clamp_valid_bounds() -> No
     assert ReadFileInput(repository_id=uuid4(), path="README.md", end_line=999).end_line == 200
     with pytest.raises(ValidationError, match="end_line must be greater"):
         ReadFileInput(repository_id=uuid4(), path="README.md", start_line=3, end_line=2)
+    with pytest.raises(ValidationError, match="must not contain NUL"):
+        ListFilesInput(repository_id=uuid4(), directory="src/\0")
+    with pytest.raises(ValidationError, match="must not contain NUL"):
+        ReadFileInput(repository_id=uuid4(), path="src/\0.py")
