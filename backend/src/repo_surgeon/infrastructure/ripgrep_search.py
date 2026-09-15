@@ -293,6 +293,7 @@ class RipgrepSearchAdapter:
             "--no-heading",
             "--line-number",
             "--column",
+            "--no-follow",
             "--max-count",
             str(request.max_matches + 1),
         ]

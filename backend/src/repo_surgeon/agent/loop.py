@@ -275,9 +275,6 @@ def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
     )
     def reject_unsupported(match: re.Match[str]) -> str:
         path = match.group("path")
-        filename = PurePath(path).name
-        if "/" not in path and "." in filename and filename.rsplit(".", 1)[-1].isdigit():
-            return match.group(0)
         start = int(match.group("start"))
         end = int(match.group("end") or start)
         if any(
