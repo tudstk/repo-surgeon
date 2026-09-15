@@ -220,6 +220,7 @@ class RipgrepSearchAdapter:
                 "--glob=!**/*token*",
             )
         )
+        file_argv.append("--glob-case-insensitive")
         file_argv.extend(("--", normalized_path))
         discovered = self._run(tuple(file_argv), root, deadline)
         if discovered.returncode not in (0, 1):
