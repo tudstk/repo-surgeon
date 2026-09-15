@@ -40,7 +40,8 @@ from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
 _FILE_LINE_REFERENCE = re.compile(
     r"(?<![\w/])(?P<open>\[)?"
-    r"(?P<path>(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*\.[A-Za-z0-9_.-]+)"
+    r"(?P<path>(?:[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*/)*"
+    r"[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*\.[A-Za-z0-9_.-]+)"
     r":(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?(?P<close>\])?"
 )
 
@@ -234,6 +235,16 @@ def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
         if bool(match.group("open")) != bool(match.group("close")):
             return "[unsupported citation]"
         path = match.group("path")
+        citation = next(
+            (
+                citation
+                for citation in allowed
+                if path == citation.path or path.endswith(f" {citation.path}")
+            ),
+            None,
+        )
+        if citation is not None:
+            path = citation.path
         start = int(match.group("start"))
         end = int(match.group("end") or start)
         supported = end >= start and any(

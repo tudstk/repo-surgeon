@@ -125,8 +125,8 @@ async def test_search_answer_accepts_citations_for_paths_with_spaces(tmp_path: P
         repository_id, RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC)
     )
     tools = McpFileTools(MemoryRepositoryStore(repository))
-    spaced_path = tmp_path / "docs" / "my file.txt"
-    spaced_path.parent.mkdir()
+    spaced_path = tmp_path / "docs" / "api specs" / "handler.txt"
+    spaced_path.parent.mkdir(parents=True)
     spaced_path.write_text("Repository safety fixture\n")
     provider = FakeModelProvider(
         [
@@ -146,13 +146,13 @@ async def test_search_answer_accepts_citations_for_paths_with_spaces(tmp_path: P
                     ),
                 ),
             ),
-            ModelResponse("The file contains the fixture [docs/my file.txt:1]."),
+            ModelResponse("The file contains the fixture [docs/api specs/handler.txt:1]."),
         ]
     )
 
     result = await run_turn(provider, tools, repository_id, "Find the fixture.")
 
-    assert result.answer.endswith("[docs/my file.txt:1].")
+    assert result.answer.endswith("[docs/api specs/handler.txt:1].")
 
 
 @pytest.mark.anyio

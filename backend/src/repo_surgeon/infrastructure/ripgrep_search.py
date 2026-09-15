@@ -240,7 +240,7 @@ class RipgrepSearchAdapter:
             "--line-number",
             "--column",
             "--max-count",
-            str(min(request.max_matches + 1, 16)),
+            str(request.max_matches + 1),
             "--max-filesize",
             str(MAX_FILE_BYTES),
         ]
@@ -250,12 +250,17 @@ class RipgrepSearchAdapter:
         reasons: list[TruncationReason] = []
         for candidate in searchable:
             self._raise_if_cancelled()
-            candidate_search = tuple((*search_argv, "--", request.query, candidate))
+            remaining = request.max_matches - len(parsed)
+            candidate_search_argv = search_argv.copy()
+            candidate_search_argv[candidate_search_argv.index("--max-count") + 1] = str(
+                remaining + 1
+            )
+            candidate_search = tuple((*candidate_search_argv, "--", request.query, candidate))
             completed = self._run(candidate_search, root, deadline)
             if completed.returncode not in (0, 1):
                 raise SearchError("search_failed", "Repository search failed.")
             candidate_matches = self._parse_matches(completed.stdout)
-            if len(candidate_matches) == min(request.max_matches + 1, 16):
+            if len(candidate_matches) == remaining + 1:
                 reasons.append("matches")
             parsed.extend(candidate_matches)
             if len(parsed) > request.max_matches:
