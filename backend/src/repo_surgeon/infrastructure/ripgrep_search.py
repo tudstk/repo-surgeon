@@ -85,14 +85,19 @@ class SubprocessSearchRunner:
     def run(
         self, argv: tuple[str, ...], cwd: Path, timeout_seconds: float
     ) -> CompletedSearchProcess:
-        process = subprocess.Popen(
-            argv,
-            cwd=cwd,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            shell=False,
-        )
+        cwd_fd = os.open(cwd, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            process = subprocess.Popen(
+                argv,
+                cwd=f"/dev/fd/{cwd_fd}",
+                pass_fds=(cwd_fd,),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                shell=False,
+            )
+        finally:
+            os.close(cwd_fd)
         with self._process_lock:
             self._process = process
             cancelled = self._cancelled.is_set()
