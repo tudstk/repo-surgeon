@@ -44,7 +44,7 @@ uv sync --locked
 uv run uvicorn repo_surgeon.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The API listens on `127.0.0.1:8000`. In another terminal, run the health checks:
+The API listens on `127.0.0.1:8000` and rejects non-loopback clients. Repository metadata and source search are unauthenticated within this local development trust boundary, so do not expose the process through a proxy, container port, or non-loopback bind. In another terminal, run the health checks:
 
 ```sh
 curl --fail --silent --show-error http://127.0.0.1:8000/health/live

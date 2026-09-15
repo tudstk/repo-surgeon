@@ -98,6 +98,19 @@ async def test_registers_and_retrieves_a_canonical_git_root(
 
 
 @pytest.mark.anyio
+async def test_api_rejects_non_loopback_clients(tmp_path: Path) -> None:
+    database_path = tmp_path / "repositories.sqlite3"
+    app = create_app(Settings(database_url=f"sqlite+aiosqlite:///{database_path}"))
+    transport = httpx.ASGITransport(app=app, client=("192.0.2.1", 1234))
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/health/live")
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "local_only"
+
+
+@pytest.mark.anyio
 async def test_repository_summary_is_derived_from_registered_files(
     client: httpx.AsyncClient, tmp_path: Path
 ) -> None:

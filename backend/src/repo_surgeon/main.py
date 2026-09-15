@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from ipaddress import ip_address
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -26,6 +27,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await engine.dispose()
 
     app = FastAPI(title=configured_settings.app_name, version="0.1.0", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def loopback_only(request: Request, call_next):
+        client = request.client
+        if client is not None and client.host:
+            try:
+                is_loopback = ip_address(client.host).is_loopback
+            except ValueError:
+                is_loopback = False
+            if not is_loopback:
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "type": "https://repo-surgeon.local/problems/local_only",
+                        "title": "Local access required",
+                        "status": 403,
+                        "detail": "This development API accepts loopback connections only.",
+                        "code": "local_only",
+                    },
+                    media_type="application/problem+json",
+                )
+        return await call_next(request)
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],

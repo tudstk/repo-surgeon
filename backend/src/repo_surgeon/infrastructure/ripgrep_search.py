@@ -238,7 +238,7 @@ class RipgrepSearchAdapter:
             searchable.append(candidate)
 
         if not searchable:
-            return SearchResult(
+            result = SearchResult(
                 request.query,
                 request.mode,
                 (),
@@ -247,6 +247,8 @@ class RipgrepSearchAdapter:
                 duration_ms=self._duration_ms(started),
                 skipped_files=skipped_files,
             )
+            self._raise_if_cancelled()
+            return result
 
         search_argv = [
             "rg",
@@ -300,7 +302,9 @@ class RipgrepSearchAdapter:
             duration_ms=self._duration_ms(started),
             skipped_files=skipped_files,
         )
-        return self._bound_result(result, request.max_result_bytes)
+        bounded = self._bound_result(result, request.max_result_bytes)
+        self._raise_if_cancelled()
+        return bounded
 
     def _run(self, argv: tuple[str, ...], root: Path, deadline: float) -> CompletedSearchProcess:
         self._raise_if_cancelled()
