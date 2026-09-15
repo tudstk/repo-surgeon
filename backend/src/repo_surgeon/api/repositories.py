@@ -27,6 +27,7 @@ from repo_surgeon.infrastructure.local_repository_root import GitLocalRepository
 from repo_surgeon.infrastructure.repository_store import SqlAlchemyRepositoryStore
 from repo_surgeon.mcp.search_tools import (
     McpSearchTools,
+    SearchCodeArguments,
     SearchCodeInput,
     SearchCodeOutput,
 )
@@ -56,10 +57,8 @@ class RepositoryListResponse(BaseModel):
     name: str
 
 
-class RepositorySearchRequest(SearchCodeInput):
+class RepositorySearchRequest(SearchCodeArguments):
     """Bounded search input whose repository is selected by the URL."""
-
-    repository_id: UUID | None = None
 
 
 class RepositorySummaryResponse(BaseModel):
@@ -205,7 +204,7 @@ async def search_repository(
             )
         )
     result = await McpSearchTools(SqlAlchemyRepositoryStore(session)).search_code(
-        body.model_copy(update={"repository_id": repository_id})
+        SearchCodeInput(repository_id=repository_id, **body.model_dump())
     )
     if not isinstance(result, SearchCodeOutput):
         raise RepositoryProblem(

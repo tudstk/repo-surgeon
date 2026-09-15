@@ -39,11 +39,10 @@ from repo_surgeon.mcp.file_tools import (
 )
 
 
-class SearchCodeInput(BaseModel):
-    """Strict provider input with independently clamped effective limits."""
+class SearchCodeArguments(BaseModel):
+    """Strict search arguments with independently clamped effective limits."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
-    repository_id: UUID
     query: str = Field(min_length=1, max_length=4096)
     mode: Literal["literal", "regex"] = "literal"
     path: str = Field(default=".", min_length=1, max_length=4096)
@@ -86,6 +85,12 @@ class SearchCodeInput(BaseModel):
             timeout_ms=self.timeout_ms,
             max_result_bytes=result_budget,
         )
+
+
+class SearchCodeInput(SearchCodeArguments):
+    """Strict provider input for a repository-scoped search."""
+
+    repository_id: UUID
 
 
 class SearchMatchOutput(BaseModel):

@@ -136,6 +136,12 @@ async def test_repository_summary_is_derived_from_registered_files(
     assert search.json()["matches"][0]["before"] == []
     assert search.json()["matches"][0]["after"] == []
 
+    duplicate_identity = await client.post(
+        f"/repositories/{created.json()['id']}/search",
+        json={"repository_id": str(created.json()["id"]), "query": "hello"},
+    )
+    assert duplicate_identity.status_code == 422
+
 
 @pytest.mark.anyio
 async def test_repository_summary_reports_unavailable_registered_root(

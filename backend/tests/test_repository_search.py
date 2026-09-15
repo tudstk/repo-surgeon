@@ -310,6 +310,16 @@ def test_oversized_matching_file_is_reported_as_skipped(tmp_path: Path) -> None:
     assert result.skipped_files == 1
 
 
+def test_non_searchable_files_are_counted_before_search(tmp_path: Path) -> None:
+    (tmp_path / "large.txt").write_bytes(b"x" * (64 * 1024 + 1))
+    (tmp_path / "binary.dat").write_bytes(b"x\x00y")
+
+    result = RipgrepSearchAdapter().search(tmp_path, request())
+
+    assert result.matches == ()
+    assert result.skipped_files == 2
+
+
 def test_search_code_input_is_strict_and_forbids_unknown_arguments() -> None:
     repository_id = uuid4()
     with pytest.raises(ValidationError):

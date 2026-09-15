@@ -229,6 +229,7 @@ class RipgrepSearchAdapter:
             self._raise_if_deadline_exceeded(deadline)
             try:
                 files.path_type(candidate)
+                files.read_file(candidate, 1, 1)
             except RepositoryFileError as error:
                 if error.code in {"binary_file", "file_too_large", "file_not_found"}:
                     skipped_files += 1
