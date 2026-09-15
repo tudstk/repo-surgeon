@@ -204,6 +204,7 @@ class RipgrepSearchAdapter:
             "--no-require-git",
             "--no-ignore-parent",
             "--hidden",
+            "--glob=!**/.git/**",
         ]
         if request.glob is not None:
             file_argv.append(f"--glob={request.glob}")
