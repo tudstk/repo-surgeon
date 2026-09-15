@@ -1,16 +1,16 @@
 # Architecture overview
 
-Milestone 2 extends the Milestone 0 foundation with bounded read-only repository tools and a deterministic provider-facing agent loop.
+Milestone 3 extends the foundation with bounded exact repository search, evidence-derived citations, and deterministic repository intelligence.
 
 ```text
 curl -> Uvicorn on 127.0.0.1:8000 -> FastAPI routers -> Pydantic JSON
-browser -> Next.js on localhost:3000 -> static workspace preview
-agent -> ModelProvider -> bounded agent loop -> in-process MCP file tools -> confined repository files
+browser -> Next.js on localhost:3000 -> typed summary and search activity display
+agent -> ModelProvider -> bounded agent loop -> in-process MCP tools -> confined files / killable ripgrep
 ```
 
 `backend/src/repo_surgeon/main.py` creates the FastAPI application and includes the health and repository routers. `backend/src/repo_surgeon/api/health.py` returns deterministic `live` and `ready` responses. `backend/src/repo_surgeon/settings.py` supplies typed settings. The agent package owns the provider protocol and bounded turn orchestration; the MCP package owns typed, read-only file adapters.
 
-`frontend/src/app/page.tsx` displays example workspace data only. It does not call the agent loop, run tests, or create patches.
+`frontend/src/app/page.tsx` displays typed example repository summary and search activity data. Citation selection opens the exact example file and line in the existing work panel. It does not yet call a backend run endpoint, execute tests, or create patches.
 
 `docker-compose.yml` provides PostgreSQL 18.6 on loopback with `pg_isready`. There are no database models, migrations, connections, or database-aware readiness checks in M0.
 
@@ -24,6 +24,8 @@ agent -> ModelProvider -> bounded agent loop -> in-process MCP file tools -> con
 | PostgreSQL | Compose starts local database | Application does not connect. |
 | Safe file tools | In-process `list_files` and `read_file` adapters | Read-only, confined, bounded results; no external MCP transport. |
 | Agent loop | `run_turn` with `ModelProvider` and `FakeModelProvider` | Bounded model/tool calls, wall-clock time, repeats, and returned bytes. |
+| Exact search | Typed `search_code` with a fixed ripgrep argv | Literal or regex mode, safe ignored files, exact citations, independent bounds. |
+| Repository intelligence | Versioned language and test-command heuristics | Bounded reads only; reports ambiguity and partial scans; never executes commands. |
 | CI | Locked installs, format, lint, types, tests, build | No integration or browser E2E jobs in M0. |
 
 ## Intended architecture, not current implementation
