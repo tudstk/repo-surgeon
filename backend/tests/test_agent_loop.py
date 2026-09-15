@@ -35,6 +35,7 @@ from repo_surgeon.mcp.file_tools import (
     ToolErrorOutput,
     returned_bytes_limit_error,
 )
+from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "repos" / "m1-repository-safety"
 
@@ -454,6 +455,56 @@ async def test_repeat_limit_uses_normalized_application_arguments(
     assert result.stop_reason == "repeated_tool_call_limit"
     assert result.tool_calls == 1
     assert len(result.events) == 1
+    assert dispatches == 1
+
+
+@pytest.mark.anyio
+async def test_search_repeat_limit_uses_effective_defaults_clamps_and_paths() -> None:
+    tools, repository_id = tool_client()
+    dispatches = 0
+    original_search = tools.search_code
+
+    async def counted_search(
+        arguments: SearchCodeInput, max_bytes: int | None = None
+    ) -> SearchCodeOutput | ToolErrorOutput | None:
+        nonlocal dispatches
+        dispatches += 1
+        return await original_search(arguments, max_bytes)
+
+    tools.search_code = counted_search  # type: ignore[method-assign]
+    provider = FakeModelProvider(
+        [
+            ModelResponse(
+                "Searching",
+                (
+                    ModelToolCall("search_code", {"query": "fixture", "timeout_ms": 1}),
+                    ModelToolCall(
+                        "search_code",
+                        {
+                            "query": "fixture",
+                            "path": "./",
+                            "mode": "literal",
+                            "max_matches": 50,
+                            "context_before": 2,
+                            "context_after": 2,
+                            "timeout_ms": 100,
+                            "max_result_bytes": 65_536,
+                        },
+                    ),
+                ),
+            )
+        ]
+    )
+
+    result = await run_turn(
+        provider,
+        tools,
+        repository_id,
+        "Summarize",
+        AgentLimits(max_repeated_tool_calls=1),
+    )
+
+    assert result.stop_reason == "repeated_tool_call_limit"
     assert dispatches == 1
 
 

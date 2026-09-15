@@ -107,7 +107,22 @@ def _json_arguments(arguments: object) -> str | None:
 def _normalized_call_key(
     name: str, arguments: ListFilesInput | ReadFileInput | SearchCodeInput
 ) -> str:
-    normalized_arguments = arguments.model_dump(mode="json")
+    if isinstance(arguments, SearchCodeInput):
+        effective = arguments.to_request(None)
+        normalized_arguments = {
+            "repository_id": str(arguments.repository_id),
+            "query": effective.query,
+            "mode": effective.mode,
+            "path": effective.path,
+            "glob": effective.glob,
+            "max_matches": effective.max_matches,
+            "context_before": effective.context_before,
+            "context_after": effective.context_after,
+            "timeout_ms": effective.timeout_ms,
+            "max_result_bytes": effective.max_result_bytes,
+        }
+    else:
+        normalized_arguments = arguments.model_dump(mode="json")
     path_field = "directory" if isinstance(arguments, ListFilesInput) else "path"
     # Unsafe spellings stay distinct and are still rejected inside the worker.
     with suppress(RepositoryFileError):

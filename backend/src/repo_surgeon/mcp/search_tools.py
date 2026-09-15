@@ -28,6 +28,7 @@ from repo_surgeon.application.repository_search import (
 )
 from repo_surgeon.infrastructure.ripgrep_search import RipgrepSearchAdapter
 from repo_surgeon.mcp.file_tools import (
+    MIN_TOOL_RESULT_BYTES,
     NumberedLineOutput,
     ToolErrorOutput,
     returned_bytes_limit_error,
@@ -206,6 +207,8 @@ class McpSearchTools:
     async def search_code(
         self, arguments: SearchCodeInput, max_bytes: int | None = None
     ) -> SearchCodeOutput | ToolErrorOutput | None:
+        if max_bytes is not None and max_bytes < MIN_TOOL_RESULT_BYTES:
+            return None
         repository = await self._store.get(arguments.repository_id)
         if repository is None:
             error = ToolErrorOutput(
