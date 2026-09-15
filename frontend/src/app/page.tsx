@@ -277,7 +277,11 @@ export default function Home() {
     const controller = new AbortController();
     let requestActive = true;
     setSelectedCitation(null);
-    setSearchActivity({ ...initialSearchActivity, summary: 'Searching for SessionManager' });
+    setSearchActivity({
+      ...initialSearchActivity,
+      phase: 'loading',
+      summary: 'Searching for SessionManager',
+    });
     fetch(`${apiBase}/repositories/${selectedRepositoryId}/search`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
