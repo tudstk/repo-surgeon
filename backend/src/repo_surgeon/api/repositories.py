@@ -12,9 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from repo_surgeon.application.repositories import (
     GetRepository,
+    ListRepositories,
     RegisterLocalRepository,
     RepositoryRegistrationError,
 )
+from repo_surgeon.application.repository_files import RepositoryFileError
 from repo_surgeon.application.repository_intelligence import (
     RepositorySummary,
     detect_repository_summary,
@@ -148,6 +150,35 @@ async def register_repository(
 
 
 @router.get(
+    "",
+    response_model=list[RepositoryResponse],
+    summary="List registered local repositories",
+)
+async def list_repositories(session: SessionDependency) -> list[RepositoryResponse]:
+    """Return registered repositories for the workspace selector."""
+    repositories = await ListRepositories(SqlAlchemyRepositoryStore(session)).execute()
+    return [_response(repository) for repository in repositories]
+
+
+def _summary_problem(error: RepositoryFileError) -> RepositoryProblem:
+    """Map repository inspection failures to a stable problem response."""
+    status_code = (
+        status.HTTP_503_SERVICE_UNAVAILABLE
+        if error.code == "repository_unavailable"
+        else status.HTTP_422_UNPROCESSABLE_CONTENT
+    )
+    return RepositoryProblem(
+        ProblemDetail(
+            type=f"https://repo-surgeon.local/problems/{error.code}",
+            title="Repository summary failed",
+            status=status_code,
+            detail="The registered repository could not be inspected.",
+            code=error.code,
+        )
+    )
+
+
+@router.get(
     "/{repository_id}/summary",
     response_model=RepositorySummaryResponse,
     responses={404: {"model": ProblemDetail}},
@@ -168,7 +199,10 @@ async def get_repository_summary(
                 code="repository_not_found",
             )
         )
-    summary = await asyncio.to_thread(detect_repository_summary, repository.canonical_root)
+    try:
+        summary = await asyncio.to_thread(detect_repository_summary, repository.canonical_root)
+    except RepositoryFileError as error:
+        raise _summary_problem(error) from error
     return RepositorySummaryResponse.from_summary(summary)
 
 

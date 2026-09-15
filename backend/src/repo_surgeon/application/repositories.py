@@ -34,6 +34,9 @@ class RepositoryStore(Protocol):
     async def get(self, repository_id: UUID) -> Repository | None:
         """Find one repository by its durable identifier."""
 
+    async def list_all(self) -> tuple[Repository, ...]:
+        """Return all registered repositories in stable order."""
+
 
 class RegisterLocalRepository:
     """Register a local Git worktree once, independent of its input spelling."""
@@ -60,3 +63,14 @@ class GetRepository:
     async def execute(self, repository_id: UUID) -> Repository | None:
         """Return a repository if its identifier is known."""
         return await self._store.get(repository_id)
+
+
+class ListRepositories:
+    """List registered repositories for client-side repository selection."""
+
+    def __init__(self, store: RepositoryStore) -> None:
+        self._store = store
+
+    async def execute(self) -> tuple[Repository, ...]:
+        """Return all registered repository capabilities."""
+        return await self._store.list_all()

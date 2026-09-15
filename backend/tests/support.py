@@ -18,3 +18,6 @@ class MemoryRepositoryStore(RepositoryStore):
 
     async def get(self, repository_id: UUID) -> Repository | None:
         return self._repository if self._repository.id == repository_id else None
+
+    async def list_all(self) -> tuple[Repository, ...]:
+        return (self._repository,)

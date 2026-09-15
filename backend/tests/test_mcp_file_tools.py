@@ -45,6 +45,9 @@ class MemoryRepositoryStore(RepositoryStore):
     async def get(self, repository_id: UUID) -> Repository | None:
         return self._repository if repository_id == self._repository.id else None
 
+    async def list_all(self) -> tuple[Repository, ...]:
+        return (self._repository,)
+
 
 def tool_client(root: Path = FIXTURE_ROOT) -> tuple[McpFileTools, UUID]:
     """Build an in-process MCP facade over one registered repository capability."""

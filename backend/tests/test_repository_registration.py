@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import shutil
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -74,6 +75,11 @@ async def test_registers_and_retrieves_a_canonical_git_root(
     assert retrieved.status_code == 200
     assert retrieved.json() == body
 
+    listed = await client.get("/repositories")
+
+    assert listed.status_code == 200
+    assert [repository["id"] for repository in listed.json()] == [body["id"]]
+
 
 @pytest.mark.anyio
 async def test_repository_summary_is_derived_from_registered_files(
@@ -89,6 +95,26 @@ async def test_repository_summary_is_derived_from_registered_files(
     assert summary.json()["language"] == "Python"
     assert summary.json()["file_count"] == 1
     assert summary.json()["approximate_lines"] == 1
+
+
+@pytest.mark.anyio
+async def test_repository_summary_reports_unavailable_registered_root(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    repository_root = _initialize_git_repository(tmp_path / "removed")
+    created = await client.post("/repositories", json={"path": str(repository_root)})
+    shutil.rmtree(repository_root)
+
+    summary = await client.get(f"/repositories/{created.json()['id']}/summary")
+
+    assert summary.status_code == 503
+    assert summary.json() == {
+        "type": "https://repo-surgeon.local/problems/repository_unavailable",
+        "title": "Repository summary failed",
+        "status": 503,
+        "detail": "The registered repository could not be inspected.",
+        "code": "repository_unavailable",
+    }
 
 
 @pytest.mark.anyio

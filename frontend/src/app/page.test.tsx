@@ -6,7 +6,41 @@ import { vi } from 'vitest';
 import Home from './page';
 
 describe('Home', () => {
-  it('renders workspace landmarks and the human-control boundary', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string) =>
+        Promise.resolve(
+          new Response(
+            input.endsWith('/summary')
+              ? JSON.stringify({
+                  language: 'Python',
+                  language_confidence: 'high',
+                  file_count: 342,
+                  approximate_lines: 28000,
+                  test_framework: 'pytest',
+                  test_command: 'pytest -q',
+                  truncated: false,
+                })
+              : JSON.stringify([
+                  {
+                    id: 'repository-1',
+                    canonical_root: '/workspace/payments-api',
+                  },
+                ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('renders workspace landmarks and the human-control boundary', async () => {
     render(<Home />);
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
@@ -22,9 +56,11 @@ describe('Home', () => {
       'aria-current',
       'page',
     );
-    expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
-      'aria-selected',
-      'true',
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
     );
     expect(screen.getByRole('option', { name: 'payments-api' })).not.toHaveAttribute(
       'aria-current',
@@ -38,11 +74,13 @@ describe('Home', () => {
     expect(screen.getByText(/Sandbox Tests: 14 passing/i)).toBeInTheDocument();
   });
 
-  it('keeps read-only controls unavailable and the composer inert', () => {
+  it('keeps read-only controls unavailable and the composer inert', async () => {
     render(<Home />);
 
     expect(screen.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Switch repository' })).toBeDisabled();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Switch repository' })).not.toBeDisabled(),
+    );
     expect(screen.getByRole('button', { name: 'Staging Chamber' })).toBeDisabled();
 
     const composer = screen.getByRole('textbox', { name: 'Agent instruction' });
@@ -66,21 +104,24 @@ describe('Home', () => {
     expect(screen.queryByText(/STATIC PREVIEW|\(PREVIEW\)/i)).not.toBeInTheDocument();
   });
 
-  it('renders repository-derived summary data from the API', async () => {
-    vi.stubEnv('NEXT_PUBLIC_REPOSITORY_ID', 'repository-1');
+  it('renders repository-derived summary data from the selected repository API', async () => {
     vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', 'http://api.test');
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          language: 'Go',
-          language_confidence: 'high',
-          file_count: 3,
-          approximate_lines: 42,
-          test_framework: 'go test',
-          test_command: 'go test ./...',
-          truncated: false,
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
+    const fetchMock = vi.fn((input: string) =>
+      Promise.resolve(
+        new Response(
+          input.endsWith('/summary')
+            ? JSON.stringify({
+                language: 'Go',
+                language_confidence: 'high',
+                file_count: 3,
+                approximate_lines: 42,
+                test_framework: 'go test',
+                test_command: 'go test ./...',
+                truncated: false,
+              })
+            : JSON.stringify([{ id: 'repository-1', canonical_root: '/workspace/go-service' }]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
       ),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -89,11 +130,13 @@ describe('Home', () => {
 
     await waitFor(() => expect(screen.getByText(/3 files · 42 LOC/i)).toBeInTheDocument());
     expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.test/repositories',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
       'http://api.test/repositories/repository-1/summary',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
-    vi.unstubAllGlobals();
-    vi.unstubAllEnvs();
   });
 
   it('opens the exact cited file and line in the work panel', () => {
@@ -247,13 +290,15 @@ describe('Home', () => {
     fireEvent.pointerUp(window);
   });
 
-  it('exposes the workspace safety boundary without preview labeling', () => {
+  it('exposes the workspace safety boundary without preview labeling', async () => {
     render(<Home />);
 
     expect(screen.getByText(/READ-ONLY \(SAFE SANDBOX\)/i)).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
-      'aria-selected',
-      'true',
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
     );
     expect(screen.getByRole('option', { name: /Refactor session module/ })).toHaveAttribute(
       'aria-selected',

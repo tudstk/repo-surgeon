@@ -13,10 +13,17 @@ import {
 
 const STACKED_LAYOUT_QUERY = '(max-width: 1024px)';
 
-const sessions = [
-  { name: 'payments-api', active: true },
-  { name: 'web-dashboard', active: false },
-] as const;
+type RegisteredRepository = {
+  id: string;
+  canonical_root: string;
+};
+
+function repositoryName(repository: RegisteredRepository | null) {
+  if (!repository) return 'No repository connected';
+  return (
+    repository.canonical_root.split(/[\\/]/).filter(Boolean).pop() ?? repository.canonical_root
+  );
+}
 
 const searchActivity: SearchActivity = {
   tool: 'search_code',
@@ -204,14 +211,34 @@ export default function Home() {
   const [paneWidths, setPaneWidths] = useState<number[] | null>(null);
   const [paneMinimumBands, setPaneMinimumBands] = useState(DEFAULT_PANE_MINIMUMS);
   const [selectedCitation, setSelectedCitation] = useState<SearchCitation | null>(null);
+  const [repositories, setRepositories] = useState<RegisteredRepository[]>([]);
+  const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [repositorySummary, setRepositorySummary] = useState<RepositorySummary | null>(null);
 
   useEffect(() => {
-    const repositoryId = process.env.NEXT_PUBLIC_REPOSITORY_ID;
-    if (!repositoryId) return;
     const controller = new AbortController();
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
-    fetch(`${apiBase}/repositories/${repositoryId}/summary`, { signal: controller.signal })
+    fetch(`${apiBase}/repositories`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('repository list request failed');
+        return response.json() as Promise<RegisteredRepository[]>;
+      })
+      .then((data) => {
+        setRepositories(data);
+        setSelectedRepositoryId((current) => current ?? data[0]?.id ?? null);
+      })
+      .catch(() => setRepositories([]));
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+    if (!selectedRepositoryId) {
+      setRepositorySummary(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(`${apiBase}/repositories/${selectedRepositoryId}/summary`, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error('summary request failed');
         return response.json() as Promise<{
@@ -235,9 +262,9 @@ export default function Home() {
           truncated: data.truncated,
         }),
       )
-      .catch(() => undefined);
+      .catch(() => setRepositorySummary(null));
     return () => controller.abort();
-  }, []);
+  }, [selectedRepositoryId]);
 
   useEffect(() => {
     const grid = gridRef.current;
@@ -300,8 +327,16 @@ export default function Home() {
           </span>
           <span className="brand-name">Repo Surgeon</span>
           <span className="bar-divider" />
-          <button className="repo-switcher" type="button" aria-label="Switch repository" disabled>
-            <Glyph>▣</Glyph> &nbsp; acme/payments-api <Glyph>⌄</Glyph>
+          <button
+            className="repo-switcher"
+            type="button"
+            aria-label="Switch repository"
+            disabled={repositories.length === 0}
+            onClick={() => setSelectedRepositoryId(repositories[0]?.id ?? null)}
+          >
+            <Glyph>▣</Glyph> &nbsp;{' '}
+            {repositoryName(repositories.find(({ id }) => id === selectedRepositoryId) ?? null)}{' '}
+            <Glyph>⌄</Glyph>
           </button>
           <span className="branch-context">
             <Glyph>⑂</Glyph> &nbsp; main <b>3 behind</b> &nbsp;<Glyph>→</Glyph>&nbsp;{' '}
@@ -378,20 +413,26 @@ export default function Home() {
               CONNECTED REPOS <Glyph>☷</Glyph>
             </div>
             <div className="session-list" role="listbox" aria-label="Connected repositories">
-              {sessions.map((session) => (
-                <button
-                  className={`session-row ${session.active ? 'session-active' : ''}`}
-                  key={session.name}
-                  type="button"
-                  disabled
-                  aria-selected={session.active}
-                  role="option"
-                >
-                  <span aria-hidden="true">{session.active ? '☑' : '□'}</span>
-                  <span>{session.name}</span>
-                  {session.active && <StatusDot />}
-                </button>
-              ))}
+              {repositories.map((repository) => {
+                const active = repository.id === selectedRepositoryId;
+                return (
+                  <button
+                    className={`session-row ${active ? 'session-active' : ''}`}
+                    key={repository.id}
+                    type="button"
+                    aria-selected={active}
+                    role="option"
+                    onClick={() => setSelectedRepositoryId(repository.id)}
+                  >
+                    <span aria-hidden="true">{active ? '☑' : '□'}</span>
+                    <span>{repositoryName(repository)}</span>
+                    {active && <StatusDot />}
+                  </button>
+                );
+              })}
+              {repositories.length === 0 && (
+                <span className="empty-state">No repositories connected.</span>
+              )}
               <button className="connect-row" type="button" disabled>
                 <Glyph>＋</Glyph> Connect a repo...
               </button>

@@ -59,3 +59,11 @@ class SqlAlchemyRepositoryStore:
         """Find a repository by durable identifier."""
         record = await self._session.get(RepositoryRecord, repository_id)
         return _to_domain(record) if record is not None else None
+
+    async def list_all(self) -> tuple[Repository, ...]:
+        """Return registered repositories in creation order."""
+        statement = select(RepositoryRecord).order_by(
+            RepositoryRecord.created_at, RepositoryRecord.id
+        )
+        records = (await self._session.execute(statement)).scalars().all()
+        return tuple(_to_domain(record) for record in records)
