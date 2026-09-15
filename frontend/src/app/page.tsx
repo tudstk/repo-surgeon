@@ -23,25 +23,16 @@ function repositoryName(repository: RegisteredRepository | null) {
   return repository.name;
 }
 
-const searchActivity: SearchActivity = {
+const initialSearchActivity: SearchActivity = {
   tool: 'search_code',
-  phase: 'completed',
-  summary: 'Searching for SessionManager',
-  matchCount: 6,
-  durationMs: 38,
+  phase: 'loading',
+  summary: 'Select a repository to search',
+  matchCount: null,
+  durationMs: null,
   truncated: false,
   skippedFiles: 0,
   errorCode: null,
-  citations: [
-    {
-      id: 'search-search-1-1',
-      path: 'auth/session.py',
-      startLine: 52,
-      endLine: 52,
-      label: 'auth/session.py:52',
-      text: 'async def resolve(self, token: str) -> Optional[SessionData]:',
-    },
-  ],
+  citations: [],
 };
 
 const SEPARATOR_SIZE = 8;
@@ -209,6 +200,7 @@ export default function Home() {
   const [paneWidths, setPaneWidths] = useState<number[] | null>(null);
   const [paneMinimumBands, setPaneMinimumBands] = useState(DEFAULT_PANE_MINIMUMS);
   const [selectedCitation, setSelectedCitation] = useState<SearchCitation | null>(null);
+  const [searchActivity, setSearchActivity] = useState<SearchActivity>(initialSearchActivity);
   const [repositories, setRepositories] = useState<RegisteredRepository[]>([]);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [repositorySummary, setRepositorySummary] = useState<RepositorySummary | null>(null);
@@ -264,6 +256,90 @@ export default function Home() {
       })
       .catch(() => {
         if (requestActive) setRepositorySummary(null);
+      });
+    return () => {
+      requestActive = false;
+      controller.abort();
+    };
+  }, [selectedRepositoryId]);
+
+  useEffect(() => {
+    if (!selectedRepositoryId) {
+      setSearchActivity(initialSearchActivity);
+      setSelectedCitation(null);
+      return;
+    }
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+    const controller = new AbortController();
+    let requestActive = true;
+    setSelectedCitation(null);
+    setSearchActivity({ ...initialSearchActivity, summary: 'Searching for SessionManager' });
+    fetch(`${apiBase}/repositories/${selectedRepositoryId}/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        query: 'SessionManager',
+        mode: 'literal',
+        context_before: 2,
+        context_after: 2,
+        max_matches: 50,
+      }),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('search request failed');
+        return response.json() as Promise<{
+          match_count: number;
+          matches: Array<{
+            path: string;
+            line: number;
+            text: string;
+            before: Array<{ number: number; text: string }>;
+            after: Array<{ number: number; text: string }>;
+          }>;
+          truncated: boolean;
+          duration_ms: number;
+          skipped_files: number;
+        }>;
+      })
+      .then((data) => {
+        if (!requestActive) return;
+        const citations = data.matches.map((match, index) => {
+          const before = match.before ?? [];
+          const after = match.after ?? [];
+          const startLine = before[0]?.number ?? match.line;
+          const endLine = after.at(-1)?.number ?? match.line;
+          return {
+            id: `search-${selectedRepositoryId}-${index}`,
+            path: match.path,
+            startLine,
+            endLine,
+            label: `${match.path}:${startLine}${endLine === startLine ? '' : `-${endLine}`}`,
+            text: match.text,
+            before,
+            after,
+          };
+        });
+        setSearchActivity({
+          tool: 'search_code',
+          phase: 'completed',
+          summary: 'Searching for SessionManager',
+          matchCount: data.match_count,
+          durationMs: data.duration_ms,
+          truncated: data.truncated,
+          skippedFiles: data.skipped_files,
+          errorCode: null,
+          citations,
+        });
+      })
+      .catch(() => {
+        if (!requestActive) return;
+        setSearchActivity({
+          ...initialSearchActivity,
+          phase: 'error',
+          summary: 'Searching for SessionManager',
+          errorCode: 'search_failed',
+        });
       });
     return () => {
       requestActive = false;
@@ -524,17 +600,13 @@ export default function Home() {
             <div className="activity-list" aria-label="Agent activity">
               <SearchActivityRow activity={searchActivity} onSelectCitation={setSelectedCitation} />
             </div>
-            <p className="agent-message finding">
-              Found the coupling in{' '}
-              <a
-                href="#work-panel"
-                onClick={() => setSelectedCitation(searchActivity.citations[0])}
-              >
-                auth/session.py:52
-              </a>
-              . Drafted a patch and verified test suite in Sandbox #89b2. See the diff in the
-              staging chamber on the right <Glyph>→</Glyph>
-            </p>
+            {selectedCitation && (
+              <p className="agent-message finding">
+                Found bounded evidence in{' '}
+                <a href="#work-panel">{selectedCitation.label}</a>. See the read-only evidence
+                in the staging chamber on the right <Glyph>→</Glyph>
+              </p>
+            )}
             <div className="pending-trace">
               proposing patch revision 1, awaiting your approval...
             </div>
@@ -622,10 +694,12 @@ export default function Home() {
               </div>
               <div className="hunk-label">Exact search evidence · read-only</div>
               <div className="diff-code">
-                <div className="code-line cited-line">
-                  <span>{selectedCitation.startLine}</span>
-                  <code>{selectedCitation.text}</code>
-                </div>
+                {[...selectedCitation.before, { number: selectedCitation.startLine, text: selectedCitation.text }, ...selectedCitation.after].map((line) => (
+                  <div className={`code-line ${line.number === selectedCitation.startLine ? 'cited-line' : ''}`} key={`${line.number}-${line.text}`}>
+                    <span>{line.number}</span>
+                    <code>{line.text}</code>
+                  </div>
+                ))}
               </div>
             </div>
           ) : (

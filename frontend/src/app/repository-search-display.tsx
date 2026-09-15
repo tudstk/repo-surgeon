@@ -15,6 +15,8 @@ export type SearchCitation = {
   endLine: number;
   label: string;
   text: string;
+  before: readonly { number: number; text: string }[];
+  after: readonly { number: number; text: string }[];
 };
 
 export type SearchActivity = {

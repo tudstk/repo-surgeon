@@ -25,6 +25,11 @@ from repo_surgeon.application.repository_intelligence import (
 from repo_surgeon.domain.repositories import Repository
 from repo_surgeon.infrastructure.local_repository_root import GitLocalRepositoryRootResolver
 from repo_surgeon.infrastructure.repository_store import SqlAlchemyRepositoryStore
+from repo_surgeon.mcp.search_tools import (
+    McpSearchTools,
+    SearchCodeInput,
+    SearchCodeOutput,
+)
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
 
@@ -49,6 +54,12 @@ class RepositoryListResponse(BaseModel):
 
     id: UUID
     name: str
+
+
+class RepositorySearchRequest(SearchCodeInput):
+    """Bounded search input whose repository is selected by the URL."""
+
+    repository_id: UUID | None = None
 
 
 class RepositorySummaryResponse(BaseModel):
@@ -169,6 +180,44 @@ async def list_repositories(session: SessionDependency) -> list[RepositoryListRe
         RepositoryListResponse(id=repository.id, name=Path(repository.canonical_root).name)
         for repository in repositories
     ]
+
+
+@router.post(
+    "/{repository_id}/search",
+    response_model=SearchCodeOutput,
+    responses={404: {"model": ProblemDetail}, 422: {"model": ProblemDetail}},
+    summary="Search one registered repository",
+)
+async def search_repository(
+    repository_id: UUID,
+    body: RepositorySearchRequest,
+    session: SessionDependency,
+) -> SearchCodeOutput:
+    """Run the existing bounded search adapter for a selected repository."""
+    if await GetRepository(SqlAlchemyRepositoryStore(session)).execute(repository_id) is None:
+        raise RepositoryProblem(
+            ProblemDetail(
+                type="https://repo-surgeon.local/problems/repository_not_found",
+                title="Repository not found",
+                status=status.HTTP_404_NOT_FOUND,
+                detail="No registered repository has this identifier.",
+                code="repository_not_found",
+            )
+        )
+    result = await McpSearchTools(SqlAlchemyRepositoryStore(session)).search_code(
+        body.model_copy(update={"repository_id": repository_id})
+    )
+    if not isinstance(result, SearchCodeOutput):
+        raise RepositoryProblem(
+            ProblemDetail(
+                type="https://repo-surgeon.local/problems/search_failed",
+                title="Repository search failed",
+                status=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="The bounded repository search could not be completed.",
+                code=getattr(result, "code", "search_failed"),
+            )
+        )
+    return result
 
 
 def _summary_problem(error: RepositoryFileError) -> RepositoryProblem:

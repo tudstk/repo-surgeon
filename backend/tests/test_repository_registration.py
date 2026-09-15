@@ -112,6 +112,17 @@ async def test_repository_summary_is_derived_from_registered_files(
     assert summary.json()["file_count"] == 1
     assert summary.json()["approximate_lines"] == 1
 
+    search = await client.post(
+        f"/repositories/{created.json()['id']}/search",
+        json={"query": "hello", "context_before": 1, "context_after": 1},
+    )
+
+    assert search.status_code == 200
+    assert search.json()["match_count"] == 1
+    assert search.json()["matches"][0]["text"] == "print('hello')"
+    assert search.json()["matches"][0]["before"] == []
+    assert search.json()["matches"][0]["after"] == []
+
 
 @pytest.mark.anyio
 async def test_repository_summary_reports_unavailable_registered_root(
