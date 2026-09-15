@@ -274,6 +274,8 @@ def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
         r"(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?\]"
     )
     def reject_unsupported(match: re.Match[str]) -> str:
+        if validated.rfind("[", 0, match.start()) > validated.rfind("]", 0, match.start()):
+            return match.group(0)
         path = match.group("path")
         start = int(match.group("start"))
         end = int(match.group("end") or start)

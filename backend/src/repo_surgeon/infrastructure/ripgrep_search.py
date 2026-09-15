@@ -196,6 +196,7 @@ class RipgrepSearchAdapter:
         deadline = started + request.timeout_ms / 1_000
         try:
             files = ConfinedRepositoryFiles(str(root))
+            root = files.canonical_root
             normalized_path = self._normalize_search_path(request.path)
             files.path_type(normalized_path)
         except RepositoryFileError as error:

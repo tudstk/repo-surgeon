@@ -98,6 +98,10 @@ class ConfinedRepositoryFiles:
                 "repository_unavailable", "The registered repository is unavailable."
             )
 
+    @property
+    def canonical_root(self) -> Path:
+        return self._root
+
     def list_files(
         self,
         directory: str = ".",
