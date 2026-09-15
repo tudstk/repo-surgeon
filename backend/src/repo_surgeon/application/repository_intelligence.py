@@ -97,7 +97,8 @@ def detect_repository_summary(
         if language is not None:
             language_scores[language] += entry.size_bytes + 1_024
 
-    names = {PurePath(entry.path).name.lower() for entry in entries}
+    readable_entries = tuple(entry for entry in entries if entry.path in text_by_path)
+    names = {PurePath(entry.path).name.lower() for entry in readable_entries}
     for manifest, language in MANIFEST_LANGUAGE.items():
         if manifest in names:
             language_scores[language] += 4_096
@@ -105,7 +106,7 @@ def detect_repository_summary(
         language_scores["C#"] += 4_096
 
     language, confidence = _select_language(language_scores)
-    framework, command, detection = _detect_tests(entries, text_by_path)
+    framework, command, detection = _detect_tests(readable_entries, text_by_path)
     return RepositorySummary(
         language=language,
         language_confidence=confidence,

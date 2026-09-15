@@ -48,6 +48,18 @@ def test_generated_binary_and_secret_content_cannot_bias_summary(tmp_path: Path)
     assert result.truncated
 
 
+def test_unreadable_manifest_does_not_supply_language_or_test_evidence(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_bytes(b"\x00" * 2_000)
+
+    result = detect_repository_summary(tmp_path, detected_at=DETECTED_AT)
+
+    assert result.language is None
+    assert result.language_confidence == "unknown"
+    assert result.test_framework is None
+    assert result.test_command is None
+    assert result.test_detection == "not_found"
+
+
 def test_ambiguous_languages_and_test_frameworks_are_reported_not_guessed(tmp_path: Path) -> None:
     (tmp_path / "main.py").write_text("x = 1\n")
     (tmp_path / "main.ts").write_text("const x = 1;\n")
