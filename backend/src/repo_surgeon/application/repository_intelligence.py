@@ -73,7 +73,10 @@ def detect_repository_summary(
 ) -> RepositorySummary:
     """Inspect only bounded safe files and map evidence to fixed catalog entries."""
     files = ConfinedRepositoryFiles(str(canonical_root))
-    listing = files.list_files(max_results=MAX_FILE_COUNT)
+    listing = files.list_files(
+        max_results=MAX_FILE_COUNT,
+        ignored_directories=frozenset(directory.lower() for directory in IGNORED_DIRECTORIES),
+    )
     entries = tuple(entry for entry in listing.entries if not _is_ignored(entry.path))
     language_scores: defaultdict[str, int] = defaultdict(int)
     text_by_path: dict[str, str] = {}

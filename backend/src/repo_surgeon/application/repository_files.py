@@ -98,7 +98,11 @@ class ConfinedRepositoryFiles:
             )
 
     def list_files(
-        self, directory: str = ".", glob: str | None = None, max_results: int = 50
+        self,
+        directory: str = ".",
+        glob: str | None = None,
+        max_results: int = 50,
+        ignored_directories: frozenset[str] = frozenset(),
     ) -> FileListing:
         """Return safe regular files below a confined directory using a fixed walk."""
         visible_directory, normalized_directory = self._resolve_directory(directory)
@@ -107,7 +111,10 @@ class ConfinedRepositoryFiles:
         for current_root, directories, files in os.walk(visible_directory, followlinks=False):
             current = Path(current_root)
             directories[:] = sorted(
-                child for child in directories if self._is_visible_directory(current / child)
+                child
+                for child in directories
+                if child.lower() not in ignored_directories
+                and self._is_visible_directory(current / child)
             )
             for filename in sorted(files):
                 try:

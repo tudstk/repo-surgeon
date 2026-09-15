@@ -40,8 +40,7 @@ from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
 _FILE_LINE_REFERENCE = re.compile(
     r"(?<![\w/])(?P<open>\[)?"
-    r"(?P<path>(?:[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*/)*"
-    r"[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*\.[A-Za-z0-9_.-]+)"
+    r"(?P<path>[^:\[\]\n]+?)"
     r":(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?(?P<close>\])?"
 )
 

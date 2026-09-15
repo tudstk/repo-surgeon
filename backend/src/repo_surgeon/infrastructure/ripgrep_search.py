@@ -58,6 +58,8 @@ class SearchProcessRunner(Protocol):
 
     def cancel(self) -> None: ...
 
+    def reset(self) -> None: ...
+
 
 class SubprocessSearchRunner:
     """Run one argv without a shell and bound time and captured bytes."""
@@ -70,7 +72,6 @@ class SubprocessSearchRunner:
     def run(
         self, argv: tuple[str, ...], cwd: Path, timeout_seconds: float
     ) -> CompletedSearchProcess:
-        self._cancelled.clear()
         process = subprocess.Popen(
             argv,
             cwd=cwd,
@@ -132,6 +133,9 @@ class SubprocessSearchRunner:
         if process is not None:
             self._kill_and_reap(process)
 
+    def reset(self) -> None:
+        self._cancelled.clear()
+
     def _clear_process(self, process: subprocess.Popen[bytes]) -> None:
         with self._process_lock:
             if self._process is process:
@@ -151,14 +155,25 @@ class RipgrepSearchAdapter:
     def __init__(self, runner: SearchProcessRunner | None = None) -> None:
         self._runner = runner or SubprocessSearchRunner()
         self._cancelled = Event()
+        self._state_lock = Lock()
 
     def cancel(self) -> None:
         """Cancel an active search and synchronously reap its child process."""
-        self._cancelled.set()
-        self._runner.cancel()
+        with self._state_lock:
+            self._cancelled.set()
+            self._runner.cancel()
 
     def search(self, canonical_root: str | Path, request: SearchRequest) -> SearchResult:
-        self._cancelled.clear()
+        try:
+            return self._search(canonical_root, request)
+        finally:
+            with self._state_lock:
+                self._cancelled.clear()
+                reset = getattr(self._runner, "reset", None)
+                if reset is not None:
+                    reset()
+
+    def _search(self, canonical_root: str | Path, request: SearchRequest) -> SearchResult:
         started = time.monotonic()
         root = Path(canonical_root)
         deadline = started + request.timeout_ms / 1_000

@@ -133,6 +133,20 @@ def test_scan_marks_partial_when_file_or_line_caps_are_reached(tmp_path: Path) -
     assert result.truncated
 
 
+def test_ignored_directories_do_not_consume_summary_file_cap(tmp_path: Path) -> None:
+    ignored = tmp_path / "node_modules"
+    ignored.mkdir()
+    for index in range(205):
+        (ignored / f"module_{index:03}.js").write_text("export {}\n")
+    (tmp_path / "main.py").write_text("print('source')\n")
+
+    result = detect_repository_summary(tmp_path, detected_at=DETECTED_AT)
+
+    assert result.file_count == 1
+    assert result.language == "Python"
+    assert not result.truncated
+
+
 def test_scan_with_exact_line_cap_is_not_partial(tmp_path: Path) -> None:
     (tmp_path / "module.py").write_text("line\n" * 200)
 
