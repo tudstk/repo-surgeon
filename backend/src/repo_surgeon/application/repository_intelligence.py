@@ -229,10 +229,6 @@ def _mapping(value: object) -> dict[str, object]:
 
 
 def _pyproject_declares_pytest(data: dict[str, object]) -> bool:
-    tool = _mapping(data.get("tool"))
-    if "pytest" in tool and isinstance(tool["pytest"], dict):
-        return True
-
     project = _mapping(data.get("project"))
     dependency_values: list[object] = [project.get("dependencies")]
     dependency_values.extend(_mapping(project.get("optional-dependencies")).values())

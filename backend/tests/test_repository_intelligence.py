@@ -95,6 +95,18 @@ def test_pytest_words_outside_recognized_dependency_and_config_keys_are_ignored(
     assert result.test_detection == "not_found"
 
 
+def test_pytest_config_without_supported_dependency_is_not_detected(tmp_path: Path) -> None:
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.pytest.ini_options]\naddopts = "-q"\npython_files = ["test_*.py"]\n'
+    )
+
+    result = detect_repository_summary(tmp_path, detected_at=DETECTED_AT)
+
+    assert result.test_framework is None
+    assert result.test_command is None
+    assert result.test_detection == "not_found"
+
+
 def test_javascript_framework_words_in_description_and_scripts_are_not_dependencies(
     tmp_path: Path,
 ) -> None:
