@@ -40,7 +40,7 @@ from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
 _FILE_LINE_REFERENCE = re.compile(
     r"(?<![\w/])(?P<open>\[)?"
-    r"(?P<path>[^:\[\]\n]+?)"
+    r"(?P<path>[^\n]+)"
     r":(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?(?P<close>\])?"
 )
 
@@ -231,17 +231,20 @@ def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
     allowed = tuple(citation for event in events for citation in event.citations)
 
     def validate(match: re.Match[str]) -> str:
-        if bool(match.group("open")) != bool(match.group("close")):
-            return "[unsupported citation]"
         path = match.group("path")
         citation = next(
             (
                 citation
                 for citation in allowed
-                if path == citation.path or path.endswith(f" {citation.path}")
+                if path == citation.path
+                or path.endswith(f" {citation.path}")
+                or path.endswith(f"[{citation.path}")
             ),
             None,
         )
+        wrapped_suffix = citation is not None and path.endswith(f"[{citation.path}")
+        if bool(match.group("open")) != bool(match.group("close")) and not wrapped_suffix:
+            return "[unsupported citation]"
         if citation is not None:
             path = citation.path
         start = int(match.group("start"))
