@@ -230,6 +230,7 @@ export default function Home() {
       setRepositorySummary(null);
       return;
     }
+    setRepositorySummary(null);
     const controller = new AbortController();
     let requestActive = true;
     fetch(`${apiBase}/repositories/${selectedRepositoryId}/summary`, { signal: controller.signal })

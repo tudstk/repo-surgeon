@@ -11,6 +11,7 @@ from pathlib import Path, PurePath
 from typing import Literal
 
 MAX_FILE_COUNT = 200
+MAX_DIRECTORY_COUNT = 2_000
 MAX_FILE_BYTES = 64 * 1024
 MAX_LINE_COUNT = 200
 
@@ -108,7 +109,11 @@ class ConfinedRepositoryFiles:
         visible_directory, normalized_directory = self._resolve_directory(directory)
         limit = min(max_results, MAX_FILE_COUNT)
         entries: list[FileEntry] = []
+        visited_directories = 0
         for current_root, directories, files in os.walk(visible_directory, followlinks=False):
+            visited_directories += 1
+            if visited_directories > MAX_DIRECTORY_COUNT:
+                return FileListing(normalized_directory, tuple(entries), truncated=True)
             current = Path(current_root)
             directories[:] = sorted(
                 child
