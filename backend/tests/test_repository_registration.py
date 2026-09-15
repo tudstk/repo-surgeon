@@ -80,6 +80,21 @@ async def test_registers_and_retrieves_a_canonical_git_root(
     assert listed.status_code == 200
     assert [repository["id"] for repository in listed.json()] == [body["id"]]
 
+    preflight = await client.options(
+        "/repositories",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+    blocked = await client.get(
+        "/repositories", headers={"Origin": "http://localhost:5173"}
+    )
+    assert "access-control-allow-origin" not in blocked.headers
+
 
 @pytest.mark.anyio
 async def test_repository_summary_is_derived_from_registered_files(

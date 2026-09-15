@@ -238,6 +238,7 @@ export default function Home() {
       return;
     }
     const controller = new AbortController();
+    let requestActive = true;
     fetch(`${apiBase}/repositories/${selectedRepositoryId}/summary`, { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error('summary request failed');
@@ -251,7 +252,8 @@ export default function Home() {
           truncated: boolean;
         }>;
       })
-      .then((data) =>
+      .then((data) => {
+        if (!requestActive) return;
         setRepositorySummary({
           language: data.language,
           languageConfidence: data.language_confidence,
@@ -260,10 +262,15 @@ export default function Home() {
           testFramework: data.test_framework,
           testCommand: data.test_command,
           truncated: data.truncated,
-        }),
-      )
-      .catch(() => setRepositorySummary(null));
-    return () => controller.abort();
+        });
+      })
+      .catch(() => {
+        if (requestActive) setRepositorySummary(null);
+      });
+    return () => {
+      requestActive = false;
+      controller.abort();
+    };
   }, [selectedRepositoryId]);
 
   useEffect(() => {
