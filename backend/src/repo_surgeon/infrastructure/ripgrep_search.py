@@ -70,6 +70,7 @@ class SubprocessSearchRunner:
     def run(
         self, argv: tuple[str, ...], cwd: Path, timeout_seconds: float
     ) -> CompletedSearchProcess:
+        self._cancelled.clear()
         process = subprocess.Popen(
             argv,
             cwd=cwd,
@@ -157,6 +158,7 @@ class RipgrepSearchAdapter:
         self._runner.cancel()
 
     def search(self, canonical_root: str | Path, request: SearchRequest) -> SearchResult:
+        self._cancelled.clear()
         started = time.monotonic()
         root = Path(canonical_root)
         deadline = started + request.timeout_ms / 1_000
@@ -212,7 +214,7 @@ class RipgrepSearchAdapter:
             self._raise_if_cancelled()
             self._raise_if_deadline_exceeded(deadline)
             try:
-                files.read_file(candidate)
+                files.path_type(candidate)
             except RepositoryFileError as error:
                 if error.code in {"binary_file", "file_too_large", "file_not_found"}:
                     skipped_files += 1
@@ -267,7 +269,14 @@ class RipgrepSearchAdapter:
                 reasons.append("matches")
                 parsed = parsed[: request.max_matches]
                 break
-        matches = tuple(self._with_context(files, item, request) for item in parsed)
+        verified_matches: list[SearchMatch] = []
+        for item in parsed:
+            verified = self._with_context(files, item, request)
+            if verified is None:
+                skipped_files += 1
+            else:
+                verified_matches.append(verified)
+        matches = tuple(verified_matches)
         result = SearchResult(
             query=request.query,
             mode=request.mode,
@@ -344,14 +353,30 @@ class RipgrepSearchAdapter:
                 raise SearchError(
                     "search_failed", "Repository search returned invalid data."
                 ) from error
+            if not isinstance(event, dict):
+                raise SearchError("search_failed", "Repository search returned invalid data.")
             if event.get("type") != "match":
                 continue
             data = event.get("data", {})
-            path = data.get("path", {}).get("text")
-            text = data.get("lines", {}).get("text")
+            if not isinstance(data, dict):
+                raise SearchError("search_failed", "Repository search returned invalid data.")
+            path_data = data.get("path")
+            lines_data = data.get("lines")
+            if not isinstance(path_data, dict) or not isinstance(lines_data, dict):
+                raise SearchError("search_failed", "Repository search returned invalid data.")
+            path = path_data.get("text")
+            text = lines_data.get("text")
+            if text is None and isinstance(lines_data.get("bytes"), str):
+                text = ""
             line = data.get("line_number")
             submatches = data.get("submatches", [])
-            if not isinstance(path, str) or not isinstance(text, str) or not isinstance(line, int):
+            if (
+                not isinstance(path, str)
+                or not isinstance(text, str)
+                or not isinstance(line, int)
+                or not isinstance(submatches, list)
+                or any(not isinstance(submatch, dict) for submatch in submatches)
+            ):
                 raise SearchError("search_failed", "Repository search returned invalid data.")
             column = None
             if submatches and isinstance(submatches[0].get("start"), int):
@@ -364,12 +389,14 @@ class RipgrepSearchAdapter:
     @staticmethod
     def _with_context(
         files: ConfinedRepositoryFiles, match: SearchMatch, request: SearchRequest
-    ) -> SearchMatch:
+    ) -> SearchMatch | None:
         start = max(1, match.line - request.context_before)
         end = match.line + request.context_after
         try:
             read = files.read_file(match.path, start, end)
         except RepositoryFileError as error:
+            if error.code in {"binary_file", "file_too_large", "file_not_found"}:
+                return None
             raise SearchError(
                 "search_failed", "A search result could not be verified safely."
             ) from error
