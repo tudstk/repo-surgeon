@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import sys
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -24,6 +26,7 @@ from repo_surgeon.infrastructure.ripgrep_search import (
     CompletedSearchProcess,
     RipgrepSearchAdapter,
     SearchProcessTimeout,
+    SubprocessSearchRunner,
 )
 from repo_surgeon.mcp.file_tools import ToolErrorOutput
 from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
@@ -72,7 +75,9 @@ def test_search_request_rejects_invalid_queries(query: str) -> None:
         request(query=query)
 
 
-@pytest.mark.parametrize("path", ["/tmp", "../outside", "src/../../outside", ".git"])
+@pytest.mark.parametrize(
+    "path", ["/tmp", "../outside", "src/../../outside", ".git", r"C:\outside", r"..\outside"]
+)
 def test_search_rejects_unsafe_paths(tmp_path: Path, path: str) -> None:
     with pytest.raises(SearchError) as raised:
         RipgrepSearchAdapter().search(tmp_path, request(path=path))
@@ -80,7 +85,10 @@ def test_search_rejects_unsafe_paths(tmp_path: Path, path: str) -> None:
     assert raised.value.code == "unsafe_path"
 
 
-@pytest.mark.parametrize("glob", ["/tmp/*.py", "../*.py", "src/../../*.py", "", "x\x00y"])
+@pytest.mark.parametrize(
+    "glob",
+    ["/tmp/*.py", "../*.py", "src/../../*.py", r"C:\*.py", r"..\*.py", "", "x\x00y"],
+)
 def test_search_rejects_unsafe_globs(tmp_path: Path, glob: str) -> None:
     with pytest.raises(SearchError) as raised:
         RipgrepSearchAdapter().search(tmp_path, request(glob=glob))
@@ -186,6 +194,29 @@ def test_timeout_is_stable_and_shared_across_processes(tmp_path: Path) -> None:
 
     assert raised.value.code == "search_timed_out"
     assert runner.calls[0][2] <= 0.1
+
+
+def test_subprocess_runner_kills_work_at_its_own_deadline(tmp_path: Path) -> None:
+    started = time.monotonic()
+
+    with pytest.raises(SearchProcessTimeout):
+        SubprocessSearchRunner().run(
+            (sys.executable, "-c", "import time; time.sleep(10)"), tmp_path, 0.05
+        )
+
+    assert time.monotonic() - started < 1
+
+
+def test_symlink_directory_cannot_escape_repository(tmp_path: Path) -> None:
+    outside = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("needle outside\n")
+    (tmp_path / "escape").symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(SearchError) as raised:
+        RipgrepSearchAdapter().search(tmp_path, request(path="escape"))
+
+    assert raised.value.code == "unsafe_path"
 
 
 def test_no_matches_is_a_success(tmp_path: Path) -> None:

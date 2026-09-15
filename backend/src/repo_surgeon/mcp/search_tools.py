@@ -144,14 +144,19 @@ def _bound_search_output(
 ) -> SearchCodeOutput | ToolErrorOutput | None:
     if max_bytes is None or _serialized_size(result) <= max_bytes:
         return result
-    without_context = result.model_copy(
-        update={
-            "matches": tuple(
-                match.model_copy(update={"before": (), "after": ()}) for match in result.matches
-            ),
-            "truncated": True,
-            "truncation_reasons": tuple(dict.fromkeys((*result.truncation_reasons, "context"))),
-        }
+    has_context = any(match.before or match.after for match in result.matches)
+    without_context = (
+        result.model_copy(
+            update={
+                "matches": tuple(
+                    match.model_copy(update={"before": (), "after": ()}) for match in result.matches
+                ),
+                "truncated": True,
+                "truncation_reasons": tuple(dict.fromkeys((*result.truncation_reasons, "context"))),
+            }
+        )
+        if has_context
+        else result
     )
     if _serialized_size(without_context) <= max_bytes:
         return without_context
@@ -160,6 +165,7 @@ def _bound_search_output(
             update={
                 "matches": without_context.matches[:count],
                 "match_count": count,
+                "truncated": True,
                 "truncation_reasons": tuple(
                     dict.fromkeys((*without_context.truncation_reasons, "bytes"))
                 ),

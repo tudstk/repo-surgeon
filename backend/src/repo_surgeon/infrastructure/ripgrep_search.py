@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
+import selectors
 import subprocess
 import time
 from dataclasses import dataclass, replace
-from pathlib import Path, PurePath
+from pathlib import Path, PurePath, PureWindowsPath
 from typing import Protocol, cast
 
 from repo_surgeon.application.repository_files import (
@@ -60,18 +62,50 @@ class SubprocessSearchRunner:
             cwd=cwd,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
             shell=False,
         )
+        assert process.stdout is not None
+        captured = bytearray()
+        deadline = time.monotonic() + timeout_seconds
+        selector = selectors.DefaultSelector()
+        selector.register(process.stdout, selectors.EVENT_READ)
         try:
-            stdout, stderr = process.communicate(timeout=timeout_seconds)
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self._kill_and_reap(process)
+                    raise SearchProcessTimeout
+                ready = selector.select(remaining)
+                if not ready:
+                    self._kill_and_reap(process)
+                    raise SearchProcessTimeout
+                for key, _ in ready:
+                    chunk = os.read(key.fd, min(8_192, PROCESS_OUTPUT_LIMIT + 1 - len(captured)))
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        continue
+                    captured.extend(chunk)
+                    if len(captured) > PROCESS_OUTPUT_LIMIT:
+                        self._kill_and_reap(process)
+                        raise SearchProcessOutputLimit
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                self._kill_and_reap(process)
+                raise SearchProcessTimeout
+            returncode = process.wait(timeout=remaining)
         except subprocess.TimeoutExpired as error:
-            process.kill()
-            process.communicate()
+            self._kill_and_reap(process)
             raise SearchProcessTimeout from error
-        if len(stdout) + len(stderr) > PROCESS_OUTPUT_LIMIT:
-            raise SearchProcessOutputLimit
-        return CompletedSearchProcess(process.returncode, stdout, stderr)
+        finally:
+            selector.close()
+            process.stdout.close()
+        return CompletedSearchProcess(returncode, bytes(captured), b"")
+
+    @staticmethod
+    def _kill_and_reap(process: subprocess.Popen[bytes]) -> None:
+        process.kill()
+        process.wait()
 
 
 class RipgrepSearchAdapter:
@@ -85,7 +119,7 @@ class RipgrepSearchAdapter:
         root = Path(canonical_root)
         try:
             files = ConfinedRepositoryFiles(str(root))
-            normalized_path = normalize_repository_relative_path(request.path)
+            normalized_path = self._normalize_search_path(request.path)
             files.list_files(normalized_path, max_results=1)
         except RepositoryFileError as error:
             raise SearchError(error.code, error.detail) from error
@@ -116,16 +150,19 @@ class RipgrepSearchAdapter:
         if discovered.returncode not in (0, 1):
             raise SearchError("search_failed", "Repository search failed.")
 
-        candidates = [
-            normalize_repository_relative_path(item.decode("utf-8"))
-            for item in discovered.stdout.split(b"\0")
-            if item
-        ]
+        candidates: list[str] = []
+        skipped_files = 0
+        for item in discovered.stdout.split(b"\0"):
+            if not item:
+                continue
+            try:
+                candidates.append(self._normalize_search_path(item.decode("utf-8")))
+            except UnicodeDecodeError, SearchError:
+                skipped_files += 1
         if len(candidates) > MAX_SEARCH_FILES:
             raise SearchError("search_output_limit", "Repository search exceeded its file limit.")
 
         searchable: list[str] = []
-        skipped_files = 0
         for candidate in candidates:
             try:
                 files.read_file(candidate)
@@ -203,8 +240,27 @@ class RipgrepSearchAdapter:
         if glob is None:
             return
         supplied = PurePath(glob)
-        if not glob or "\0" in glob or supplied.is_absolute() or ".." in supplied.parts:
+        windows = PureWindowsPath(glob)
+        if (
+            not glob
+            or "\0" in glob
+            or supplied.is_absolute()
+            or windows.is_absolute()
+            or windows.drive
+            or ".." in supplied.parts
+            or ".." in windows.parts
+        ):
             raise SearchError("unsafe_glob", "The requested glob is not safe.")
+
+    @staticmethod
+    def _normalize_search_path(path: str) -> str:
+        windows = PureWindowsPath(path)
+        if windows.is_absolute() or windows.drive or ".." in windows.parts:
+            raise SearchError("unsafe_path", "The requested path is outside the repository.")
+        try:
+            return normalize_repository_relative_path(path)
+        except RepositoryFileError as error:
+            raise SearchError(error.code, error.detail) from error
 
     @staticmethod
     def _parse_matches(payload: bytes) -> list[SearchMatch]:
@@ -256,11 +312,16 @@ class RipgrepSearchAdapter:
     def _bound_result(cls, result: SearchResult, max_bytes: int) -> SearchResult:
         if cls._serialized_size(result) <= max_bytes:
             return result
-        without_context = replace(
-            result,
-            matches=tuple(replace(match, before=(), after=()) for match in result.matches),
-            truncated=True,
-            truncation_reasons=cls._add_reason(result.truncation_reasons, "context"),
+        has_context = any(match.before or match.after for match in result.matches)
+        without_context = (
+            replace(
+                result,
+                matches=tuple(replace(match, before=(), after=()) for match in result.matches),
+                truncated=True,
+                truncation_reasons=cls._add_reason(result.truncation_reasons, "context"),
+            )
+            if has_context
+            else result
         )
         if cls._serialized_size(without_context) <= max_bytes:
             return without_context
@@ -275,12 +336,16 @@ class RipgrepSearchAdapter:
             )
             if cls._serialized_size(candidate) <= max_bytes:
                 return candidate
-        return replace(
+        empty = replace(
             without_context,
             matches=(),
             match_count=0,
+            truncated=True,
             truncation_reasons=cls._add_reason(without_context.truncation_reasons, "bytes"),
         )
+        if cls._serialized_size(empty) > max_bytes:
+            raise SearchError("result_bytes_limit", "The search result exceeds its byte budget.")
+        return empty
 
     @staticmethod
     def _serialized_size(result: SearchResult) -> int:

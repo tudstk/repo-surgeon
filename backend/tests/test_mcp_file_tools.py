@@ -239,13 +239,31 @@ async def test_fastmcp_in_process_client_exposes_flat_schema_and_invokes_handler
         assert {"repository_id", "path", "start_line", "end_line"} <= set(
             tools["read_file"].inputSchema["properties"]
         )
+        assert {
+            "repository_id",
+            "query",
+            "mode",
+            "path",
+            "glob",
+            "max_matches",
+            "context_before",
+            "context_after",
+            "timeout_ms",
+        } <= set(tools["search_code"].inputSchema["properties"])
         result = await mcp_client.call_tool(
             "read_file", {"repository_id": str(repository_id), "path": "README.md"}
+        )
+        search_result = await mcp_client.call_tool(
+            "search_code",
+            {"repository_id": str(repository_id), "query": "Repository safety fixture"},
         )
 
     assert result.is_error is False
     assert result.structured_content is not None
     assert result.structured_content["path"] == "README.md"
+    assert search_result.is_error is False
+    assert search_result.structured_content is not None
+    assert search_result.structured_content["match_count"] == 1
 
 
 def test_pydantic_contracts_reject_unknown_fields_and_clamp_valid_bounds() -> None:
