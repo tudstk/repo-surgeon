@@ -25,8 +25,8 @@ function repositoryName(repository: RegisteredRepository | null) {
 
 const initialSearchActivity: SearchActivity = {
   tool: 'search_code',
-  phase: 'loading',
-  summary: 'Select a repository to search',
+  phase: 'idle',
+  summary: 'No repository selected',
   matchCount: null,
   durationMs: null,
   truncated: false,
@@ -215,6 +215,9 @@ export default function Home() {
       })
       .then((data) => {
         setRepositories(data);
+        if (data.length === 0) {
+          setSearchActivity(initialSearchActivity);
+        }
         setSelectedRepositoryId((current) => current ?? data[0]?.id ?? null);
       })
       .catch(() => setRepositories([]));

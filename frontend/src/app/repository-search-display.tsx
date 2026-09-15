@@ -21,7 +21,7 @@ export type SearchCitation = {
 
 export type SearchActivity = {
   tool: 'search_code';
-  phase: 'loading' | 'completed' | 'error';
+  phase: 'idle' | 'loading' | 'completed' | 'error';
   summary: string;
   matchCount: number | null;
   durationMs: number | null;
@@ -74,6 +74,7 @@ export function RepositorySummaryCard({ summary }: { summary: RepositorySummary 
 }
 
 function activityResult(activity: SearchActivity) {
+  if (activity.phase === 'idle') return 'No repository';
   if (activity.phase === 'loading') return 'Searching...';
   if (activity.phase === 'error') {
     return activity.errorCode === 'search_timed_out' ? 'Timed out' : 'Search failed';

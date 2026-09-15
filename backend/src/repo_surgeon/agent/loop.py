@@ -178,7 +178,13 @@ def _tool_event(
                     f"-{match.after[-1].number if match.after else match.line}"
                 ),
                 source="search_code",
-                text=match.text,
+                text="\n".join(
+                    [
+                        *(line.text for line in match.before),
+                        match.text,
+                        *(line.text for line in match.after),
+                    ]
+                ),
             )
             for index, match in enumerate(result.matches, start=1)
         )
@@ -262,7 +268,54 @@ def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
         )
         return match.group(0) if supported else "[unsupported citation]"
 
-    return allowed_reference.sub(validate, answer) if allowed_reference else answer
+    validated = allowed_reference.sub(validate, answer) if allowed_reference else answer
+    fallback_reference = re.compile(
+        r"\[(?P<path>(?!https?://|www\.)[^\]\n]+):"
+        r"(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?\]"
+    )
+    file_extensions = {
+        "c",
+        "cc",
+        "cpp",
+        "cs",
+        "go",
+        "h",
+        "hpp",
+        "java",
+        "js",
+        "json",
+        "md",
+        "py",
+        "rb",
+        "rs",
+        "sh",
+        "sql",
+        "toml",
+        "ts",
+        "tsx",
+        "txt",
+        "xml",
+        "yaml",
+        "yml",
+    }
+
+    def reject_unsupported(match: re.Match[str]) -> str:
+        path = match.group("path")
+        suffix = path.rsplit(".", 1)[-1].lower()
+        if "/" not in path and suffix not in file_extensions:
+            return match.group(0)
+        start = int(match.group("start"))
+        end = int(match.group("end") or start)
+        if any(
+            citation.path == path
+            and start >= citation.start_line
+            and end <= citation.end_line
+            for citation in allowed
+        ):
+            return match.group(0)
+        return "[unsupported citation]"
+
+    return fallback_reference.sub(reject_unsupported, validated)
 
 
 async def run_turn(
