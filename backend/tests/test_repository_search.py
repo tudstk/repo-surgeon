@@ -83,14 +83,14 @@ def test_search_rejects_unsafe_globs(tmp_path: Path, glob: str) -> None:
 def test_literal_and_regex_modes_are_distinct_and_preserve_citations(tmp_path: Path) -> None:
     source = tmp_path / "src" / "sample.py"
     source.parent.mkdir()
-    source.write_text("before\na.* literal\naZZ regex\na.* again\nafter\n")
+    source.write_text("before\na.*z\nabz\na.*z\nafter\n")
     adapter = RipgrepSearchAdapter()
 
     literal = adapter.search(
         tmp_path,
-        request(query="a.*", mode="literal", context_before=1, context_after=1),
+        request(query="a.*z", mode="literal", context_before=1, context_after=1),
     )
-    regex = adapter.search(tmp_path, request(query="a.*", mode="regex"))
+    regex = adapter.search(tmp_path, request(query="a.*z", mode="regex"))
 
     assert [(match.path, match.line, match.column) for match in literal.matches] == [
         ("src/sample.py", 2, 1),
