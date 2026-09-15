@@ -204,18 +204,22 @@ class RipgrepSearchAdapter:
             "--no-require-git",
             "--no-ignore-parent",
             "--hidden",
-            "--glob=!**/.git/**",
-            "--glob=!**/.env*",
-            "--glob=!**/id_rsa",
-            "--glob=!**/id_dsa",
-            "--glob=!**/id_ecdsa",
-            "--glob=!**/id_ed25519",
-            "--glob=!**/*credential*",
-            "--glob=!**/*secret*",
-            "--glob=!**/*token*",
         ]
         if request.glob is not None:
             file_argv.append(f"--glob={request.glob}")
+        file_argv.extend(
+            (
+                "--glob=!**/.git/**",
+                "--glob=!**/.env*",
+                "--glob=!**/id_rsa",
+                "--glob=!**/id_dsa",
+                "--glob=!**/id_ecdsa",
+                "--glob=!**/id_ed25519",
+                "--glob=!**/*credential*",
+                "--glob=!**/*secret*",
+                "--glob=!**/*token*",
+            )
+        )
         file_argv.extend(("--", normalized_path))
         discovered = self._run(tuple(file_argv), root, deadline)
         if discovered.returncode not in (0, 1):
