@@ -30,7 +30,6 @@ from repo_surgeon.application.repository_search import (
 )
 
 PROCESS_OUTPUT_LIMIT = 2 * 1024 * 1024
-_POLICY_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix="repo-surgeon-policy")
 
 
 class SearchProcessTimeout(Exception):
@@ -249,14 +248,7 @@ class RipgrepSearchAdapter:
             self._raise_if_deadline_exceeded(deadline)
             try:
                 files.path_type(candidate)
-                policy_check = _POLICY_WORKER.submit(files.read_file, candidate, 1, 1)
-                try:
-                    policy_check.result(timeout=max(0, deadline - time.monotonic()))
-                except FutureTimeoutError as error:
-                    policy_check.cancel()
-                    raise SearchError(
-                        "search_timed_out", "Repository search timed out."
-                    ) from error
+                self._check_candidate_policy(files, candidate, deadline)
             except RepositoryFileError as error:
                 if error.code in {"binary_file", "file_too_large", "file_not_found"}:
                     skipped_files += 1
@@ -360,6 +352,25 @@ class RipgrepSearchAdapter:
     def _raise_if_deadline_exceeded(deadline: float) -> None:
         if time.monotonic() >= deadline:
             raise SearchError("search_timed_out", "Repository search timed out.")
+
+    @staticmethod
+    def _check_candidate_policy(
+        files: ConfinedRepositoryFiles, candidate: str, deadline: float
+    ) -> None:
+        policy_worker = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="repo-surgeon-policy"
+        )
+        try:
+            policy_check = policy_worker.submit(files.read_file, candidate, 1, 1)
+            try:
+                policy_check.result(timeout=max(0, deadline - time.monotonic()))
+            except FutureTimeoutError as error:
+                policy_check.cancel()
+                raise SearchError(
+                    "search_timed_out", "Repository search timed out."
+                ) from error
+        finally:
+            policy_worker.shutdown(wait=False, cancel_futures=True)
 
     @staticmethod
     def _validate_glob(glob: str | None) -> None:

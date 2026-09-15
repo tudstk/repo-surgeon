@@ -270,7 +270,7 @@ def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
 
     validated = allowed_reference.sub(validate, answer) if allowed_reference else answer
     fallback_reference = re.compile(
-        r"\[(?P<path>(?!https?://|www\.)[^\n]*):"
+        r"\[(?P<path>(?!https?://|www\.)(?:[^\]\n]|\](?!\s*(?:and\s*)?\[))+):"
         r"(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?\]"
     )
     file_extensions = {
