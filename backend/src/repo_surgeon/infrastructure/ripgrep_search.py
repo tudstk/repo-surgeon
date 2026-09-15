@@ -370,6 +370,7 @@ class RipgrepSearchAdapter:
             raise SearchError("search_timed_out", "Repository search timed out.")
 
     def _check_candidate_policy(
+        self,
         root: Path, candidate: str, deadline: float
     ) -> None:
         self._raise_if_cancelled()
