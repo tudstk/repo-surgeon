@@ -13,7 +13,6 @@ from typing import Literal
 
 from repo_surgeon.application.repository_files import (
     MAX_FILE_COUNT,
-    MAX_LINE_COUNT,
     ConfinedRepositoryFiles,
     FileEntry,
     RepositoryFileError,
@@ -90,7 +89,7 @@ def detect_repository_summary(
             continue
         text_by_path[entry.path] = "\n".join(line.text for line in read.lines)
         approximate_lines += len(read.lines)
-        truncated = truncated or len(read.lines) == MAX_LINE_COUNT
+        truncated = truncated or read.truncated
         language = _language_for_file(entry)
         if language is not None:
             language_scores[language] += entry.size_bytes + 1_024
@@ -171,31 +170,35 @@ def _detect_tests(
         except json.JSONDecodeError:
             unsupported = True
         else:
-            dependencies = {
-                **_string_dict(package_data.get("dependencies")),
-                **_string_dict(package_data.get("devDependencies")),
-            }
-            managers = [
-                manager
-                for lock, manager in (
-                    ("pnpm-lock.yaml", "pnpm"),
-                    ("yarn.lock", "yarn"),
-                    ("package-lock.json", "npm"),
-                )
-                if lock in paths
-            ]
-            if len(managers) > 1:
+            if not isinstance(package_data, dict):
                 unsupported = True
-            elif "vitest" in dependencies:
-                manager = managers[0] if managers else "npm"
-                detections.append(("vitest", f"{manager} exec vitest run"))
-            elif "jest" in dependencies:
-                manager = managers[0] if managers else "npm"
-                detections.append(("jest", f"{manager} exec jest"))
-            elif (
-                isinstance(package_data.get("scripts"), dict) and "test" in package_data["scripts"]
-            ):
-                unsupported = True
+            else:
+                dependencies = {
+                    **_string_dict(package_data.get("dependencies")),
+                    **_string_dict(package_data.get("devDependencies")),
+                }
+                managers = [
+                    manager
+                    for lock, manager in (
+                        ("pnpm-lock.yaml", "pnpm"),
+                        ("yarn.lock", "yarn"),
+                        ("package-lock.json", "npm"),
+                    )
+                    if lock in paths
+                ]
+                if len(managers) > 1:
+                    unsupported = True
+                elif "vitest" in dependencies:
+                    manager = managers[0] if managers else "npm"
+                    detections.append(("vitest", f"{manager} exec vitest run"))
+                elif "jest" in dependencies:
+                    manager = managers[0] if managers else "npm"
+                    detections.append(("jest", f"{manager} exec jest"))
+                elif (
+                    isinstance(package_data.get("scripts"), dict)
+                    and "test" in package_data["scripts"]
+                ):
+                    unsupported = True
 
     if "go.mod" in paths:
         detections.append(("go test", "go test ./..."))

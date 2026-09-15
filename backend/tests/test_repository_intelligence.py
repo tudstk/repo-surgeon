@@ -131,3 +131,22 @@ def test_scan_marks_partial_when_file_or_line_caps_are_reached(tmp_path: Path) -
     assert result.file_count == 200
     assert result.approximate_lines == 200
     assert result.truncated
+
+
+def test_scan_with_exact_line_cap_is_not_partial(tmp_path: Path) -> None:
+    (tmp_path / "module.py").write_text("line\n" * 200)
+
+    result = detect_repository_summary(tmp_path, detected_at=DETECTED_AT)
+
+    assert result.approximate_lines == 200
+    assert not result.truncated
+
+
+def test_non_object_package_manifest_is_unsupported(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text("[]")
+
+    result = detect_repository_summary(tmp_path, detected_at=DETECTED_AT)
+
+    assert result.test_detection == "unsupported"
+    assert result.test_framework is None
+    assert result.test_command is None

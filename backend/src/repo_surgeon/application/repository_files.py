@@ -152,7 +152,11 @@ class ConfinedRepositoryFiles:
             start_line=start_line,
             end_line=selected_end,
             lines=lines,
-            truncated=requested_end > selected_end,
+            truncated=(
+                len(all_lines) > selected_end
+                if end_line is None
+                else requested_end > selected_end
+            ),
             content_sha256=hashlib.sha256(payload).hexdigest(),
         )
 
