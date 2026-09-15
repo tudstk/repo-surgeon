@@ -169,12 +169,16 @@ class RipgrepSearchAdapter:
         self._runner = runner or SubprocessSearchRunner()
         self._cancelled = Event()
         self._state_lock = Lock()
+        self._policy_process: multiprocessing.Process | None = None
 
     def cancel(self) -> None:
         """Cancel an active search and synchronously reap its child process."""
         with self._state_lock:
             self._cancelled.set()
             self._runner.cancel()
+            policy_process = self._policy_process
+            if policy_process is not None and policy_process.is_alive():
+                policy_process.terminate()
 
     def search(self, canonical_root: str | Path, request: SearchRequest) -> SearchResult:
         try:
@@ -365,10 +369,10 @@ class RipgrepSearchAdapter:
         if time.monotonic() >= deadline:
             raise SearchError("search_timed_out", "Repository search timed out.")
 
-    @staticmethod
     def _check_candidate_policy(
         root: Path, candidate: str, deadline: float
     ) -> None:
+        self._raise_if_cancelled()
         parent, child = multiprocessing.Pipe(duplex=False)
         policy_worker = multiprocessing.Process(
             target=_policy_read_worker,
@@ -376,18 +380,27 @@ class RipgrepSearchAdapter:
         )
         policy_worker.start()
         child.close()
+        with self._state_lock:
+            self._policy_process = policy_worker
+            cancelled = self._cancelled.is_set()
+        if cancelled and policy_worker.is_alive():
+            policy_worker.terminate()
         try:
             policy_worker.join(max(0, deadline - time.monotonic()))
             if policy_worker.is_alive():
                 policy_worker.terminate()
                 policy_worker.join()
                 raise SearchError("search_timed_out", "Repository search timed out.")
+            self._raise_if_cancelled()
             if not parent.poll():
                 raise SearchError("search_failed", "Repository search failed.")
             result = parent.recv()
             if result[0] == "error":
                 raise RepositoryFileError(result[1], result[2])
         finally:
+            with self._state_lock:
+                if self._policy_process is policy_worker:
+                    self._policy_process = None
             parent.close()
             if policy_worker.is_alive():
                 policy_worker.terminate()
