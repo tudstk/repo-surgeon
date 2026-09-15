@@ -4,9 +4,9 @@ Repo Surgeon is a local-first, human-controlled coding assistant for understandi
 
 ## Implemented status
 
-This checkout provides an executable foundation: a typed FastAPI process, a strict TypeScript and Next.js frontend, local PostgreSQL through Docker Compose, and CI quality gates. It also registers an existing local Git working tree and persists its resolved canonical root. The backend includes bounded, read-only repository file tools and a deterministic model-provider agent loop, in addition to process health and repository registration and retrieval.
+This checkout provides an executable foundation: a typed FastAPI process, a strict TypeScript and Next.js frontend, local PostgreSQL through Docker Compose, and CI quality gates. It also registers an existing local Git working tree and persists its resolved canonical root. The backend includes bounded read-only file and exact-search tools, deterministic repository intelligence, and a deterministic model-provider agent loop.
 
-Registration validates only the selected path and Git worktree boundary. The file tools read bounded safe content through an in-process MCP adapter, and the agent loop can use only those read-only tools through a provider boundary. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. The frontend remains a visual shell with static example repositories, activity, tests, and diff content. See [product scope](docs/product/scope.md) for the broader roadmap.
+Registration validates only the selected path and Git worktree boundary. The MCP tools read and search bounded safe content, and the agent loop can use only those read-only capabilities through a provider boundary. Repository intelligence maps bounded manifest evidence to versioned language and test-command catalogs without executing repository code. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. The frontend remains a visual shell, now with typed example summary, search activity, and exact citation states. See [safe search](docs/mcp/safe-search-tools.md) and [product scope](docs/product/scope.md).
 
 No model API key is required.
 
@@ -111,4 +111,4 @@ The workflow runs on pushes and pull requests. It uses `backend/uv.lock` and `fr
 
 The registration request path is `curl -> Uvicorn ASGI server -> FastAPI router -> application use case -> SQLAlchemy adapter -> PostgreSQL`. The frontend is independent. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
 
-Future work continues with HTTP/API integration, repository indexing, test sandboxing, proposals, approvals, patch application, audits, and pull requests. The current provider boundary, bounded agent loop, and in-process safe file tools are not yet connected to the frontend workflow.
+Future work continues with HTTP/API integration, Git context, test sandboxing, proposals, approvals, patch application, audits, and pull requests. The current provider boundary, bounded agent loop, and in-process safe repository tools are not yet connected to the frontend workflow.
