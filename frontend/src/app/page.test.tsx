@@ -113,6 +113,32 @@ describe('Home', () => {
     window.matchMedia = originalMatchMedia;
   });
 
+  it('clears desktop inline widths at a narrow mobile width', () => {
+    const originalWidth = window.innerWidth;
+    const originalMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 500 });
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(max-width: 1024px)',
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+
+    render(<Home />);
+
+    const grid = screen.getByRole('main').querySelector('.workspace-grid');
+    expect(grid).toHaveAttribute('data-layout', 'stacked');
+    expect(grid).not.toHaveAttribute('style');
+    expect(screen.queryAllByRole('separator')).toHaveLength(0);
+
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
+    window.matchMedia = originalMatchMedia;
+  });
+
   it('resizes adjacent panes with bounded pointer and keyboard input', () => {
     render(<Home />);
 

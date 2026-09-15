@@ -221,8 +221,12 @@ export default function Home() {
     const syncWidths = () => {
       const nextMinimums = paneMinimums(window.innerWidth);
       setPaneMinimumBands(nextMinimums);
+      if (isStackedLayout) {
+        setPaneWidths(null);
+        return;
+      }
       const availableWidth = grid.getBoundingClientRect().width;
-      if (!availableWidth || isStackedLayout) return;
+      if (!availableWidth) return;
       setPaneWidths((current) =>
         fitPaneWidths(current ?? DEFAULT_PANE_WIDTHS, availableWidth, nextMinimums),
       );

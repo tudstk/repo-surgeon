@@ -125,6 +125,26 @@ def test_literal_and_regex_modes_are_distinct_and_preserve_citations(tmp_path: P
     assert [match.line for match in regex.matches] == [2, 3, 4]
 
 
+def test_search_accepts_a_specific_file_path(tmp_path: Path) -> None:
+    source = tmp_path / "README.md"
+    source.write_text("needle\n")
+
+    result = RipgrepSearchAdapter().search(tmp_path, request(path="README.md"))
+
+    assert [(match.path, match.line) for match in result.matches] == [("README.md", 1)]
+
+
+def test_search_caps_matches_before_scanning_all_files(tmp_path: Path) -> None:
+    for index in range(40):
+        (tmp_path / f"file-{index}.txt").write_text("needle\n" * 20)
+
+    result = RipgrepSearchAdapter().search(tmp_path, request(max_matches=5))
+
+    assert result.match_count == 5
+    assert result.truncated
+    assert "matches" in result.truncation_reasons
+
+
 def test_query_and_glob_are_fixed_arguments_not_shell_syntax(tmp_path: Path) -> None:
     (tmp_path / "safe.py").write_text("--hidden $(touch PWNED)\n")
     runner = RecordingRunner(

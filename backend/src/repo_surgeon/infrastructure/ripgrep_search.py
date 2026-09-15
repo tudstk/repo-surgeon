@@ -159,14 +159,15 @@ class RipgrepSearchAdapter:
     def search(self, canonical_root: str | Path, request: SearchRequest) -> SearchResult:
         started = time.monotonic()
         root = Path(canonical_root)
+        deadline = started + request.timeout_ms / 1_000
         try:
             files = ConfinedRepositoryFiles(str(root))
             normalized_path = self._normalize_search_path(request.path)
-            files.list_files(normalized_path, max_results=1)
+            files.path_type(normalized_path)
         except RepositoryFileError as error:
             raise SearchError(error.code, error.detail) from error
         self._validate_glob(request.glob)
-        deadline = started + request.timeout_ms / 1_000
+        self._raise_if_deadline_exceeded(deadline)
 
         if request.mode == "regex":
             validation = self._run(
@@ -239,22 +240,28 @@ class RipgrepSearchAdapter:
             "--line-number",
             "--column",
             "--max-count",
-            str(request.max_matches + 1),
+            str(min(request.max_matches + 1, 16)),
             "--max-filesize",
             str(MAX_FILE_BYTES),
         ]
         if request.mode == "literal":
             search_argv.append("--fixed-strings")
-        search_argv.extend(("--", request.query, *searchable))
-        completed = self._run(tuple(search_argv), root, deadline)
-        if completed.returncode not in (0, 1):
-            raise SearchError("search_failed", "Repository search failed.")
-
-        parsed = self._parse_matches(completed.stdout)
+        parsed: list[SearchMatch] = []
         reasons: list[TruncationReason] = []
-        if len(parsed) > request.max_matches:
-            parsed = parsed[: request.max_matches]
-            reasons.append("matches")
+        for candidate in searchable:
+            self._raise_if_cancelled()
+            candidate_search = tuple((*search_argv, "--", request.query, candidate))
+            completed = self._run(candidate_search, root, deadline)
+            if completed.returncode not in (0, 1):
+                raise SearchError("search_failed", "Repository search failed.")
+            candidate_matches = self._parse_matches(completed.stdout)
+            if len(candidate_matches) == min(request.max_matches + 1, 16):
+                reasons.append("matches")
+            parsed.extend(candidate_matches)
+            if len(parsed) > request.max_matches:
+                reasons.append("matches")
+                parsed = parsed[: request.max_matches]
+                break
         matches = tuple(self._with_context(files, item, request) for item in parsed)
         result = SearchResult(
             query=request.query,

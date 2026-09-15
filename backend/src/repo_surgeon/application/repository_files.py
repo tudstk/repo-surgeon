@@ -125,6 +125,34 @@ class ConfinedRepositoryFiles:
                 entries.append(FileEntry(path=relative, entry_type="file", size_bytes=size))
         return FileListing(normalized_directory, tuple(entries), truncated=False)
 
+    def path_type(self, path: str) -> Literal["file", "directory"]:
+        """Validate one visible path without walking its descendants."""
+        candidate, relative = self._resolve_requested_path(path)
+        try:
+            resolved = candidate.resolve(strict=True)
+        except FileNotFoundError as error:
+            raise RepositoryFileError(
+                "file_not_found", "The requested file was not found."
+            ) from error
+        except OSError as error:
+            raise RepositoryFileError(
+                "unsafe_path", "The requested path cannot be inspected safely."
+            ) from error
+        self._ensure_contained(resolved)
+        self._ensure_visible_relative(relative)
+        self._ensure_visible_relative(resolved.relative_to(self._root).as_posix())
+        try:
+            mode = resolved.stat().st_mode
+        except OSError as error:
+            raise RepositoryFileError(
+                "file_not_found", "The requested file was not found."
+            ) from error
+        if stat.S_ISDIR(mode):
+            return "directory"
+        if stat.S_ISREG(mode):
+            return "file"
+        raise RepositoryFileError("unsafe_path", "The requested path is not a regular file.")
+
     def read_file(self, path: str, start_line: int = 1, end_line: int | None = None) -> FileRead:
         """Read from a root-anchored descriptor after canonical policy checks."""
         candidate, relative = self._resolve_requested_path(path)
