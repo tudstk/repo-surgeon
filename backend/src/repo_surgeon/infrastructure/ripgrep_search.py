@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 import os
 import selectors
 import subprocess
 import time
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePath, PureWindowsPath
@@ -30,6 +30,19 @@ from repo_surgeon.application.repository_search import (
 )
 
 PROCESS_OUTPUT_LIMIT = 2 * 1024 * 1024
+
+
+def _policy_read_worker(
+    root: str, candidate: str, connection: multiprocessing.connection.Connection
+) -> None:
+    try:
+        ConfinedRepositoryFiles(root).read_file(candidate, 1, 1)
+    except RepositoryFileError as error:
+        connection.send(("error", error.code, error.detail))
+    else:
+        connection.send(("ok",))
+    finally:
+        connection.close()
 
 
 class SearchProcessTimeout(Exception):
@@ -239,16 +252,13 @@ class RipgrepSearchAdapter:
                 candidates.append(candidate)
             except UnicodeDecodeError, SearchError:
                 skipped_files += 1
-        if len(candidates) > MAX_SEARCH_FILES:
-            raise SearchError("search_output_limit", "Repository search exceeded its file limit.")
-
         searchable: list[str] = []
         for candidate in candidates:
             self._raise_if_cancelled()
             self._raise_if_deadline_exceeded(deadline)
             try:
                 files.path_type(candidate)
-                self._check_candidate_policy(files, candidate, deadline)
+                self._check_candidate_policy(root, candidate, deadline)
             except RepositoryFileError as error:
                 if error.code in {"binary_file", "file_too_large", "file_not_found"}:
                     skipped_files += 1
@@ -256,6 +266,8 @@ class RipgrepSearchAdapter:
                 continue
             self._raise_if_deadline_exceeded(deadline)
             searchable.append(candidate)
+            if len(searchable) > MAX_SEARCH_FILES:
+                raise SearchError("search_output_limit", "Repository search exceeded its file limit.")
 
         if not searchable:
             result = SearchResult(
@@ -355,22 +367,31 @@ class RipgrepSearchAdapter:
 
     @staticmethod
     def _check_candidate_policy(
-        files: ConfinedRepositoryFiles, candidate: str, deadline: float
+        root: Path, candidate: str, deadline: float
     ) -> None:
-        policy_worker = ThreadPoolExecutor(
-            max_workers=1, thread_name_prefix="repo-surgeon-policy"
+        parent, child = multiprocessing.Pipe(duplex=False)
+        policy_worker = multiprocessing.Process(
+            target=_policy_read_worker,
+            args=(str(root), candidate, child),
         )
+        policy_worker.start()
+        child.close()
         try:
-            policy_check = policy_worker.submit(files.read_file, candidate, 1, 1)
-            try:
-                policy_check.result(timeout=max(0, deadline - time.monotonic()))
-            except FutureTimeoutError as error:
-                policy_check.cancel()
-                raise SearchError(
-                    "search_timed_out", "Repository search timed out."
-                ) from error
+            policy_worker.join(max(0, deadline - time.monotonic()))
+            if policy_worker.is_alive():
+                policy_worker.terminate()
+                policy_worker.join()
+                raise SearchError("search_timed_out", "Repository search timed out.")
+            if not parent.poll():
+                raise SearchError("search_failed", "Repository search failed.")
+            result = parent.recv()
+            if result[0] == "error":
+                raise RepositoryFileError(result[1], result[2])
         finally:
-            policy_worker.shutdown(wait=False, cancel_futures=True)
+            parent.close()
+            if policy_worker.is_alive():
+                policy_worker.terminate()
+            policy_worker.join()
 
     @staticmethod
     def _validate_glob(glob: str | None) -> None:

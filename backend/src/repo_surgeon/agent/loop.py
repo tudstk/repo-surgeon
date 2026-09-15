@@ -273,36 +273,10 @@ def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
         r"\[(?P<path>(?!https?://|www\.)(?:[^\]\n]|\](?!\s*(?:and\s*)?\[))+):"
         r"(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?\]"
     )
-    file_extensions = {
-        "c",
-        "cc",
-        "cpp",
-        "cs",
-        "go",
-        "h",
-        "hpp",
-        "java",
-        "js",
-        "json",
-        "md",
-        "py",
-        "rb",
-        "rs",
-        "sh",
-        "sql",
-        "toml",
-        "ts",
-        "tsx",
-        "txt",
-        "xml",
-        "yaml",
-        "yml",
-    }
-
     def reject_unsupported(match: re.Match[str]) -> str:
         path = match.group("path")
-        suffix = path.rsplit(".", 1)[-1].lower()
-        if "/" not in path and suffix not in file_extensions:
+        filename = PurePath(path).name
+        if "/" not in path and ("." not in filename or filename.startswith(".")):
             return match.group(0)
         start = int(match.group("start"))
         end = int(match.group("end") or start)
