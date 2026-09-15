@@ -205,6 +205,14 @@ class RipgrepSearchAdapter:
             "--no-ignore-parent",
             "--hidden",
             "--glob=!**/.git/**",
+            "--glob=!**/.env*",
+            "--glob=!**/id_rsa",
+            "--glob=!**/id_dsa",
+            "--glob=!**/id_ecdsa",
+            "--glob=!**/id_ed25519",
+            "--glob=!**/*credential*",
+            "--glob=!**/*secret*",
+            "--glob=!**/*token*",
         ]
         if request.glob is not None:
             file_argv.append(f"--glob={request.glob}")
