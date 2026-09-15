@@ -40,7 +40,7 @@ from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
 _FILE_LINE_REFERENCE = re.compile(
     r"(?<![\w/])(?P<open>\[)?"
-    r"(?P<path>[^\n]+)"
+    r"(?P<path>(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*\.[A-Za-z0-9_.-]+)"
     r":(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?(?P<close>\])?"
 )
 
@@ -67,6 +67,7 @@ class Citation:
     end_line: int
     label: str
     source: Literal["search_code", "read_file"]
+    text: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,6 +185,7 @@ def _tool_event(
                     f"-{match.after[-1].number if match.after else match.line}"
                 ),
                 source="search_code",
+                text=match.text,
             )
             for index, match in enumerate(result.matches, start=1)
         )
@@ -218,6 +220,7 @@ def _tool_event(
                     end_line=end_line,
                     label=label,
                     source="read_file",
+                    text="\n".join(line.text for line in result.lines),
                 ),
             ),
             truncated=result.truncated,
@@ -229,6 +232,17 @@ def _tool_event(
 
 def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
     allowed = tuple(citation for event in events for citation in event.citations)
+
+    allowed_reference = None
+    if allowed:
+        paths = "|".join(
+            sorted((re.escape(citation.path) for citation in allowed), key=len, reverse=True)
+        )
+        allowed_reference = re.compile(
+            r"(?<![\w/])(?P<open>\[)?(?P<path>"
+            + paths
+            + r"):(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?(?P<close>\])?"
+        )
 
     def validate(match: re.Match[str]) -> str:
         path = match.group("path")
@@ -255,7 +269,8 @@ def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
         )
         return match.group(0) if supported else "[unsupported citation]"
 
-    return _FILE_LINE_REFERENCE.sub(validate, answer)
+    validated = allowed_reference.sub(validate, answer) if allowed_reference else answer
+    return _FILE_LINE_REFERENCE.sub(validate, validated)
 
 
 async def run_turn(

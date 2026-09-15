@@ -286,7 +286,8 @@ class RipgrepSearchAdapter:
                 break
         verified_matches: list[SearchMatch] = []
         for item in parsed:
-            verified = self._with_context(files, item, request)
+            self._raise_if_deadline_exceeded(deadline)
+            verified = self._with_context(files, item, request, deadline)
             if verified is None:
                 skipped_files += 1
             else:
@@ -403,8 +404,13 @@ class RipgrepSearchAdapter:
 
     @staticmethod
     def _with_context(
-        files: ConfinedRepositoryFiles, match: SearchMatch, request: SearchRequest
+        files: ConfinedRepositoryFiles,
+        match: SearchMatch,
+        request: SearchRequest,
+        deadline: float,
     ) -> SearchMatch | None:
+        if time.monotonic() >= deadline:
+            raise SearchError("search_timed_out", "Repository search timed out.")
         start = max(1, match.line - request.context_before)
         end = match.line + request.context_after
         try:
@@ -415,6 +421,8 @@ class RipgrepSearchAdapter:
             raise SearchError(
                 "search_failed", "A search result could not be verified safely."
             ) from error
+        if time.monotonic() >= deadline:
+            raise SearchError("search_timed_out", "Repository search timed out.")
         matched = next((line for line in read.lines if line.number == match.line), None)
         if matched is None or matched.text != match.text:
             raise SearchError("search_failed", "A search result changed before verification.")

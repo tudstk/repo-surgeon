@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
+import { vi } from 'vitest';
 
 import Home from './page';
 
@@ -61,8 +62,38 @@ describe('Home', () => {
     expect(screen.getByLabelText('Sandbox HEAD')).toHaveTextContent('9b4ec8f');
     expect(screen.getByText('GIT DAG LINEAGE')).toBeInTheDocument();
     expect(screen.getByText(/INDEX 47b91e\.\.\.c892fa 100644/)).toBeInTheDocument();
-    expect(screen.getByText(/342 files · 28K LOC/i)).toBeInTheDocument();
+    expect(screen.getByText('Repository summary unavailable.')).toBeInTheDocument();
     expect(screen.queryByText(/STATIC PREVIEW|\(PREVIEW\)/i)).not.toBeInTheDocument();
+  });
+
+  it('renders repository-derived summary data from the API', async () => {
+    vi.stubEnv('NEXT_PUBLIC_REPOSITORY_ID', 'repository-1');
+    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', 'http://api.test');
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          language: 'Go',
+          language_confidence: 'high',
+          file_count: 3,
+          approximate_lines: 42,
+          test_framework: 'go test',
+          test_command: 'go test ./...',
+          truncated: false,
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<Home />);
+
+    await waitFor(() => expect(screen.getByText(/3 files · 42 LOC/i)).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.test/repositories/repository-1/summary',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
   });
 
   it('opens the exact cited file and line in the work panel', () => {

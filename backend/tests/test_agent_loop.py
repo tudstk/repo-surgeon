@@ -158,6 +158,16 @@ async def test_search_answer_accepts_citations_for_paths_with_spaces(tmp_path: P
 
 
 @pytest.mark.anyio
+async def test_answer_preserves_unrelated_colon_number_prose() -> None:
+    tools, repository_id = tool_client()
+    provider = FakeModelProvider([ModelResponse("See http://host:8080 for details.")])
+
+    result = await run_turn(provider, tools, repository_id, "Explain the repository.")
+
+    assert result.answer == "See http://host:8080 for details."
+
+
+@pytest.mark.anyio
 async def test_write_requests_are_denied_by_application_code() -> None:
     tools, repository_id = tool_client()
     before = (FIXTURE_ROOT / "README.md").read_bytes()

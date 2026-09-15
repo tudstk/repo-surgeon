@@ -1,5 +1,6 @@
 """Typed HTTP boundary for registering and retrieving local repositories."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated, Literal
@@ -13,6 +14,10 @@ from repo_surgeon.application.repositories import (
     GetRepository,
     RegisterLocalRepository,
     RepositoryRegistrationError,
+)
+from repo_surgeon.application.repository_intelligence import (
+    RepositorySummary,
+    detect_repository_summary,
 )
 from repo_surgeon.domain.repositories import Repository
 from repo_surgeon.infrastructure.local_repository_root import GitLocalRepositoryRootResolver
@@ -34,6 +39,36 @@ class RepositoryResponse(BaseModel):
     source: Literal["local"]
     canonical_root: str
     created_at: datetime
+
+
+class RepositorySummaryResponse(BaseModel):
+    """Repository-derived metadata for the workspace summary card."""
+
+    language: str | None
+    language_confidence: Literal["high", "medium", "low", "unknown"]
+    file_count: int
+    total_bytes: int
+    approximate_lines: int | None
+    test_framework: str | None
+    test_command: str | None
+    test_detection: Literal["detected", "ambiguous", "not_found", "unsupported"]
+    detected_at: datetime
+    truncated: bool
+
+    @classmethod
+    def from_summary(cls, summary: RepositorySummary) -> "RepositorySummaryResponse":
+        return cls(
+            language=summary.language,
+            language_confidence=summary.language_confidence,
+            file_count=summary.file_count,
+            total_bytes=summary.total_bytes,
+            approximate_lines=summary.approximate_lines,
+            test_framework=summary.test_framework,
+            test_command=summary.test_command,
+            test_detection=summary.test_detection,
+            detected_at=summary.detected_at,
+            truncated=summary.truncated,
+        )
 
 
 class ProblemDetail(BaseModel):
@@ -110,6 +145,31 @@ async def register_repository(
     except RepositoryRegistrationError as error:
         raise _registration_problem(error) from error
     return _response(repository)
+
+
+@router.get(
+    "/{repository_id}/summary",
+    response_model=RepositorySummaryResponse,
+    responses={404: {"model": ProblemDetail}},
+    summary="Detect bounded repository summary metadata",
+)
+async def get_repository_summary(
+    repository_id: UUID, session: SessionDependency
+) -> RepositorySummaryResponse:
+    """Return bounded metadata detected from a registered repository root."""
+    repository = await GetRepository(SqlAlchemyRepositoryStore(session)).execute(repository_id)
+    if repository is None:
+        raise RepositoryProblem(
+            ProblemDetail(
+                type="https://repo-surgeon.local/problems/repository_not_found",
+                title="Repository not found",
+                status=status.HTTP_404_NOT_FOUND,
+                detail="No registered repository has this identifier.",
+                code="repository_not_found",
+            )
+        )
+    summary = await asyncio.to_thread(detect_repository_summary, repository.canonical_root)
+    return RepositorySummaryResponse.from_summary(summary)
 
 
 @router.get(

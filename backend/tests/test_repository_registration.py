@@ -76,6 +76,22 @@ async def test_registers_and_retrieves_a_canonical_git_root(
 
 
 @pytest.mark.anyio
+async def test_repository_summary_is_derived_from_registered_files(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    repository_root = _initialize_git_repository(tmp_path / "summary")
+    (repository_root / "main.py").write_text("print('hello')\n")
+
+    created = await client.post("/repositories", json={"path": str(repository_root)})
+    summary = await client.get(f"/repositories/{created.json()['id']}/summary")
+
+    assert summary.status_code == 200
+    assert summary.json()["language"] == "Python"
+    assert summary.json()["file_count"] == 1
+    assert summary.json()["approximate_lines"] == 1
+
+
+@pytest.mark.anyio
 async def test_registration_is_idempotent_for_nested_and_symlinked_paths(
     client: httpx.AsyncClient, tmp_path: Path
 ) -> None:

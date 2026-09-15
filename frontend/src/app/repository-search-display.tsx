@@ -14,6 +14,7 @@ export type SearchCitation = {
   startLine: number;
   endLine: number;
   label: string;
+  text: string;
 };
 
 export type SearchActivity = {
@@ -33,14 +34,15 @@ function formatLines(lines: number | null) {
   return `${new Intl.NumberFormat('en', { notation: 'compact' }).format(lines)} LOC`;
 }
 
-export function RepositorySummaryCard({ summary }: { summary: RepositorySummary }) {
+export function RepositorySummaryCard({ summary }: { summary: RepositorySummary | null }) {
   return (
     <section className="repo-summary" aria-labelledby="repo-summary-title">
       <div className="summary-heading">
         <h2 id="repo-summary-title">REPO SUMMARY</h2>
-        {summary.truncated && <span className="partial-pill">SCAN PARTIAL</span>}
+        {summary?.truncated && <span className="partial-pill">SCAN PARTIAL</span>}
       </div>
-      <dl>
+      {summary ? (
+        <dl>
         <div>
           <dt>Language</dt>
           <dd>
@@ -61,7 +63,10 @@ export function RepositorySummaryCard({ summary }: { summary: RepositorySummary 
             {summary.testFramework && <span className="status-dot" aria-hidden="true" />}
           </dd>
         </div>
-      </dl>
+        </dl>
+      ) : (
+        <p className="summary-unavailable">Repository summary unavailable.</p>
+      )}
     </section>
   );
 }

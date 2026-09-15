@@ -18,16 +18,6 @@ const sessions = [
   { name: 'web-dashboard', active: false },
 ] as const;
 
-const repositorySummary: RepositorySummary = {
-  language: 'Python',
-  languageConfidence: 'high',
-  fileCount: 342,
-  approximateLines: 28_000,
-  testFramework: 'pytest',
-  testCommand: 'uv run pytest',
-  truncated: false,
-};
-
 const searchActivity: SearchActivity = {
   tool: 'search_code',
   phase: 'completed',
@@ -44,6 +34,7 @@ const searchActivity: SearchActivity = {
       startLine: 52,
       endLine: 52,
       label: 'auth/session.py:52',
+      text: 'async def resolve(self, token: str) -> Optional[SessionData]:',
     },
   ],
 };
@@ -213,6 +204,40 @@ export default function Home() {
   const [paneWidths, setPaneWidths] = useState<number[] | null>(null);
   const [paneMinimumBands, setPaneMinimumBands] = useState(DEFAULT_PANE_MINIMUMS);
   const [selectedCitation, setSelectedCitation] = useState<SearchCitation | null>(null);
+  const [repositorySummary, setRepositorySummary] = useState<RepositorySummary | null>(null);
+
+  useEffect(() => {
+    const repositoryId = process.env.NEXT_PUBLIC_REPOSITORY_ID;
+    if (!repositoryId) return;
+    const controller = new AbortController();
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+    fetch(`${apiBase}/repositories/${repositoryId}/summary`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('summary request failed');
+        return response.json() as Promise<{
+          language: string | null;
+          language_confidence: RepositorySummary['languageConfidence'];
+          file_count: number;
+          approximate_lines: number | null;
+          test_framework: string | null;
+          test_command: string | null;
+          truncated: boolean;
+        }>;
+      })
+      .then((data) =>
+        setRepositorySummary({
+          language: data.language,
+          languageConfidence: data.language_confidence,
+          fileCount: data.file_count,
+          approximateLines: data.approximate_lines,
+          testFramework: data.test_framework,
+          testCommand: data.test_command,
+          truncated: data.truncated,
+        }),
+      )
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     const grid = gridRef.current;
@@ -553,7 +578,7 @@ export default function Home() {
               <div className="diff-code">
                 <div className="code-line cited-line">
                   <span>{selectedCitation.startLine}</span>
-                  <code>Selected citation: {selectedCitation.label}</code>
+                  <code>{selectedCitation.text}</code>
                 </div>
               </div>
             </div>
