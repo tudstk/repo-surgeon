@@ -38,13 +38,6 @@ from repo_surgeon.mcp.file_tools import (
 )
 from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
-_FILE_LINE_REFERENCE = re.compile(
-    r"(?<![\w/])(?P<open>\[)?"
-    r"(?P<path>(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*\.[A-Za-z0-9_.-]+)"
-    r":(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?(?P<close>\])?"
-)
-
-
 @dataclass(frozen=True, slots=True)
 class AgentLimits:
     """Hard limits applied by application code, regardless of provider behavior."""
@@ -269,8 +262,7 @@ def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
         )
         return match.group(0) if supported else "[unsupported citation]"
 
-    validated = allowed_reference.sub(validate, answer) if allowed_reference else answer
-    return _FILE_LINE_REFERENCE.sub(validate, validated)
+    return allowed_reference.sub(validate, answer) if allowed_reference else answer
 
 
 async def run_turn(

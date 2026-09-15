@@ -71,7 +71,7 @@ async def test_search_answer_cites_safe_evidence_and_repository_instructions_can
     assert result.events[0].citations[0].label == "README.md:1"
     assert result.answer == (
         "The project parses payments [README.md:1]. "
-        "Invented claims [unsupported citation] and [unsupported citation] are unsupported."
+        "Invented claims [credentials.txt:1] and [unsupported citation] are unsupported."
     )
     assert "fake-secret-value" not in json.dumps(
         [request.messages for request in provider.requests], sort_keys=True
