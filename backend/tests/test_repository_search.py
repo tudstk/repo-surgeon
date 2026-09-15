@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
+from support import MemoryRepositoryStore
 
 from repo_surgeon.application.repository_search import (
     MAX_CONTEXT_LINES,
@@ -14,11 +19,14 @@ from repo_surgeon.application.repository_search import (
     SearchError,
     SearchRequest,
 )
+from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.infrastructure.ripgrep_search import (
     CompletedSearchProcess,
     RipgrepSearchAdapter,
     SearchProcessTimeout,
 )
+from repo_surgeon.mcp.file_tools import ToolErrorOutput
+from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
 
 class RecordingRunner:
@@ -188,3 +196,39 @@ def test_no_matches_is_a_success(tmp_path: Path) -> None:
     assert result.matches == ()
     assert result.match_count == 0
     assert not result.truncated
+
+
+def test_search_code_input_is_strict_and_forbids_unknown_arguments() -> None:
+    repository_id = uuid4()
+    with pytest.raises(ValidationError):
+        SearchCodeInput.model_validate(
+            {"repository_id": repository_id, "query": "needle", "max_matches": "2"}
+        )
+    with pytest.raises(ValidationError):
+        SearchCodeInput.model_validate(
+            {"repository_id": repository_id, "query": "needle", "command": "rg needle"}
+        )
+
+
+@pytest.mark.anyio
+async def test_mcp_search_code_is_typed_bounded_and_repository_scoped(tmp_path: Path) -> None:
+    from repo_surgeon.mcp.search_tools import McpSearchTools
+
+    repository_id = uuid4()
+    (tmp_path / "safe.py").write_text("needle one\nneedle two\n")
+    repository = Repository(repository_id, RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
+    tools = McpSearchTools(MemoryRepositoryStore(repository))
+
+    result = await tools.search_code(
+        SearchCodeInput(repository_id=repository_id, query="needle", context_before=0),
+        max_bytes=700,
+    )
+    missing = await tools.search_code(
+        SearchCodeInput(repository_id=uuid4(), query="needle"), max_bytes=700
+    )
+
+    assert isinstance(result, SearchCodeOutput)
+    assert result.match_count == 2
+    assert len(json.dumps(result.model_dump(mode="json"), separators=(",", ":")).encode()) <= 700
+    assert isinstance(missing, ToolErrorOutput)
+    assert missing.code == "repository_not_found"

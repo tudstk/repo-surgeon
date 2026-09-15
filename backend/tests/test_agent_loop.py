@@ -82,6 +82,42 @@ async def test_summary_turn_completes_after_safe_reads() -> None:
 
 
 @pytest.mark.anyio
+async def test_search_driven_answer_has_deterministic_activity_and_exact_citations() -> None:
+    tools, repository_id = tool_client()
+    provider = FakeModelProvider(
+        [
+            ModelResponse(
+                "Searching.",
+                (
+                    ModelToolCall(
+                        "search_code",
+                        {
+                            "query": "Repository safety fixture",
+                            "mode": "literal",
+                            "path": ".",
+                            "context_before": 0,
+                            "context_after": 0,
+                        },
+                        "search-1",
+                    ),
+                ),
+            ),
+            ModelResponse("The README describes the fixture repository [README.md:1]."),
+        ]
+    )
+
+    result = await run_turn(provider, tools, repository_id, "What does this repository do?")
+
+    assert result.status == "complete"
+    assert result.answer.endswith("[README.md:1].")
+    assert result.events[0].summary == "Searching for Repository safety fixture"
+    assert result.events[0].match_count == 1
+    assert result.events[0].citations[0].path == "README.md"
+    assert result.events[0].citations[0].start_line == 1
+    assert result.events[0].citations[0].end_line == 1
+
+
+@pytest.mark.anyio
 async def test_write_requests_are_denied_by_application_code() -> None:
     tools, repository_id = tool_client()
     before = (FIXTURE_ROOT / "README.md").read_bytes()

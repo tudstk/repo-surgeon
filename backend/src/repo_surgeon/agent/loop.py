@@ -34,6 +34,7 @@ from repo_surgeon.mcp.file_tools import (
     ToolErrorOutput,
     returned_bytes_limit_error,
 )
+from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,12 +49,31 @@ class AgentLimits:
 
 
 @dataclass(frozen=True, slots=True)
+class Citation:
+    """Repository evidence derived from a validated tool result."""
+
+    citation_id: str
+    repository_id: UUID
+    path: str
+    start_line: int
+    end_line: int
+    label: str
+    source: Literal["search_code", "read_file"]
+
+
+@dataclass(frozen=True, slots=True)
 class ToolEvent:
     """Safe activity trace entry with no raw repository content."""
 
     name: str
     status: Literal["success", "error", "denied"]
     call_id: str = ""
+    summary: str = ""
+    duration_ms: int | None = None
+    match_count: int | None = None
+    truncated: bool = False
+    error_code: str | None = None
+    citations: tuple[Citation, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +104,9 @@ def _json_arguments(arguments: object) -> str | None:
         return None
 
 
-def _normalized_call_key(name: str, arguments: ListFilesInput | ReadFileInput) -> str:
+def _normalized_call_key(
+    name: str, arguments: ListFilesInput | ReadFileInput | SearchCodeInput
+) -> str:
     normalized_arguments = arguments.model_dump(mode="json")
     path_field = "directory" if isinstance(arguments, ListFilesInput) else "path"
     # Unsafe spellings stay distinct and are still rejected inside the worker.
@@ -109,6 +131,52 @@ def _denied_call_key(name: str, serialized_arguments: str) -> str:
 
 def _validation_error(name: str) -> ToolErrorOutput:
     return ToolErrorOutput(code="invalid_tool_arguments", detail=f"Invalid arguments for {name}.")
+
+
+def _safe_search_summary(query: str) -> str:
+    display = "".join(character if character.isprintable() else " " for character in query)
+    display = " ".join(display.split())[:80]
+    return f"Searching for {display}" if display else "Searching repository"
+
+
+def _tool_event(
+    name: str,
+    status: Literal["success", "error", "denied"],
+    call_id: str,
+    result: object,
+    repository_id: UUID,
+) -> ToolEvent:
+    if isinstance(result, SearchCodeOutput):
+        citations = tuple(
+            Citation(
+                citation_id=f"search-{call_id}-{index}",
+                repository_id=repository_id,
+                path=match.path,
+                start_line=match.before[0].number if match.before else match.line,
+                end_line=match.after[-1].number if match.after else match.line,
+                label=(
+                    f"{match.path}:{match.line}"
+                    if not match.before and not match.after
+                    else f"{match.path}:{match.before[0].number if match.before else match.line}"
+                    f"-{match.after[-1].number if match.after else match.line}"
+                ),
+                source="search_code",
+            )
+            for index, match in enumerate(result.matches, start=1)
+        )
+        return ToolEvent(
+            name,
+            status,
+            call_id,
+            summary=_safe_search_summary(result.query),
+            duration_ms=result.duration_ms,
+            match_count=result.match_count,
+            truncated=result.truncated,
+            citations=citations,
+        )
+    if isinstance(result, ToolErrorOutput):
+        return ToolEvent(name, status, call_id, error_code=result.code)
+    return ToolEvent(name, status, call_id)
 
 
 async def run_turn(
@@ -189,16 +257,17 @@ async def run_turn(
             if tool_calls >= effective_limits.max_tool_calls:
                 return limited("tool_call_limit")
             serialized_arguments = _json_arguments(call.arguments)
-            validated_arguments: ListFilesInput | ReadFileInput | None = None
+            validated_arguments: ListFilesInput | ReadFileInput | SearchCodeInput | None = None
             invalid_arguments = serialized_arguments is None
-            if not invalid_arguments and call.name in {"list_files", "read_file"}:
+            if not invalid_arguments and call.name in {"list_files", "read_file", "search_code"}:
                 try:
                     arguments = {**call.arguments, "repository_id": repository_id}
-                    validated_arguments = (
-                        ListFilesInput.model_validate(arguments)
-                        if call.name == "list_files"
-                        else ReadFileInput.model_validate(arguments)
-                    )
+                    if call.name == "list_files":
+                        validated_arguments = ListFilesInput.model_validate(arguments)
+                    elif call.name == "read_file":
+                        validated_arguments = ReadFileInput.model_validate(arguments)
+                    else:
+                        validated_arguments = SearchCodeInput.model_validate(arguments)
                 except TypeError, ValidationError:
                     invalid_arguments = True
 
@@ -253,7 +322,10 @@ async def run_turn(
                     code="write_operation_denied"
                     if call.name.startswith("write")
                     else "tool_not_allowed",
-                    detail="Only list_files and read_file are permitted in a read-only turn.",
+                    detail=(
+                        "Only list_files, read_file, and search_code are permitted "
+                        "in a read-only turn."
+                    ),
                 )
                 status = "denied"
             else:
@@ -265,9 +337,14 @@ async def run_turn(
                             tools.list_files(validated_arguments, max_bytes=tool_budget),
                             timeout=max(tool_remaining, 0.001),
                         )
-                    else:
+                    elif isinstance(validated_arguments, ReadFileInput):
                         result = await asyncio.wait_for(
                             tools.read_file(validated_arguments, max_bytes=tool_budget),
+                            timeout=max(tool_remaining, 0.001),
+                        )
+                    else:
+                        result = await asyncio.wait_for(
+                            tools.search_code(validated_arguments, max_bytes=tool_budget),
                             timeout=max(tool_remaining, 0.001),
                         )
                     if result is None:
@@ -283,7 +360,7 @@ async def run_turn(
                 status = "error"
                 payload = _serialized(result)
             returned_bytes += len(payload)
-            events.append(ToolEvent(call.name, status, call_id))
+            events.append(_tool_event(call.name, status, call_id, result, repository_id))
             messages.append(
                 {
                     "role": "assistant",

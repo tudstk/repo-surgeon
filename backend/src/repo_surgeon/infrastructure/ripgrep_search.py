@@ -101,7 +101,14 @@ class RipgrepSearchAdapter:
             if validation.returncode not in (0, 1):
                 raise SearchError("search_failed", "Repository search failed.")
 
-        file_argv = ["rg", "--files", "-0", "--color=never", "--no-require-git"]
+        file_argv = [
+            "rg",
+            "--files",
+            "-0",
+            "--color=never",
+            "--no-require-git",
+            "--no-ignore-parent",
+        ]
         if request.glob is not None:
             file_argv.append(f"--glob={request.glob}")
         file_argv.extend(("--", normalized_path))
