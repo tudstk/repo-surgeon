@@ -3,6 +3,7 @@
 import asyncio
 from collections.abc import AsyncIterator
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -41,6 +42,13 @@ class RepositoryResponse(BaseModel):
     source: Literal["local"]
     canonical_root: str
     created_at: datetime
+
+
+class RepositoryListResponse(BaseModel):
+    """Minimal repository identity for the workspace selector."""
+
+    id: UUID
+    name: str
 
 
 class RepositorySummaryResponse(BaseModel):
@@ -151,13 +159,16 @@ async def register_repository(
 
 @router.get(
     "",
-    response_model=list[RepositoryResponse],
+    response_model=list[RepositoryListResponse],
     summary="List registered local repositories",
 )
-async def list_repositories(session: SessionDependency) -> list[RepositoryResponse]:
+async def list_repositories(session: SessionDependency) -> list[RepositoryListResponse]:
     """Return registered repositories for the workspace selector."""
     repositories = await ListRepositories(SqlAlchemyRepositoryStore(session)).execute()
-    return [_response(repository) for repository in repositories]
+    return [
+        RepositoryListResponse(id=repository.id, name=Path(repository.canonical_root).name)
+        for repository in repositories
+    ]
 
 
 def _summary_problem(error: RepositoryFileError) -> RepositoryProblem:

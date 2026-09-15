@@ -78,7 +78,8 @@ async def test_registers_and_retrieves_a_canonical_git_root(
     listed = await client.get("/repositories")
 
     assert listed.status_code == 200
-    assert [repository["id"] for repository in listed.json()] == [body["id"]]
+    assert listed.json() == [{"id": body["id"], "name": "example"}]
+    assert "canonical_root" not in listed.json()[0]
 
     preflight = await client.options(
         "/repositories",

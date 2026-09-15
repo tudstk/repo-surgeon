@@ -25,7 +25,7 @@ describe('Home', () => {
               : JSON.stringify([
                   {
                     id: 'repository-1',
-                    canonical_root: '/workspace/payments-api',
+                    name: 'payments-api',
                   },
                 ]),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -119,7 +119,7 @@ describe('Home', () => {
                 test_command: 'go test ./...',
                 truncated: false,
               })
-            : JSON.stringify([{ id: 'repository-1', canonical_root: '/workspace/go-service' }]),
+            : JSON.stringify([{ id: 'repository-1', name: 'go-service' }]),
           { status: 200, headers: { 'Content-Type': 'application/json' } },
         ),
       ),

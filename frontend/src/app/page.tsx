@@ -15,14 +15,12 @@ const STACKED_LAYOUT_QUERY = '(max-width: 1024px)';
 
 type RegisteredRepository = {
   id: string;
-  canonical_root: string;
+  name: string;
 };
 
 function repositoryName(repository: RegisteredRepository | null) {
   if (!repository) return 'No repository connected';
-  return (
-    repository.canonical_root.split(/[\\/]/).filter(Boolean).pop() ?? repository.canonical_root
-  );
+  return repository.name;
 }
 
 const searchActivity: SearchActivity = {

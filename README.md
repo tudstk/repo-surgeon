@@ -6,7 +6,7 @@ Repo Surgeon is a local-first, human-controlled coding assistant for understandi
 
 This checkout provides an executable foundation: a typed FastAPI process, a strict TypeScript and Next.js frontend, local PostgreSQL through Docker Compose, and CI quality gates. It also registers an existing local Git working tree and persists its resolved canonical root. The backend includes bounded read-only file and exact-search tools, deterministic repository intelligence, and a deterministic model-provider agent loop.
 
-Registration validates only the selected path and Git worktree boundary. The MCP tools read and search bounded safe content, and the agent loop can use only those read-only capabilities through a provider boundary. Repository intelligence maps bounded manifest evidence to versioned language and test-command catalogs without executing repository code. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. The frontend remains a visual shell, now with typed example summary, search activity, and exact citation states. See [safe search](docs/mcp/safe-search-tools.md) and [product scope](docs/product/scope.md).
+Registration validates only the selected path and Git worktree boundary. The MCP tools read and search bounded safe content, and the agent loop can use only those read-only capabilities through a provider boundary. Repository intelligence maps bounded manifest evidence to versioned language and test-command catalogs without executing repository code. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. The frontend now loads registered repository names and bounded summary metadata from the backend, alongside typed search activity and exact citation states. See [safe search](docs/mcp/safe-search-tools.md) and [product scope](docs/product/scope.md).
 
 No model API key is required.
 
@@ -80,7 +80,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open <http://localhost:3000>. The rendered workspace data is static preview content and does not invoke the backend or perform agent actions.
+Open <http://localhost:3000>. The workspace selector requests `GET /repositories`, and the selected summary card requests `GET /repositories/<id>/summary`. The backend and PostgreSQL must be running for live repository data. Development CORS permits only `http://localhost:3000` and `http://127.0.0.1:3000`; the frontend uses `NEXT_PUBLIC_API_BASE_URL` when the API is not at `http://127.0.0.1:8000`. The frontend remains read-only and does not perform agent actions.
 
 ## Verify quality gates
 
@@ -109,6 +109,6 @@ The workflow runs on pushes and pull requests. It uses `backend/uv.lock` and `fr
 
 ## Learn the foundation
 
-The registration request path is `curl -> Uvicorn ASGI server -> FastAPI router -> application use case -> SQLAlchemy adapter -> PostgreSQL`. The frontend is independent. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
+The registration and summary request paths are `curl or frontend -> Uvicorn ASGI server -> FastAPI router -> application use case -> SQLAlchemy adapter -> PostgreSQL`, with bounded repository inspection performed from the registered local root. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
 
 Future work continues with HTTP/API integration, Git context, test sandboxing, proposals, approvals, patch application, audits, and pull requests. The current provider boundary, bounded agent loop, and in-process safe repository tools are not yet connected to the frontend workflow.
