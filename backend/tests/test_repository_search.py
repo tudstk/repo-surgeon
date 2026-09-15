@@ -220,7 +220,9 @@ def test_match_context_and_byte_truncation_are_independent(tmp_path: Path) -> No
         tmp_path,
         request(context_before=10, context_after=10, max_result_bytes=700),
     )
-    tiny = adapter.search(tmp_path, request(max_result_bytes=256))
+    tiny = adapter.search(
+        tmp_path, request(context_before=0, context_after=0, max_result_bytes=256)
+    )
 
     assert matches.match_count == 2
     assert matches.truncated
@@ -298,6 +300,16 @@ def test_no_matches_is_a_success(tmp_path: Path) -> None:
     assert result.matches == ()
     assert result.match_count == 0
     assert not result.truncated
+
+
+def test_hidden_safe_files_are_searchable(tmp_path: Path) -> None:
+    hidden = tmp_path / ".github"
+    hidden.mkdir()
+    (hidden / "workflow.yml").write_text("needle\n")
+
+    result = RipgrepSearchAdapter().search(tmp_path, request())
+
+    assert [match.path for match in result.matches] == [".github/workflow.yml"]
 
 
 def test_oversized_matching_file_is_reported_as_skipped(tmp_path: Path) -> None:

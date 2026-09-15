@@ -203,6 +203,7 @@ class RipgrepSearchAdapter:
             "--color=never",
             "--no-require-git",
             "--no-ignore-parent",
+            "--hidden",
         ]
         if request.glob is not None:
             file_argv.append(f"--glob={request.glob}")
@@ -456,6 +457,7 @@ class RipgrepSearchAdapter:
                 without_context,
                 matches=tuple(matches),
                 match_count=len(matches),
+                truncated=True,
                 truncation_reasons=cls._add_reason(without_context.truncation_reasons, "bytes"),
             )
             if cls._serialized_size(candidate) <= max_bytes:
