@@ -300,6 +300,16 @@ def test_no_matches_is_a_success(tmp_path: Path) -> None:
     assert not result.truncated
 
 
+def test_oversized_matching_file_is_reported_as_skipped(tmp_path: Path) -> None:
+    (tmp_path / "large.txt").write_bytes(b"needle\n" + b"x" * (64 * 1024))
+
+    result = RipgrepSearchAdapter().search(tmp_path, request())
+
+    assert result.matches == ()
+    assert result.match_count == 0
+    assert result.skipped_files == 1
+
+
 def test_search_code_input_is_strict_and_forbids_unknown_arguments() -> None:
     repository_id = uuid4()
     with pytest.raises(ValidationError):
@@ -400,3 +410,23 @@ async def test_cancelled_search_releases_admission_for_the_next_search(tmp_path:
         result = await next_tools.search_code(arguments)
     assert isinstance(result, SearchCodeOutput)
     assert result.match_count == 0
+
+
+@pytest.mark.anyio
+async def test_search_queue_wait_is_bounded_by_request_timeout(tmp_path: Path) -> None:
+    from repo_surgeon.mcp import search_tools
+
+    repository_id = uuid4()
+    repository = Repository(repository_id, RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
+    store = MemoryRepositoryStore(repository)
+    assert search_tools._SEARCH_WORKER_SLOT.acquire(blocking=False)
+    try:
+        tools = McpSearchTools(store)
+        result = await tools.search_code(
+            SearchCodeInput(repository_id=repository_id, query="needle", timeout_ms=100)
+        )
+    finally:
+        search_tools._SEARCH_WORKER_SLOT.release()
+
+    assert isinstance(result, ToolErrorOutput)
+    assert result.code == "search_timed_out"

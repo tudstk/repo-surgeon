@@ -14,7 +14,6 @@ from threading import Event, Lock
 from typing import Protocol, cast
 
 from repo_surgeon.application.repository_files import (
-    MAX_FILE_BYTES,
     ConfinedRepositoryFiles,
     NumberedLine,
     RepositoryFileError,
@@ -258,8 +257,6 @@ class RipgrepSearchAdapter:
             "--column",
             "--max-count",
             str(request.max_matches + 1),
-            "--max-filesize",
-            str(MAX_FILE_BYTES),
         ]
         if request.mode == "literal":
             search_argv.append("--fixed-strings")

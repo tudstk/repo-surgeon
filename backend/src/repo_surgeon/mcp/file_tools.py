@@ -310,13 +310,23 @@ class McpFileTools:
 
 
 def tool_audit_summary(
-    result: ListFilesOutput | ReadFileOutput | ToolErrorOutput,
+    result: ListFilesOutput | ReadFileOutput | ToolErrorOutput | SearchCodeOutput,
 ) -> dict[str, Any]:
     """Return a sanitized result summary with no file content or host paths."""
     if isinstance(result, ToolErrorOutput):
         return {"success": False, "code": result.code}
     if isinstance(result, ListFilesOutput):
         return {"success": True, "operation": "list_files", "result_count": len(result.entries)}
+    from repo_surgeon.mcp.search_tools import SearchCodeOutput
+
+    if isinstance(result, SearchCodeOutput):
+        return {
+            "success": True,
+            "operation": "search_code",
+            "match_count": result.match_count,
+            "truncated": result.truncated,
+            "skipped_files": result.skipped_files,
+        }
     return {
         "success": True,
         "operation": "read_file",

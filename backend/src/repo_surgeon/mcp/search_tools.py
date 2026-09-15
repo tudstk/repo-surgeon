@@ -7,6 +7,7 @@ import json
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
+from dataclasses import replace
 from threading import BoundedSemaphore
 from typing import Literal, Protocol
 from uuid import UUID
@@ -23,6 +24,7 @@ from repo_surgeon.application.repository_search import (
     MAX_MATCHES,
     MAX_SEARCH_RESULT_BYTES,
     MAX_SEARCH_TIMEOUT_MS,
+    MIN_SEARCH_TIMEOUT_MS,
     SearchError,
     SearchMatch,
     SearchRequest,
@@ -195,11 +197,20 @@ async def _run_search(
     request: SearchRequest,
     adapter_factory: Callable[[], SearchAdapter],
 ) -> SearchResult:
+    deadline = asyncio.get_running_loop().time() + request.timeout_ms / 1_000
     while not _SEARCH_WORKER_SLOT.acquire(blocking=False):
-        await asyncio.sleep(0.001)
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise SearchError("search_timed_out", "Repository search timed out.")
+        await asyncio.sleep(min(0.001, remaining))
+    remaining = deadline - asyncio.get_running_loop().time()
+    if remaining < MIN_SEARCH_TIMEOUT_MS / 1_000:
+        _SEARCH_WORKER_SLOT.release()
+        raise SearchError("search_timed_out", "Repository search timed out.")
+    effective_request = replace(request, timeout_ms=max(1, int(remaining * 1_000)))
     adapter = adapter_factory()
     try:
-        worker = _SEARCH_WORKER.submit(adapter.search, canonical_root, request)
+        worker = _SEARCH_WORKER.submit(adapter.search, canonical_root, effective_request)
     except BaseException:
         _SEARCH_WORKER_SLOT.release()
         raise

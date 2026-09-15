@@ -26,6 +26,7 @@ from repo_surgeon.mcp.file_tools import (
     ToolErrorOutput,
     tool_audit_summary,
 )
+from repo_surgeon.mcp.search_tools import SearchCodeOutput
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "repos" / "m1-repository-safety"
 
@@ -84,6 +85,27 @@ async def test_list_files_and_read_file_return_typed_bounded_results() -> None:
     assert len(result.content_sha256) == 64
     assert str(FIXTURE_ROOT) not in result.model_dump_json()
     assert tool_audit_summary(result)["line_count"] == 20
+
+
+def test_tool_audit_summary_projects_search_results_without_content() -> None:
+    result = SearchCodeOutput(
+        query="needle",
+        mode="literal",
+        matches=(),
+        match_count=0,
+        truncated=False,
+        truncation_reasons=(),
+        duration_ms=4,
+        skipped_files=2,
+    )
+
+    assert tool_audit_summary(result) == {
+        "success": True,
+        "operation": "search_code",
+        "match_count": 0,
+        "truncated": False,
+        "skipped_files": 2,
+    }
 
 
 @pytest.mark.anyio
