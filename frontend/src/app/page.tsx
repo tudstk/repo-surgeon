@@ -549,7 +549,7 @@ export default function Home() {
               <div className="diff-code">
                 <div className="code-line cited-line">
                   <span>{selectedCitation.startLine}</span>
-                  <code>async def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
+                  <code>Selected citation: {selectedCitation.label}</code>
                 </div>
               </div>
             </div>

@@ -158,6 +158,23 @@ def test_invalid_regex_returns_stable_error_without_stderr(tmp_path: Path) -> No
     assert str(tmp_path) not in raised.value.detail
 
 
+def test_regex_validation_does_not_scan_repository(tmp_path: Path) -> None:
+    runner = RecordingRunner(
+        [
+            CompletedSearchProcess(1, b"", b""),
+            CompletedSearchProcess(0, b"safe.py\0", b""),
+            CompletedSearchProcess(1, b"", b""),
+        ]
+    )
+    adapter = RipgrepSearchAdapter(runner=runner)
+
+    adapter.search(tmp_path, request(mode="regex"))
+
+    validation_argv = runner.calls[0][0]
+    assert validation_argv[-1] == "/dev/null"
+    assert str(tmp_path) not in validation_argv
+
+
 def test_ignored_binary_invalid_utf8_and_secret_files_are_not_returned(tmp_path: Path) -> None:
     (tmp_path / ".gitignore").write_text("ignored/\n")
     (tmp_path / "safe.txt").write_text("needle\n")

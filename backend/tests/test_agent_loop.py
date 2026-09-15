@@ -119,6 +119,43 @@ async def test_search_driven_answer_has_deterministic_activity_and_exact_citatio
 
 
 @pytest.mark.anyio
+async def test_search_answer_accepts_citations_for_paths_with_spaces(tmp_path: Path) -> None:
+    repository_id = uuid4()
+    repository = Repository(
+        repository_id, RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC)
+    )
+    tools = McpFileTools(MemoryRepositoryStore(repository))
+    spaced_path = tmp_path / "docs" / "my file.txt"
+    spaced_path.parent.mkdir()
+    spaced_path.write_text("Repository safety fixture\n")
+    provider = FakeModelProvider(
+        [
+            ModelResponse(
+                "Searching.",
+                (
+                    ModelToolCall(
+                        "search_code",
+                        {
+                            "query": "Repository safety fixture",
+                            "mode": "literal",
+                            "path": "docs",
+                            "context_before": 0,
+                            "context_after": 0,
+                        },
+                        "search-spaced",
+                    ),
+                ),
+            ),
+            ModelResponse("The file contains the fixture [docs/my file.txt:1]."),
+        ]
+    )
+
+    result = await run_turn(provider, tools, repository_id, "Find the fixture.")
+
+    assert result.answer.endswith("[docs/my file.txt:1].")
+
+
+@pytest.mark.anyio
 async def test_write_requests_are_denied_by_application_code() -> None:
     tools, repository_id = tool_client()
     before = (FIXTURE_ROOT / "README.md").read_bytes()

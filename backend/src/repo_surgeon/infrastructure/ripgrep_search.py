@@ -170,7 +170,9 @@ class RipgrepSearchAdapter:
 
         if request.mode == "regex":
             validation = self._run(
-                ("rg", "--json", "--color=never", "--", request.query), root, deadline
+                ("rg", "--json", "--color=never", "--", request.query, "/dev/null"),
+                root,
+                deadline,
             )
             if validation.returncode == 2:
                 raise SearchError("invalid_regex", "The regular expression is invalid.")
@@ -207,12 +209,15 @@ class RipgrepSearchAdapter:
         searchable: list[str] = []
         for candidate in candidates:
             self._raise_if_cancelled()
+            self._raise_if_deadline_exceeded(deadline)
             try:
                 files.read_file(candidate)
             except RepositoryFileError as error:
                 if error.code in {"binary_file", "file_too_large", "file_not_found"}:
                     skipped_files += 1
+                self._raise_if_deadline_exceeded(deadline)
                 continue
+            self._raise_if_deadline_exceeded(deadline)
             searchable.append(candidate)
 
         if not searchable:
@@ -284,6 +289,11 @@ class RipgrepSearchAdapter:
     def _raise_if_cancelled(self) -> None:
         if self._cancelled.is_set():
             raise SearchError("search_cancelled", "Repository search was cancelled.")
+
+    @staticmethod
+    def _raise_if_deadline_exceeded(deadline: float) -> None:
+        if time.monotonic() >= deadline:
+            raise SearchError("search_timed_out", "Repository search timed out.")
 
     @staticmethod
     def _validate_glob(glob: str | None) -> None:
