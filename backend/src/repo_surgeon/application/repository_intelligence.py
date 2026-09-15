@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import tomllib
 from collections import defaultdict
 from dataclasses import dataclass
@@ -160,8 +161,7 @@ def _detect_tests(
         except tomllib.TOMLDecodeError:
             unsupported = True
         else:
-            serialized = json.dumps(data, sort_keys=True).lower()
-            if "pytest" in serialized:
+            if _pyproject_declares_pytest(data):
                 detections.append(("pytest", "uv run pytest"))
 
     package = paths.get("package.json")
@@ -220,3 +220,33 @@ def _string_dict(value: object) -> dict[str, str]:
     return {
         key: item for key, item in value.items() if isinstance(key, str) and isinstance(item, str)
     }
+
+
+def _mapping(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    return {key: item for key, item in value.items() if isinstance(key, str)}
+
+
+def _pyproject_declares_pytest(data: dict[str, object]) -> bool:
+    tool = _mapping(data.get("tool"))
+    if "pytest" in tool and isinstance(tool["pytest"], dict):
+        return True
+
+    project = _mapping(data.get("project"))
+    dependency_values: list[object] = [project.get("dependencies")]
+    dependency_values.extend(_mapping(project.get("optional-dependencies")).values())
+    dependency_values.extend(_mapping(data.get("dependency-groups")).values())
+    return any(_dependency_list_contains(value, "pytest") for value in dependency_values)
+
+
+def _dependency_list_contains(value: object, expected: str) -> bool:
+    if not isinstance(value, list):
+        return False
+    for item in value:
+        if not isinstance(item, str):
+            continue
+        match = re.match(r"\s*([A-Za-z0-9][A-Za-z0-9._-]*)", item)
+        if match and match.group(1).lower().replace("_", "-").replace(".", "-") == expected:
+            return True
+    return False

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Event
 from uuid import uuid4
 
 import pytest
@@ -20,6 +24,7 @@ from repo_surgeon.application.repository_search import (
     MAX_SEARCH_TIMEOUT_MS,
     SearchError,
     SearchRequest,
+    SearchResult,
 )
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.infrastructure.ripgrep_search import (
@@ -45,6 +50,9 @@ class RecordingRunner:
         if isinstance(response, Exception):
             raise response
         return response
+
+    def cancel(self) -> None:
+        return None
 
 
 def request(**updates: object) -> SearchRequest:
@@ -207,6 +215,32 @@ def test_subprocess_runner_kills_work_at_its_own_deadline(tmp_path: Path) -> Non
     assert time.monotonic() - started < 1
 
 
+def test_subprocess_runner_cancellation_reaps_the_active_child(tmp_path: Path) -> None:
+    pid_file = tmp_path / "child.pid"
+    runner = SubprocessSearchRunner()
+    argv = (
+        sys.executable,
+        "-c",
+        "import os,pathlib,sys,time; "
+        "pathlib.Path(sys.argv[1]).write_text(str(os.getpid())); time.sleep(10)",
+        str(pid_file),
+    )
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(runner.run, argv, tmp_path, 5)
+        deadline = time.monotonic() + 1
+        while not pid_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.001)
+        assert pid_file.exists()
+        pid = int(pid_file.read_text())
+
+        runner.cancel()
+        completed = future.result(timeout=1)
+
+    assert completed.returncode != 0
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
 def test_symlink_directory_cannot_escape_repository(tmp_path: Path) -> None:
     outside = tmp_path.parent / f"{tmp_path.name}-outside"
     outside.mkdir()
@@ -239,6 +273,14 @@ def test_search_code_input_is_strict_and_forbids_unknown_arguments() -> None:
         SearchCodeInput.model_validate(
             {"repository_id": repository_id, "query": "needle", "command": "rg needle"}
         )
+    assert (
+        SearchCodeInput(
+            repository_id=repository_id,
+            query="needle",
+            max_result_bytes=MAX_SEARCH_RESULT_BYTES + 1,
+        ).max_result_bytes
+        == MAX_SEARCH_RESULT_BYTES
+    )
 
 
 @pytest.mark.anyio
@@ -263,3 +305,61 @@ async def test_mcp_search_code_is_typed_bounded_and_repository_scoped(tmp_path: 
     assert len(json.dumps(result.model_dump(mode="json"), separators=(",", ":")).encode()) <= 700
     assert isinstance(missing, ToolErrorOutput)
     assert missing.code == "repository_not_found"
+
+
+@pytest.mark.anyio
+async def test_cancelled_search_releases_admission_for_the_next_search(tmp_path: Path) -> None:
+    from repo_surgeon.mcp.search_tools import McpSearchTools
+
+    class BlockingAdapter:
+        def __init__(self) -> None:
+            self.started = Event()
+            self.cancelled = Event()
+
+        def search(self, canonical_root: str, search_request: SearchRequest) -> SearchResult:
+            self.started.set()
+            assert self.cancelled.wait(1)
+            return SearchResult(
+                query=search_request.query,
+                mode=search_request.mode,
+                matches=(),
+                match_count=0,
+                truncated=False,
+            )
+
+        def cancel(self) -> None:
+            self.cancelled.set()
+
+    class FastAdapter:
+        def search(self, canonical_root: str, search_request: SearchRequest) -> SearchResult:
+            return SearchResult(
+                query=search_request.query,
+                mode=search_request.mode,
+                matches=(),
+                match_count=0,
+                truncated=False,
+            )
+
+        def cancel(self) -> None:
+            return None
+
+    repository_id = uuid4()
+    repository = Repository(repository_id, RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
+    store = MemoryRepositoryStore(repository)
+    blocking = BlockingAdapter()
+    tools = McpSearchTools(store, adapter_factory=lambda: blocking)
+    arguments = SearchCodeInput(repository_id=repository_id, query="needle")
+    task = asyncio.create_task(tools.search_code(arguments))
+    async with asyncio.timeout(1):
+        while not blocking.started.is_set():
+            await asyncio.sleep(0.001)
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    next_tools = McpSearchTools(store, adapter_factory=FastAdapter)
+    async with asyncio.timeout(0.2):
+        result = await next_tools.search_code(arguments)
+    assert isinstance(result, SearchCodeOutput)
+    assert result.match_count == 0

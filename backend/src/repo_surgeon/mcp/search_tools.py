@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import suppress
 from threading import BoundedSemaphore
-from typing import Literal
+from typing import Literal, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -182,11 +184,22 @@ _SEARCH_WORKER = ThreadPoolExecutor(max_workers=1, thread_name_prefix="repo-surg
 _SEARCH_WORKER_SLOT = BoundedSemaphore(value=1)
 
 
-async def _run_search(canonical_root: str, request: SearchRequest) -> SearchResult:
+class SearchAdapter(Protocol):
+    def search(self, canonical_root: str, request: SearchRequest) -> SearchResult: ...
+
+    def cancel(self) -> None: ...
+
+
+async def _run_search(
+    canonical_root: str,
+    request: SearchRequest,
+    adapter_factory: Callable[[], SearchAdapter],
+) -> SearchResult:
     while not _SEARCH_WORKER_SLOT.acquire(blocking=False):
         await asyncio.sleep(0.001)
+    adapter = adapter_factory()
     try:
-        worker = _SEARCH_WORKER.submit(RipgrepSearchAdapter().search, canonical_root, request)
+        worker = _SEARCH_WORKER.submit(adapter.search, canonical_root, request)
     except BaseException:
         _SEARCH_WORKER_SLOT.release()
         raise
@@ -195,14 +208,30 @@ async def _run_search(canonical_root: str, request: SearchRequest) -> SearchResu
         _SEARCH_WORKER_SLOT.release()
 
     worker.add_done_callback(release_worker_slot)
-    return await asyncio.shield(asyncio.wrap_future(worker))
+    wrapped = asyncio.wrap_future(worker)
+    try:
+        return await asyncio.shield(wrapped)
+    except asyncio.CancelledError:
+        adapter.cancel()
+        while not worker.done():
+            await asyncio.sleep(0.001)
+        with suppress(BaseException):
+            worker.exception()
+        with suppress(BaseException):
+            wrapped.exception()
+        raise
 
 
 class McpSearchTools:
     """Resolve repository capabilities before dispatching fixed search arguments."""
 
-    def __init__(self, store: RepositoryStore) -> None:
+    def __init__(
+        self,
+        store: RepositoryStore,
+        adapter_factory: Callable[[], SearchAdapter] = RipgrepSearchAdapter,
+    ) -> None:
         self._store = store
+        self._adapter_factory = adapter_factory
 
     async def search_code(
         self, arguments: SearchCodeInput, max_bytes: int | None = None
@@ -220,7 +249,7 @@ class McpSearchTools:
             return fallback if _serialized_size(fallback) <= max_bytes else None
         try:
             request = arguments.to_request(max_bytes)
-            result = await _run_search(repository.canonical_root, request)
+            result = await _run_search(repository.canonical_root, request, self._adapter_factory)
         except SearchError as error:
             output = ToolErrorOutput(code=error.code, detail=error.detail)
             if max_bytes is None or _serialized_size(output) <= max_bytes:

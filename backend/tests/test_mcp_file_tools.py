@@ -249,6 +249,7 @@ async def test_fastmcp_in_process_client_exposes_flat_schema_and_invokes_handler
             "context_before",
             "context_after",
             "timeout_ms",
+            "max_result_bytes",
         } <= set(tools["search_code"].inputSchema["properties"])
         result = await mcp_client.call_tool(
             "read_file", {"repository_id": str(repository_id), "path": "README.md"}

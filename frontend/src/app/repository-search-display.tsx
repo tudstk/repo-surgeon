@@ -91,7 +91,11 @@ export function SearchActivityRow({
       <small>{activity.durationMs === null ? 'pending' : `${activity.durationMs}ms`}</small>
       <div className="activity-badges">
         {activity.truncated && <span className="partial-pill">TRUNCATED</span>}
-        {activity.skippedFiles > 0 && <span>{activity.skippedFiles} binary skipped</span>}
+        {activity.skippedFiles > 0 && (
+          <span>
+            {activity.skippedFiles} {activity.skippedFiles === 1 ? 'file' : 'files'} skipped
+          </span>
+        )}
       </div>
       {activity.citations.length > 0 && (
         <div className="search-citations" aria-label="Search citations">

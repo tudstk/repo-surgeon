@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import re
 import time
 from collections import Counter
 from collections.abc import Callable
@@ -31,10 +32,17 @@ from repo_surgeon.mcp.file_tools import (
     ListFilesInput,
     McpFileTools,
     ReadFileInput,
+    ReadFileOutput,
     ToolErrorOutput,
     returned_bytes_limit_error,
 )
 from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
+
+_FILE_LINE_REFERENCE = re.compile(
+    r"(?<![\w/])(?P<open>\[)?"
+    r"(?P<path>(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+\.[A-Za-z0-9_.-]+)"
+    r":(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?(?P<close>\])?"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -189,9 +197,52 @@ def _tool_event(
             truncated=result.truncated,
             citations=citations,
         )
+    if isinstance(result, ReadFileOutput) and result.lines:
+        start_line = result.lines[0].number
+        end_line = result.lines[-1].number
+        label = (
+            f"{result.path}:{start_line}"
+            if start_line == end_line
+            else f"{result.path}:{start_line}-{end_line}"
+        )
+        return ToolEvent(
+            name,
+            status,
+            call_id,
+            citations=(
+                Citation(
+                    citation_id=f"read-{call_id}-1",
+                    repository_id=repository_id,
+                    path=result.path,
+                    start_line=start_line,
+                    end_line=end_line,
+                    label=label,
+                    source="read_file",
+                ),
+            ),
+            truncated=result.truncated,
+        )
     if isinstance(result, ToolErrorOutput):
         return ToolEvent(name, status, call_id, error_code=result.code)
     return ToolEvent(name, status, call_id)
+
+
+def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
+    allowed = tuple(citation for event in events for citation in event.citations)
+
+    def validate(match: re.Match[str]) -> str:
+        if bool(match.group("open")) != bool(match.group("close")):
+            return "[unsupported citation]"
+        path = match.group("path")
+        start = int(match.group("start"))
+        end = int(match.group("end") or start)
+        supported = end >= start and any(
+            citation.path == path and start >= citation.start_line and end <= citation.end_line
+            for citation in allowed
+        )
+        return match.group(0) if supported else "[unsupported citation]"
+
+    return _FILE_LINE_REFERENCE.sub(validate, answer)
 
 
 async def run_turn(
@@ -247,7 +298,7 @@ async def run_turn(
                 raise
         except TimeoutError:
             return limited("duration_limit")
-        answer = response.text
+        answer = _validate_answer_citations(response.text, events)
         if not response.tool_calls:
             return AgentTurn(
                 status="complete",

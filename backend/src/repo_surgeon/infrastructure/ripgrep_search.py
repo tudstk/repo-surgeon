@@ -7,8 +7,10 @@ import os
 import selectors
 import subprocess
 import time
+from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePath, PureWindowsPath
+from threading import Event, Lock
 from typing import Protocol, cast
 
 from repo_surgeon.application.repository_files import (
@@ -38,6 +40,10 @@ class SearchProcessOutputLimit(Exception):
     """The child output exceeded the adapter's fixed capture limit."""
 
 
+class SearchProcessCancelled(Exception):
+    """The search caller cancelled and the child was reaped."""
+
+
 @dataclass(frozen=True, slots=True)
 class CompletedSearchProcess:
     returncode: int
@@ -50,9 +56,16 @@ class SearchProcessRunner(Protocol):
         self, argv: tuple[str, ...], cwd: Path, timeout_seconds: float
     ) -> CompletedSearchProcess: ...
 
+    def cancel(self) -> None: ...
+
 
 class SubprocessSearchRunner:
     """Run one argv without a shell and bound time and captured bytes."""
+
+    def __init__(self) -> None:
+        self._cancelled = Event()
+        self._process_lock = Lock()
+        self._process: subprocess.Popen[bytes] | None = None
 
     def run(
         self, argv: tuple[str, ...], cwd: Path, timeout_seconds: float
@@ -65,6 +78,13 @@ class SubprocessSearchRunner:
             stderr=subprocess.DEVNULL,
             shell=False,
         )
+        with self._process_lock:
+            self._process = process
+            cancelled = self._cancelled.is_set()
+        if cancelled:
+            self._kill_and_reap(process)
+            self._clear_process(process)
+            raise SearchProcessCancelled
         assert process.stdout is not None
         captured = bytearray()
         deadline = time.monotonic() + timeout_seconds
@@ -100,11 +120,27 @@ class SubprocessSearchRunner:
         finally:
             selector.close()
             process.stdout.close()
+            self._clear_process(process)
         return CompletedSearchProcess(returncode, bytes(captured), b"")
+
+    def cancel(self) -> None:
+        """Stop and reap the active child from an asyncio cancellation path."""
+        self._cancelled.set()
+        with self._process_lock:
+            process = self._process
+        if process is not None:
+            self._kill_and_reap(process)
+
+    def _clear_process(self, process: subprocess.Popen[bytes]) -> None:
+        with self._process_lock:
+            if self._process is process:
+                self._process = None
 
     @staticmethod
     def _kill_and_reap(process: subprocess.Popen[bytes]) -> None:
-        process.kill()
+        if process.poll() is None:
+            with suppress(ProcessLookupError):
+                process.kill()
         process.wait()
 
 
@@ -113,6 +149,12 @@ class RipgrepSearchAdapter:
 
     def __init__(self, runner: SearchProcessRunner | None = None) -> None:
         self._runner = runner or SubprocessSearchRunner()
+        self._cancelled = Event()
+
+    def cancel(self) -> None:
+        """Cancel an active search and synchronously reap its child process."""
+        self._cancelled.set()
+        self._runner.cancel()
 
     def search(self, canonical_root: str | Path, request: SearchRequest) -> SearchResult:
         started = time.monotonic()
@@ -164,6 +206,7 @@ class RipgrepSearchAdapter:
 
         searchable: list[str] = []
         for candidate in candidates:
+            self._raise_if_cancelled()
             try:
                 files.read_file(candidate)
             except RepositoryFileError as error:
@@ -221,6 +264,7 @@ class RipgrepSearchAdapter:
         return self._bound_result(result, request.max_result_bytes)
 
     def _run(self, argv: tuple[str, ...], root: Path, deadline: float) -> CompletedSearchProcess:
+        self._raise_if_cancelled()
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise SearchError("search_timed_out", "Repository search timed out.")
@@ -232,8 +276,14 @@ class RipgrepSearchAdapter:
             raise SearchError(
                 "search_output_limit", "Repository search output was too large."
             ) from error
+        except SearchProcessCancelled as error:
+            raise SearchError("search_cancelled", "Repository search was cancelled.") from error
         except OSError as error:
             raise SearchError("search_failed", "Repository search is unavailable.") from error
+
+    def _raise_if_cancelled(self) -> None:
+        if self._cancelled.is_set():
+            raise SearchError("search_cancelled", "Repository search was cancelled.")
 
     @staticmethod
     def _validate_glob(glob: str | None) -> None:

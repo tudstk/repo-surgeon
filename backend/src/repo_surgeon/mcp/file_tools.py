@@ -394,6 +394,7 @@ def create_mcp_server(store: RepositoryStore) -> Any:
         context_before: int = 2,
         context_after: int = 2,
         timeout_ms: int = 1_000,
+        max_result_bytes: int | None = None,
     ) -> dict[str, object]:
         result = await tools.search_code(
             SearchCodeInput(
@@ -406,6 +407,7 @@ def create_mcp_server(store: RepositoryStore) -> Any:
                 context_before=context_before,
                 context_after=context_after,
                 timeout_ms=timeout_ms,
+                max_result_bytes=max_result_bytes,
             )
         )
         assert result is not None

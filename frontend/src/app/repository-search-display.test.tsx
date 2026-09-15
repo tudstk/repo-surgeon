@@ -57,7 +57,7 @@ describe('SearchActivityRow', () => {
 
     expect(screen.getByText('6 hits')).toBeInTheDocument();
     expect(screen.getByText('TRUNCATED')).toBeInTheDocument();
-    expect(screen.getByText('1 binary skipped')).toBeInTheDocument();
+    expect(screen.getByText('1 file skipped')).toBeInTheDocument();
     const citation = screen.getByRole('link', { name: 'auth/session.py:52' });
     fireEvent.click(citation);
     expect(onSelect).toHaveBeenCalledWith(completed.citations[0]);
