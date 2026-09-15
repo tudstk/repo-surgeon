@@ -322,6 +322,7 @@ export default function Home() {
           return {
             id: `search-${selectedRepositoryId}-${index}`,
             path: match.path,
+            matchLine: match.line,
             startLine,
             endLine,
             label: `${match.path}:${startLine}${endLine === startLine ? '' : `-${endLine}`}`,
@@ -693,8 +694,8 @@ export default function Home() {
               </div>
               <div className="hunk-label">Exact search evidence · read-only</div>
               <div className="diff-code">
-                {[...selectedCitation.before, { number: selectedCitation.startLine, text: selectedCitation.text }, ...selectedCitation.after].map((line) => (
-                  <div className={`code-line ${line.number === selectedCitation.startLine ? 'cited-line' : ''}`} key={`${line.number}-${line.text}`}>
+                {[...selectedCitation.before, { number: selectedCitation.matchLine, text: selectedCitation.text }, ...selectedCitation.after].map((line) => (
+                  <div className={`code-line ${line.number === selectedCitation.matchLine ? 'cited-line' : ''}`} key={`${line.number}-${line.text}`}>
                     <span>{line.number}</span>
                     <code>{line.text}</code>
                   </div>

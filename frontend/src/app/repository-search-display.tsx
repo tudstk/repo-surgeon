@@ -11,6 +11,7 @@ export type RepositorySummary = {
 export type SearchCitation = {
   id: string;
   path: string;
+  matchLine: number;
   startLine: number;
   endLine: number;
   label: string;
