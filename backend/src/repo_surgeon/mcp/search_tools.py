@@ -226,7 +226,12 @@ async def _run_search(
     worker.add_done_callback(release_worker_slot)
     wrapped = asyncio.wrap_future(worker)
     try:
-        return await asyncio.shield(wrapped)
+        remaining = deadline - asyncio.get_running_loop().time()
+        async with asyncio.timeout(max(0, remaining)):
+            return await asyncio.shield(wrapped)
+    except TimeoutError as error:
+        adapter.cancel()
+        raise SearchError("search_timed_out", "Repository search timed out.") from error
     except asyncio.CancelledError:
         adapter.cancel()
         while not worker.done():
