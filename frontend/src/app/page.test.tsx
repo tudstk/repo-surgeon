@@ -95,7 +95,10 @@ describe('Home', () => {
 
     expect(screen.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Switch repository' })).not.toBeDisabled(),
+      expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
     );
     expect(screen.getByRole('button', { name: 'Staging Chamber' })).toBeDisabled();
 

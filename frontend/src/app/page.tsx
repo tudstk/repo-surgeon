@@ -287,7 +287,13 @@ export default function Home() {
       }),
     })
       .then((response) => {
-        if (!response.ok) throw new Error('search request failed');
+        if (!response.ok) {
+          return response.json().catch(() => null).then((payload) => {
+            const code =
+              payload && typeof payload.code === 'string' ? payload.code : 'search_failed';
+            throw new Error(code);
+          });
+        }
         return response.json() as Promise<{
           match_count: number;
           matches: Array<{
@@ -332,13 +338,13 @@ export default function Home() {
           citations,
         });
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!requestActive) return;
         setSearchActivity({
           ...initialSearchActivity,
           phase: 'error',
           summary: 'Searching for SessionManager',
-          errorCode: 'search_failed',
+          errorCode: error instanceof Error ? error.message : 'search_failed',
         });
       });
     return () => {
@@ -408,17 +414,6 @@ export default function Home() {
           </span>
           <span className="brand-name">Repo Surgeon</span>
           <span className="bar-divider" />
-          <button
-            className="repo-switcher"
-            type="button"
-            aria-label="Switch repository"
-            disabled={repositories.length === 0}
-            onClick={() => setSelectedRepositoryId(repositories[0]?.id ?? null)}
-          >
-            <Glyph>▣</Glyph> &nbsp;{' '}
-            {repositoryName(repositories.find(({ id }) => id === selectedRepositoryId) ?? null)}{' '}
-            <Glyph>⌄</Glyph>
-          </button>
           <span className="branch-context">
             <Glyph>⑂</Glyph> &nbsp; main <b>3 behind</b> &nbsp;<Glyph>→</Glyph>&nbsp;{' '}
             <strong>fix/session-token-store</strong>

@@ -218,7 +218,10 @@ class RipgrepSearchAdapter:
             if not item:
                 continue
             try:
-                candidates.append(self._normalize_search_path(item.decode("utf-8")))
+                candidate = self._normalize_search_path(item.decode("utf-8"))
+                if candidate == ".git" or candidate.startswith(".git/"):
+                    continue
+                candidates.append(candidate)
             except UnicodeDecodeError, SearchError:
                 skipped_files += 1
         if len(candidates) > MAX_SEARCH_FILES:
