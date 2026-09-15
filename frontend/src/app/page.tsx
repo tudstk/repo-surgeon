@@ -3,6 +3,14 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import {
+  RepositorySummaryCard,
+  SearchActivityRow,
+  type RepositorySummary,
+  type SearchActivity,
+  type SearchCitation,
+} from './repository-search-display';
+
 const STACKED_LAYOUT_QUERY = '(max-width: 1024px)';
 
 const sessions = [
@@ -10,11 +18,35 @@ const sessions = [
   { name: 'web-dashboard', active: false },
 ] as const;
 
-const activity = [
-  { tool: 'search_code', detail: '"SessionManager"', result: '6 hits', time: '38ms' },
-  { tool: 'read_file', detail: 'auth/session.py:40–118', result: '78 LOC', time: '12ms' },
-  { tool: 'run_tests', detail: 'pytest tests/test_session.py', result: '14 pass', time: '2.4s' },
-] as const;
+const repositorySummary: RepositorySummary = {
+  language: 'Python',
+  languageConfidence: 'high',
+  fileCount: 342,
+  approximateLines: 28_000,
+  testFramework: 'pytest',
+  testCommand: 'uv run pytest',
+  truncated: false,
+};
+
+const searchActivity: SearchActivity = {
+  tool: 'search_code',
+  phase: 'completed',
+  summary: 'Searching for SessionManager',
+  matchCount: 6,
+  durationMs: 38,
+  truncated: false,
+  skippedFiles: 0,
+  errorCode: null,
+  citations: [
+    {
+      id: 'search-search-1-1',
+      path: 'auth/session.py',
+      startLine: 52,
+      endLine: 52,
+      label: 'auth/session.py:52',
+    },
+  ],
+};
 
 const SEPARATOR_SIZE = 8;
 const DEFAULT_PANE_WIDTHS = [200, 260, 400, 556];
@@ -180,6 +212,7 @@ export default function Home() {
   const gridRef = useRef<HTMLDivElement>(null);
   const [paneWidths, setPaneWidths] = useState<number[] | null>(null);
   const [paneMinimumBands, setPaneMinimumBands] = useState(DEFAULT_PANE_MINIMUMS);
+  const [selectedCitation, setSelectedCitation] = useState<SearchCitation | null>(null);
 
   useEffect(() => {
     const grid = gridRef.current;
@@ -381,31 +414,7 @@ export default function Home() {
               </b>
             </div>
           </div>
-          <section className="repo-summary" aria-labelledby="repo-summary-title">
-            <h2 id="repo-summary-title">REPO SUMMARY</h2>
-            <dl>
-              <div>
-                <dt>Language</dt>
-                <dd>Python 3.11</dd>
-              </div>
-              <div>
-                <dt>Size</dt>
-                <dd>342 files · 28k LOC</dd>
-              </div>
-              <div>
-                <dt>Tests</dt>
-                <dd>
-                  pytest <StatusDot />
-                </dd>
-              </div>
-              <div>
-                <dt>Vector Index</dt>
-                <dd>
-                  pgvector <Glyph>✓</Glyph>
-                </dd>
-              </div>
-            </dl>
-          </section>
+          <RepositorySummaryCard summary={repositorySummary} />
         </aside>
         {!isStackedLayout && (
           <PaneSeparator
@@ -438,22 +447,18 @@ export default function Home() {
               verify tests before proposing it.
             </p>
             <div className="activity-list" aria-label="Agent activity">
-              {activity.map((item) => (
-                <div className="activity-row" key={item.tool}>
-                  <Glyph>▹</Glyph>
-                  <code>{item.tool}</code>
-                  <span className="activity-detail">{item.detail}</span>
-                  <strong>
-                    <Glyph>✓</Glyph> {item.result}
-                  </strong>
-                  <small>{item.time}</small>
-                </div>
-              ))}
+              <SearchActivityRow activity={searchActivity} onSelectCitation={setSelectedCitation} />
             </div>
             <p className="agent-message finding">
-              Found the coupling in <a href="#diff">auth/session.py:52</a>. Drafted a patch and
-              verified test suite in Sandbox #89b2. See the diff in the staging chamber on the right{' '}
-              <Glyph>→</Glyph>
+              Found the coupling in{' '}
+              <a
+                href="#work-panel"
+                onClick={() => setSelectedCitation(searchActivity.citations[0])}
+              >
+                auth/session.py:52
+              </a>
+              . Drafted a patch and verified test suite in Sandbox #89b2. See the diff in the
+              staging chamber on the right <Glyph>→</Glyph>
             </p>
             <div className="pending-trace">
               proposing patch revision 1, awaiting your approval...
@@ -496,20 +501,26 @@ export default function Home() {
             setWidths={resizePanes}
           />
         )}
-        <section className="work-panel" aria-labelledby="work-panel-title">
+        <section className="work-panel" id="work-panel" aria-labelledby="work-panel-title">
           <h2 className="sr-only" id="work-panel-title">
             Work panel
           </h2>
           <div className="work-toolbar">
             <div className="work-tabs" role="tablist" aria-label="Staging views">
-              <button type="button" role="tab" aria-selected="false" disabled>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={selectedCitation !== null}
+                className={selectedCitation ? 'tab-selected' : undefined}
+                disabled
+              >
                 <Glyph>‹›</Glyph> Code
               </button>
               <button
                 type="button"
                 role="tab"
-                aria-selected="true"
-                className="tab-selected"
+                aria-selected={selectedCitation === null}
+                className={selectedCitation ? undefined : 'tab-selected'}
                 disabled
               >
                 <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
@@ -522,90 +533,116 @@ export default function Home() {
               +7 −5 &nbsp; <b>SPLIT</b> &nbsp; UNIFIED
             </span>
           </div>
-          <div className="file-heading" id="diff">
-            <strong>
-              <Glyph>▤</Glyph> &nbsp; auth/session.py
-            </strong>
-            <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
-          </div>
-          <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
-          <div className="diff-code" aria-label="Proposed code diff">
-            <div className="code-line">
-              <span>48&nbsp;&nbsp; 48</span>
-              <code>def __init__(self, ttl_seconds: int = 3600) -&gt; None:</code>
+          {selectedCitation ? (
+            <div className="citation-code-view" aria-label="Cited source">
+              <div className="file-heading">
+                <strong>
+                  <Glyph>‹›</Glyph> &nbsp; {selectedCitation.path}
+                </strong>
+                <span>
+                  L{selectedCitation.startLine}
+                  {selectedCitation.endLine !== selectedCitation.startLine &&
+                    `-${selectedCitation.endLine}`}
+                </span>
+              </div>
+              <div className="hunk-label">Exact search evidence · read-only</div>
+              <div className="diff-code">
+                <div className="code-line cited-line">
+                  <span>{selectedCitation.startLine}</span>
+                  <code>async def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
+                </div>
+              </div>
             </div>
-            <div className="code-line">
-              <span>49&nbsp;&nbsp; 49</span>
-              <code> self._ttl = ttl_seconds</code>
-            </div>
-            <div className="code-line removed">
-              <span>50&nbsp;&nbsp; −</span>
-              <code> self._sessions = {'{}'}</code>
-            </div>
-            <div className="code-line added">
-              <span>50&nbsp;&nbsp; +</span>
-              <code> self._store = TokenStore(default_ttl=ttl_seconds)</code>
-            </div>
-            <div className="code-line">
-              <span>51&nbsp;&nbsp; 51</span>
-              <code> self._lock = threading.RLock()</code>
-            </div>
-            <div className="code-line removed">
-              <span>52&nbsp;&nbsp; −</span>
-              <code>def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
-            </div>
-            <div className="code-line added">
-              <span>52&nbsp;&nbsp; +</span>
-              <code>async def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
-            </div>
-            <div className="code-line removed">
-              <span>53&nbsp;&nbsp; −</span>
-              <code> return self._sessions.get(token)</code>
-            </div>
-            <div className="code-line added">
-              <span>53&nbsp;&nbsp; +</span>
-              <code> return await self._store.lookup(token)</code>
-            </div>
-            <div className="code-line">
-              <span>54&nbsp;&nbsp; 54</span>
-              <code>def invalidate(self, token: str) -&gt; bool:</code>
-            </div>
-            <div className="code-line removed">
-              <span>55&nbsp;&nbsp; −</span>
-              <code> return self._sessions.pop(token, None) is not None</code>
-            </div>
-            <div className="code-line added">
-              <span>55&nbsp;&nbsp; +</span>
-              <code> return self._store.revoke(token)</code>
-            </div>
-          </div>
-          <div className="test-result">
-            <span className="test-dot" aria-hidden="true" />{' '}
-            <strong>
-              Sandbox Tests: 14 passing <Glyph>→</Glyph> 14 passing
-            </strong>
-            <span>0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem: 64MB &nbsp; EXIT: 0</span>
-          </div>
-          <div className="approval-panel">
-            <p className="approval-status">
-              <Glyph>⚠</Glyph> WRITE PENDING - proposal has NOT touched local repository disk.
-              &nbsp; <small>REV 1 · SHA256: 4f8e...9a21</small>
-            </p>
-            <div className="approval-actions">
-              <button type="button" disabled>
-                <Glyph>ⓧ</Glyph> Reject
-              </button>
-              <button type="button" disabled>
-                <Glyph>☷</Glyph> Request Changes
-              </button>
-              <button type="button" disabled>
-                <Glyph>↥</Glyph> Apply to Branch <strong>fix/session-token-store</strong>
-              </button>
-              <button type="button" className="approve-button" disabled>
-                <Glyph>⚙</Glyph> Approve &amp; Open PR
-              </button>
-            </div>
-          </div>
+          ) : (
+            <>
+              <div className="file-heading" id="diff">
+                <strong>
+                  <Glyph>▤</Glyph> &nbsp; auth/session.py
+                </strong>
+                <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
+              </div>
+              <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
+              <div className="diff-code" aria-label="Proposed code diff">
+                <div className="code-line">
+                  <span>48&nbsp;&nbsp; 48</span>
+                  <code>def __init__(self, ttl_seconds: int = 3600) -&gt; None:</code>
+                </div>
+                <div className="code-line">
+                  <span>49&nbsp;&nbsp; 49</span>
+                  <code> self._ttl = ttl_seconds</code>
+                </div>
+                <div className="code-line removed">
+                  <span>50&nbsp;&nbsp; −</span>
+                  <code> self._sessions = {'{}'}</code>
+                </div>
+                <div className="code-line added">
+                  <span>50&nbsp;&nbsp; +</span>
+                  <code> self._store = TokenStore(default_ttl=ttl_seconds)</code>
+                </div>
+                <div className="code-line">
+                  <span>51&nbsp;&nbsp; 51</span>
+                  <code> self._lock = threading.RLock()</code>
+                </div>
+                <div className="code-line removed">
+                  <span>52&nbsp;&nbsp; −</span>
+                  <code>def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
+                </div>
+                <div className="code-line added">
+                  <span>52&nbsp;&nbsp; +</span>
+                  <code>async def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
+                </div>
+                <div className="code-line removed">
+                  <span>53&nbsp;&nbsp; −</span>
+                  <code> return self._sessions.get(token)</code>
+                </div>
+                <div className="code-line added">
+                  <span>53&nbsp;&nbsp; +</span>
+                  <code> return await self._store.lookup(token)</code>
+                </div>
+                <div className="code-line">
+                  <span>54&nbsp;&nbsp; 54</span>
+                  <code>def invalidate(self, token: str) -&gt; bool:</code>
+                </div>
+                <div className="code-line removed">
+                  <span>55&nbsp;&nbsp; −</span>
+                  <code> return self._sessions.pop(token, None) is not None</code>
+                </div>
+                <div className="code-line added">
+                  <span>55&nbsp;&nbsp; +</span>
+                  <code> return self._store.revoke(token)</code>
+                </div>
+              </div>
+              <div className="test-result">
+                <span className="test-dot" aria-hidden="true" />{' '}
+                <strong>
+                  Sandbox Tests: 14 passing <Glyph>→</Glyph> 14 passing
+                </strong>
+                <span>
+                  0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem: 64MB &nbsp; EXIT: 0
+                </span>
+              </div>
+              <div className="approval-panel">
+                <p className="approval-status">
+                  <Glyph>⚠</Glyph> WRITE PENDING - proposal has NOT touched local repository disk.
+                  &nbsp; <small>REV 1 · SHA256: 4f8e...9a21</small>
+                </p>
+                <div className="approval-actions">
+                  <button type="button" disabled>
+                    <Glyph>ⓧ</Glyph> Reject
+                  </button>
+                  <button type="button" disabled>
+                    <Glyph>☷</Glyph> Request Changes
+                  </button>
+                  <button type="button" disabled>
+                    <Glyph>↥</Glyph> Apply to Branch <strong>fix/session-token-store</strong>
+                  </button>
+                  <button type="button" className="approve-button" disabled>
+                    <Glyph>⚙</Glyph> Approve &amp; Open PR
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </section>
       </div>
       <h1 className="sr-only">Understand the code. Keep people in control.</h1>

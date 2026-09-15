@@ -61,8 +61,18 @@ describe('Home', () => {
     expect(screen.getByLabelText('Sandbox HEAD')).toHaveTextContent('9b4ec8f');
     expect(screen.getByText('GIT DAG LINEAGE')).toBeInTheDocument();
     expect(screen.getByText(/INDEX 47b91e\.\.\.c892fa 100644/)).toBeInTheDocument();
-    expect(screen.getByText(/pgvector/)).toBeInTheDocument();
+    expect(screen.getByText(/342 files · 28K LOC/i)).toBeInTheDocument();
     expect(screen.queryByText(/STATIC PREVIEW|\(PREVIEW\)/i)).not.toBeInTheDocument();
+  });
+
+  it('opens the exact cited file and line in the work panel', () => {
+    render(<Home />);
+
+    fireEvent.click(screen.getAllByRole('link', { name: 'auth/session.py:52' })[0]);
+
+    expect(screen.getByRole('region', { name: 'Work panel' })).toHaveTextContent('auth/session.py');
+    expect(screen.getByRole('region', { name: 'Work panel' })).toHaveTextContent('L52');
+    expect(screen.getByRole('tab', { name: /Code/ })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('hides commit nodes from assistive technology because they are decorative', () => {

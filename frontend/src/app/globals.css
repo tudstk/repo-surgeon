@@ -495,12 +495,31 @@ textarea:focus-visible {
   background: #0b1019;
 }
 .repo-summary h2 {
-  margin: 0 0 9px;
+  margin: 0;
   font:
     10px ui-monospace,
     monospace;
   letter-spacing: 0.1em;
   color: var(--faint);
+}
+.summary-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.partial-pill {
+  flex: none;
+  padding: 2px 5px;
+  border: 1px solid #71552f;
+  background: #302615;
+  color: var(--amber);
+  font:
+    8px ui-monospace,
+    monospace;
+  letter-spacing: 0.06em;
 }
 .repo-summary dl {
   display: grid;
@@ -514,10 +533,19 @@ textarea:focus-visible {
   font-size: 11px;
 }
 .repo-summary dd {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
   margin: 0;
   color: var(--text);
   font-family: ui-monospace, monospace;
   font-size: 10px;
+}
+.repo-summary dd small {
+  color: var(--faint);
+  font-size: 8px;
+  text-transform: uppercase;
 }
 .conversation {
   position: relative;
@@ -596,6 +624,38 @@ textarea:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.search-activity.error strong {
+  color: var(--amber);
+}
+.activity-badges,
+.search-citations {
+  grid-column: 3 / -1;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font:
+    9px ui-monospace,
+    monospace;
+}
+.activity-badges:empty {
+  display: none;
+}
+.search-citations a {
+  min-width: 0;
+  overflow: hidden;
+  color: #aaaaff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.citation-code-view {
+  min-width: 0;
+}
+.cited-line {
+  border-left: 2px solid var(--violet);
+  background: #242840;
 }
 .finding a {
   color: #aaaaff;
