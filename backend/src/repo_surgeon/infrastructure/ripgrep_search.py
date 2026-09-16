@@ -276,7 +276,6 @@ class RipgrepSearchAdapter:
             "--files",
             "-0",
             "--color=never",
-            "--no-ignore-parent",
             "--hidden",
         ]
         # Older ripgrep releases only apply ignore files inside a Git worktree.
