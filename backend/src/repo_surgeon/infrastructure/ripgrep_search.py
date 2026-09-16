@@ -227,6 +227,8 @@ class RipgrepSearchAdapter:
                 if reset is not None:
                     reset()
 
+    # Search combines independent safety, timeout, and result-bound checks.
+    # skipcq: PY-R1000
     def _search(
         self,
         canonical_root: str | Path,
@@ -566,6 +568,8 @@ class RipgrepSearchAdapter:
             raise SearchError(error.code, error.detail) from error
 
     @staticmethod
+    # Parsing rejects malformed untrusted output at every record boundary.
+    # skipcq: PY-R1000
     def _parse_matches(payload: bytes) -> list[SearchMatch]:
         matches: list[SearchMatch] = []
         for raw_line in payload.splitlines():

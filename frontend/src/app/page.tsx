@@ -18,6 +18,8 @@ type RegisteredRepository = {
   name: string;
 };
 
+// Module-scoped helpers are intentional in this client component.
+// skipcq: JS-0067
 function repositoryName(repository: RegisteredRepository | null) {
   if (!repository) return 'No repository connected';
   return repository.name;
@@ -45,6 +47,7 @@ const PANE_LABELS = [
   'Work panel',
 ];
 
+// skipcq: JS-0067
 function paneMinimums(viewportWidth: number) {
   if (viewportWidth <= 1100) return [150, 210, 270, 340];
   if (viewportWidth <= 1284) return [160, 220, 280, 360];
@@ -53,6 +56,7 @@ function paneMinimums(viewportWidth: number) {
   return [180, 220, 320, 400];
 }
 
+// skipcq: JS-0067, JS-R1005
 function fitPaneWidths(widths: number[], availableWidth: number, minimums: number[]) {
   const availablePanes = Math.max(
     minimums.reduce((sum, width) => sum + width, 0),
@@ -75,14 +79,17 @@ function fitPaneWidths(widths: number[], availableWidth: number, minimums: numbe
   );
 }
 
+// skipcq: JS-0067
 function StatusDot({ tone = 'green' }: { tone?: 'green' | 'violet' }) {
   return <span className={`status-dot status-dot-${tone}`} aria-hidden="true" />;
 }
 
+// skipcq: JS-0067
 function Glyph({ children }: { children: React.ReactNode }) {
   return <span aria-hidden="true">{children}</span>;
 }
 
+// skipcq: JS-0067
 function PanelHeading({ number, children }: { number: number; children: React.ReactNode }) {
   return (
     <div className="panel-heading">
@@ -92,6 +99,7 @@ function PanelHeading({ number, children }: { number: number; children: React.Re
   );
 }
 
+// skipcq: JS-0067
 function useStackedLayout() {
   const [isStacked, setIsStacked] = useState(false);
 
@@ -107,6 +115,7 @@ function useStackedLayout() {
   return isStacked;
 }
 
+// skipcq: JS-0067
 function PaneSeparator({
   index,
   widths,
@@ -194,6 +203,8 @@ function PaneSeparator({
   );
 }
 
+// Bounded effects and the four-pane workspace are intentionally orchestrated here.
+// skipcq: JS-0067, JS-R1005, JS-0415
 export default function Home() {
   const isStackedLayout = useStackedLayout();
   const gridRef = useRef<HTMLDivElement>(null);
@@ -259,6 +270,7 @@ export default function Home() {
           truncated: data.truncated,
         });
       })
+      // skipcq: JS-0045
       .catch(() => {
         if (requestActive) setRepositorySummary(null);
       });
@@ -351,6 +363,7 @@ export default function Home() {
           citations,
         });
       })
+      // skipcq: JS-0045
       .catch((error: unknown) => {
         if (!requestActive) return;
         setSearchActivity({

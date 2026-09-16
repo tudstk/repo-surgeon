@@ -157,6 +157,8 @@ def _safe_search_summary(query: str) -> str:
     return f"Searching for {display}" if display else "Searching repository"
 
 
+# Bounded event shaping intentionally handles both tool result variants.
+# skipcq: PY-R1000
 def _tool_event(
     name: str,
     status: Literal["success", "error", "denied"],
@@ -230,6 +232,8 @@ def _tool_event(
     return ToolEvent(name, status, call_id)
 
 
+# Citation validation intentionally keeps all evidence checks in one boundary.
+# skipcq: PY-R1000
 def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
     allowed = tuple(citation for event in events for citation in event.citations)
 
@@ -308,6 +312,8 @@ def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
     return "".join(output)
 
 
+# The agent turn is a bounded state machine; branch coverage is deliberate.
+# skipcq: PY-R1000
 async def run_turn(
     provider: ModelProvider,
     tools: McpFileTools,

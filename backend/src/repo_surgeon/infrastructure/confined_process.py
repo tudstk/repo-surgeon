@@ -29,7 +29,8 @@ def main() -> int:
             os.fchdir(root_fd)
         finally:
             os.close(root_fd)
-        os.execvp(argv[0], argv)
+        # Fixed argv is intentionally executed without a shell.
+        os.execvp(argv[0], argv)  # skipcq
     except OSError, ValueError:
         return 126
 

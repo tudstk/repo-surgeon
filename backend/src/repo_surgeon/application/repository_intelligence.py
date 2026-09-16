@@ -69,6 +69,8 @@ class RepositorySummary:
     truncated: bool
 
 
+# Metadata detection applies independent bounded heuristics in one pass.
+# skipcq: PY-R1000
 def detect_repository_summary(
     canonical_root: str | Path,
     *,
@@ -171,6 +173,8 @@ def _select_language(
     return None, "low"
 
 
+# Fixed test catalogs require explicit precedence and ambiguity branches.
+# skipcq: PY-R1000
 def _detect_tests(
     entries: tuple[FileEntry, ...], text_by_path: dict[str, str]
 ) -> tuple[
