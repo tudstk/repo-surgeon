@@ -24,6 +24,7 @@ from repo_surgeon.application.repository_files import (
 from repo_surgeon.application.repository_search import (
     MAX_CONTEXT_LINES,
     MAX_MATCHES,
+    MAX_SEARCH_FILES,
     MAX_SEARCH_RESULT_BYTES,
     MAX_SEARCH_TIMEOUT_MS,
     SearchError,
@@ -147,6 +148,19 @@ def test_search_caps_matches_before_scanning_all_files(tmp_path: Path) -> None:
     assert result.match_count == 5
     assert result.truncated
     assert "matches" in result.truncation_reasons
+
+
+def test_search_rejects_too_many_candidates_before_policy_validation(tmp_path: Path) -> None:
+    discovered = b"\0".join(
+        f"file-{index:04}.txt".encode() for index in range(MAX_SEARCH_FILES + 1)
+    )
+    runner = RecordingRunner([CompletedSearchProcess(0, discovered + b"\0", b"")])
+
+    with pytest.raises(SearchError) as raised:
+        RipgrepSearchAdapter(runner=runner).search(tmp_path, request())
+
+    assert raised.value.code == "search_output_limit"
+    assert len(runner.calls) == 1
 
 
 def test_query_and_glob_are_fixed_arguments_not_shell_syntax(tmp_path: Path) -> None:

@@ -294,11 +294,14 @@ class RipgrepSearchAdapter:
                 continue
             try:
                 candidate = self._normalize_search_path(raw_candidate.decode("utf-8"))
-                if candidate == ".git" or candidate.startswith(".git/"):
-                    continue
-                candidates.append(candidate)
             except UnicodeDecodeError, SearchError:
                 skipped_files += 1
+                continue
+            if candidate == ".git" or candidate.startswith(".git/"):
+                continue
+            candidates.append(candidate)
+            if len(candidates) > MAX_SEARCH_FILES:
+                raise SearchError("search_output_limit", "Repository search exceeded its file limit.")
         policy_results = self._check_candidate_policies(
             root, files.root_identity, tuple(candidates), deadline
         )
@@ -318,10 +321,6 @@ class RipgrepSearchAdapter:
                 continue
             self._raise_if_deadline_exceeded(deadline)
             searchable.append(candidate)
-            if len(searchable) > MAX_SEARCH_FILES:
-                raise SearchError(
-                    "search_output_limit", "Repository search exceeded its file limit."
-                )
 
         if not searchable:
             result = SearchResult(
