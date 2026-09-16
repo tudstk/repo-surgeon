@@ -121,9 +121,7 @@ async def test_search_driven_answer_has_deterministic_activity_and_exact_citatio
 @pytest.mark.anyio
 async def test_search_answer_accepts_citations_for_paths_with_spaces(tmp_path: Path) -> None:
     repository_id = uuid4()
-    repository = Repository(
-        repository_id, RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC)
-    )
+    repository = Repository(repository_id, RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
     tools = McpFileTools(MemoryRepositoryStore(repository))
     spaced_path = tmp_path / "docs" / "api specs" / "@scope" / "C++" / "a:b[1].cpp"
     spaced_path.parent.mkdir(parents=True)

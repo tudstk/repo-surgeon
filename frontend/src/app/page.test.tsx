@@ -29,21 +29,21 @@ describe('Home', () => {
                   skipped_files: 0,
                 })
               : input.endsWith('/summary')
-              ? JSON.stringify({
-                  language: 'Python',
-                  language_confidence: 'high',
-                  file_count: 342,
-                  approximate_lines: 28000,
-                  test_framework: 'pytest',
-                  test_command: 'pytest -q',
-                  truncated: false,
-                })
-              : JSON.stringify([
-                  {
-                    id: 'repository-1',
-                    name: 'payments-api',
-                  },
-                ]),
+                ? JSON.stringify({
+                    language: 'Python',
+                    language_confidence: 'high',
+                    file_count: 342,
+                    approximate_lines: 28000,
+                    test_framework: 'pytest',
+                    test_command: 'pytest -q',
+                    truncated: false,
+                  })
+                : JSON.stringify([
+                    {
+                      id: 'repository-1',
+                      name: 'payments-api',
+                    },
+                  ]),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           ),
         ),
@@ -161,12 +161,16 @@ describe('Home', () => {
   it('opens the exact cited context in the work panel', async () => {
     render(<Home />);
 
-    await waitFor(() => expect(screen.getByRole('link', { name: 'auth/session.py:51-53' })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'auth/session.py:51-53' })).toBeInTheDocument(),
+    );
     fireEvent.click(screen.getByRole('link', { name: 'auth/session.py:51-53' }));
 
     expect(screen.getByRole('region', { name: 'Work panel' })).toHaveTextContent('auth/session.py');
     expect(screen.getByRole('region', { name: 'Work panel' })).toHaveTextContent('L51-53');
-    expect(screen.getByRole('region', { name: 'Work panel' })).toHaveTextContent('class SessionManager:');
+    expect(screen.getByRole('region', { name: 'Work panel' })).toHaveTextContent(
+      'class SessionManager:',
+    );
     expect(screen.getByRole('region', { name: 'Work panel' })).toHaveTextContent('return session');
     expect(screen.getByRole('tab', { name: /Code/ })).toHaveAttribute('aria-selected', 'true');
   });

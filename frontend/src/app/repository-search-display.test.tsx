@@ -20,10 +20,13 @@ const completed: SearchActivity = {
     {
       id: 'search-1',
       path: 'auth/session.py',
+      matchLine: 52,
       startLine: 52,
       endLine: 52,
       label: 'auth/session.py:52',
       text: 'async def resolve(self, token: string):',
+      before: [],
+      after: [],
     },
   ],
 };
