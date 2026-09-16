@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from repo_surgeon.application.repository_intelligence import detect_repository_summary
 from repo_surgeon.application.repository_files import RepositoryFileError
+from repo_surgeon.application.repository_intelligence import detect_repository_summary
 
 DETECTED_AT = datetime(2026, 9, 15, tzinfo=UTC)
 

@@ -193,20 +193,36 @@ _FILE_WORKER_SLOT = BoundedSemaphore(value=1)
 
 def _list_repository_files(
     canonical_root: str,
+    root_identity: tuple[int, int],
     directory: str,
     glob: str | None,
     max_results: int,
 ) -> FileListing:
-    return ConfinedRepositoryFiles(canonical_root).list_files(directory, glob, max_results)
+    return ConfinedRepositoryFiles(canonical_root, root_identity).list_files(
+        directory, glob, max_results
+    )
 
 
 def _read_repository_file(
     canonical_root: str,
+    root_identity: tuple[int, int],
     path: str,
     start_line: int,
     end_line: int | None,
 ) -> FileRead:
-    return ConfinedRepositoryFiles(canonical_root).read_file(path, start_line, end_line)
+    return ConfinedRepositoryFiles(canonical_root, root_identity).read_file(
+        path, start_line, end_line
+    )
+
+
+def _repository_root_identity(repository: object) -> tuple[int, int]:
+    root_device = getattr(repository, "root_device", None)
+    root_inode = getattr(repository, "root_inode", None)
+    if root_device is None or root_inode is None:
+        raise RepositoryFileError(
+            "repository_unavailable", "The registered repository is unavailable."
+        )
+    return root_device, root_inode
 
 
 async def _run_blocking[BlockingResult](
@@ -262,6 +278,7 @@ class McpFileTools:
                 await _run_blocking(
                     _list_repository_files,
                     repository.canonical_root,
+                    _repository_root_identity(repository),
                     arguments.directory,
                     arguments.glob,
                     arguments.max_results,
@@ -292,6 +309,7 @@ class McpFileTools:
                 await _run_blocking(
                     _read_repository_file,
                     repository.canonical_root,
+                    _repository_root_identity(repository),
                     arguments.path,
                     arguments.start_line,
                     arguments.end_line,

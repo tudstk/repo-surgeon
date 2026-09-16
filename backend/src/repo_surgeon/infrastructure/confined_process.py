@@ -17,16 +17,20 @@ def main() -> int:
         root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             root_stat = os.fstat(root_fd)
-            if not stat.S_ISDIR(root_stat.st_mode) or (
-                root_stat.st_dev,
-                root_stat.st_ino,
-            ) != expected_identity:
+            if (
+                not stat.S_ISDIR(root_stat.st_mode)
+                or (
+                    root_stat.st_dev,
+                    root_stat.st_ino,
+                )
+                != expected_identity
+            ):
                 return 126
             os.fchdir(root_fd)
         finally:
             os.close(root_fd)
         os.execvp(argv[0], argv)
-    except (OSError, ValueError):
+    except OSError, ValueError:
         return 126
 
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -13,7 +14,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from repo_surgeon.application.repositories import RepositoryStore
+from repo_surgeon.application.repositories import RepositoryStore, ResolvedLocalRepositoryRoot
 from repo_surgeon.application.repository_files import ConfinedRepositoryFiles
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.mcp.file_tools import (
@@ -35,13 +36,24 @@ class MemoryRepositoryStore(RepositoryStore):
     """Minimal application port fake used by the in-process tool client."""
 
     def __init__(self, repository: Repository) -> None:
+        root_stat = Path(repository.canonical_root).stat()
+        repository = replace(
+            repository,
+            root_device=root_stat.st_dev,
+            root_inode=root_stat.st_ino,
+        )
         self._repository = repository
 
     async def get_by_canonical_root(self, canonical_root: str) -> Repository | None:
         return self._repository if canonical_root == self._repository.canonical_root else None
 
-    async def add_local(self, canonical_root: str) -> Repository:
+    async def add_local(self, root: ResolvedLocalRepositoryRoot) -> Repository:
         raise AssertionError("The safe file tools must not register repositories.")
+
+    async def bind_legacy_identity(
+        self, repository_id: UUID, root: ResolvedLocalRepositoryRoot
+    ) -> Repository:
+        raise AssertionError("The safe file tools must not bind repository identities.")
 
     async def get(self, repository_id: UUID) -> Repository | None:
         return self._repository if repository_id == self._repository.id else None

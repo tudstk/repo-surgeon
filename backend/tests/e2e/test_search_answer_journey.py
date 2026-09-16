@@ -1,6 +1,7 @@
 """End-to-end fake-provider journey through real search and agent boundaries."""
 
 import json
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -8,22 +9,36 @@ from uuid import UUID, uuid4
 import pytest
 
 from repo_surgeon.agent import FakeModelProvider, ModelResponse, ModelToolCall, run_turn
+from repo_surgeon.application.repositories import ResolvedLocalRepositoryRoot
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.mcp.file_tools import McpFileTools
 
 
 class MemoryRepositoryStore:
     def __init__(self, repository: Repository) -> None:
-        self.repository = repository
+        root_stat = Path(repository.canonical_root).stat()
+        self.repository = replace(
+            repository,
+            root_device=root_stat.st_dev,
+            root_inode=root_stat.st_ino,
+        )
 
     async def get_by_canonical_root(self, canonical_root: str) -> Repository | None:
         return self.repository if canonical_root == self.repository.canonical_root else None
 
-    async def add_local(self, canonical_root: str) -> Repository:
+    async def add_local(self, root: ResolvedLocalRepositoryRoot) -> Repository:
         raise AssertionError("test store does not register repositories")
+
+    async def bind_legacy_identity(
+        self, repository_id: UUID, root: ResolvedLocalRepositoryRoot
+    ) -> Repository:
+        raise AssertionError("test store does not bind repository identities")
 
     async def get(self, repository_id: UUID) -> Repository | None:
         return self.repository if repository_id == self.repository.id else None
+
+    async def list_all(self) -> tuple[Repository, ...]:
+        return (self.repository,)
 
 
 @pytest.mark.anyio

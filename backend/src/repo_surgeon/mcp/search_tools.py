@@ -192,13 +192,19 @@ _SEARCH_WORKER_SLOT = BoundedSemaphore(value=1)
 
 
 class SearchAdapter(Protocol):
-    def search(self, canonical_root: str, request: SearchRequest) -> SearchResult: ...
+    def search(
+        self,
+        canonical_root: str,
+        request: SearchRequest,
+        expected_root_identity: tuple[int, int] | None = None,
+    ) -> SearchResult: ...
 
     def cancel(self) -> None: ...
 
 
 async def _run_search(
     canonical_root: str,
+    root_identity: tuple[int, int],
     request: SearchRequest,
     adapter_factory: Callable[[], SearchAdapter],
 ) -> SearchResult:
@@ -215,7 +221,9 @@ async def _run_search(
     effective_request = replace(request, timeout_ms=max(1, int(remaining * 1_000)))
     adapter = adapter_factory()
     try:
-        worker = _SEARCH_WORKER.submit(adapter.search, canonical_root, effective_request)
+        worker = _SEARCH_WORKER.submit(
+            adapter.search, canonical_root, effective_request, root_identity
+        )
     except BaseException:
         _SEARCH_WORKER_SLOT.release()
         raise
@@ -269,8 +277,17 @@ class McpSearchTools:
             fallback = returned_bytes_limit_error()
             return fallback if _serialized_size(fallback) <= max_bytes else None
         try:
+            if repository.root_device is None or repository.root_inode is None:
+                raise SearchError(
+                    "repository_unavailable", "The registered repository is unavailable."
+                )
             request = arguments.to_request(max_bytes)
-            result = await _run_search(repository.canonical_root, request, self._adapter_factory)
+            result = await _run_search(
+                repository.canonical_root,
+                (repository.root_device, repository.root_inode),
+                request,
+                self._adapter_factory,
+            )
         except SearchError as error:
             output = ToolErrorOutput(code=error.code, detail=error.detail)
             if max_bytes is None or _serialized_size(output) <= max_bytes:

@@ -162,6 +162,34 @@ async def test_repository_summary_reports_unavailable_registered_root(
 
 
 @pytest.mark.anyio
+async def test_registered_root_identity_rejects_a_directory_replacement(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    repository_root = _initialize_git_repository(tmp_path / "registered")
+    (repository_root / "safe.txt").write_text("registered content\n")
+    created = await client.post("/repositories", json={"path": str(repository_root)})
+    repository_id = created.json()["id"]
+
+    original_root = tmp_path / "original"
+    repository_root.rename(original_root)
+    replacement_root = _initialize_git_repository(repository_root)
+    (replacement_root / "safe.txt").write_text("replacement content\n")
+
+    summary = await client.get(f"/repositories/{repository_id}/summary")
+    search = await client.post(
+        f"/repositories/{repository_id}/search", json={"query": "replacement"}
+    )
+    repeated_registration = await client.post("/repositories", json={"path": str(replacement_root)})
+
+    assert summary.status_code == 503
+    assert summary.json()["code"] == "repository_unavailable"
+    assert search.status_code == 422
+    assert search.json()["code"] == "repository_unavailable"
+    assert repeated_registration.status_code == 422
+    assert repeated_registration.json()["code"] == "repository_identity_changed"
+
+
+@pytest.mark.anyio
 async def test_registration_is_idempotent_for_nested_and_symlinked_paths(
     client: httpx.AsyncClient, tmp_path: Path
 ) -> None:

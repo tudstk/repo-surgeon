@@ -787,14 +787,18 @@ async def test_blocking_repository_construction_obeys_deadline_and_global_admiss
     counter_lock = Lock()
     original_init = ConfinedRepositoryFiles.__init__
 
-    def blocked_init(service: ConfinedRepositoryFiles, canonical_root: str) -> None:
+    def blocked_init(
+        service: ConfinedRepositoryFiles,
+        canonical_root: str,
+        expected_root_identity: tuple[int, int] | None = None,
+    ) -> None:
         nonlocal constructor_calls
         with counter_lock:
             constructor_calls += 1
         constructor_started.set()
         release_constructor.wait(timeout=1)
         try:
-            original_init(service, canonical_root)
+            original_init(service, canonical_root, expected_root_identity)
         finally:
             constructor_finished.set()
 

@@ -70,7 +70,10 @@ class RepositorySummary:
 
 
 def detect_repository_summary(
-    canonical_root: str | Path, *, detected_at: datetime | None = None
+    canonical_root: str | Path,
+    *,
+    expected_root_identity: tuple[int, int] | None = None,
+    detected_at: datetime | None = None,
 ) -> RepositorySummary:
     """Inspect only bounded safe files and map evidence to fixed catalog entries."""
     root = Path(canonical_root)
@@ -85,7 +88,11 @@ def detect_repository_summary(
         raise RepositoryFileError(
             "repository_unavailable", "The registered repository is unavailable."
         ) from error
-    files = ConfinedRepositoryFiles(str(root), root_identity)
+    if expected_root_identity is not None and root_identity != expected_root_identity:
+        raise RepositoryFileError(
+            "repository_unavailable", "The registered repository is unavailable."
+        )
+    files = ConfinedRepositoryFiles(str(root), expected_root_identity or root_identity)
     listing = files.list_files(
         max_results=MAX_FILE_COUNT,
         ignored_directories=frozenset(directory.lower() for directory in IGNORED_DIRECTORIES),

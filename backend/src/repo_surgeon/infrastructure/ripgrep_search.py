@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import multiprocessing
 import os
-from queue import Empty
 import selectors
 import stat
 import subprocess
@@ -14,6 +13,7 @@ import time
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePath, PureWindowsPath
+from queue import Empty
 from threading import Event, Lock
 from typing import Protocol, cast
 
@@ -212,9 +212,14 @@ class RipgrepSearchAdapter:
             if policy_process is not None and policy_process.is_alive():
                 policy_process.terminate()
 
-    def search(self, canonical_root: str | Path, request: SearchRequest) -> SearchResult:
+    def search(
+        self,
+        canonical_root: str | Path,
+        request: SearchRequest,
+        expected_root_identity: tuple[int, int] | None = None,
+    ) -> SearchResult:
         try:
-            return self._search(canonical_root, request)
+            return self._search(canonical_root, request, expected_root_identity)
         finally:
             with self._state_lock:
                 self._cancelled.clear()
@@ -222,7 +227,12 @@ class RipgrepSearchAdapter:
                 if reset is not None:
                     reset()
 
-    def _search(self, canonical_root: str | Path, request: SearchRequest) -> SearchResult:
+    def _search(
+        self,
+        canonical_root: str | Path,
+        request: SearchRequest,
+        expected_root_identity: tuple[int, int] | None,
+    ) -> SearchResult:
         started = time.monotonic()
         root = Path(canonical_root)
         deadline = started + request.timeout_ms / 1_000
@@ -233,7 +243,11 @@ class RipgrepSearchAdapter:
                 root_identity = (root_stat.st_dev, root_stat.st_ino)
             finally:
                 os.close(root_fd)
-            files = ConfinedRepositoryFiles(str(root), root_identity)
+            if expected_root_identity is not None and root_identity != expected_root_identity:
+                raise SearchError(
+                    "repository_unavailable", "The registered repository is unavailable."
+                )
+            files = ConfinedRepositoryFiles(str(root), expected_root_identity or root_identity)
             root = files.canonical_root
             normalized_path = self._normalize_search_path(request.path)
             files.path_type(normalized_path)
@@ -301,7 +315,9 @@ class RipgrepSearchAdapter:
                 continue
             candidates.append(candidate)
             if len(candidates) > MAX_SEARCH_FILES:
-                raise SearchError("search_output_limit", "Repository search exceeded its file limit.")
+                raise SearchError(
+                    "search_output_limit", "Repository search exceeded its file limit."
+                )
         policy_results = self._check_candidate_policies(
             root, files.root_identity, tuple(candidates), deadline
         )
@@ -470,9 +486,9 @@ class RipgrepSearchAdapter:
         self._raise_if_cancelled()
         if not candidates:
             return {}
-        result_queue: multiprocessing.queues.Queue[
-            tuple[str, str, str, str] | tuple[str, str]
-        ] = multiprocessing.Queue(maxsize=len(candidates))
+        result_queue: multiprocessing.queues.Queue[tuple[str, str, str, str] | tuple[str, str]] = (
+            multiprocessing.Queue(maxsize=len(candidates))
+        )
         policy_worker = multiprocessing.Process(
             target=_policy_read_many_worker,
             args=(str(root), root_identity, candidates, result_queue),

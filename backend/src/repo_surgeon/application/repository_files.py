@@ -105,10 +105,14 @@ class ConfinedRepositoryFiles:
             raise RepositoryFileError(
                 "repository_unavailable", "The registered repository is unavailable."
             ) from error
-        if expected_root_identity is not None and (
-            root_stat.st_dev,
-            root_stat.st_ino,
-        ) != expected_root_identity:
+        if (
+            expected_root_identity is not None
+            and (
+                root_stat.st_dev,
+                root_stat.st_ino,
+            )
+            != expected_root_identity
+        ):
             raise RepositoryFileError(
                 "repository_unavailable", "The registered repository changed."
             )

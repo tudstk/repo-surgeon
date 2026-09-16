@@ -259,7 +259,15 @@ async def get_repository_summary(
             )
         )
     try:
-        summary = await asyncio.to_thread(detect_repository_summary, repository.canonical_root)
+        if repository.root_device is None or repository.root_inode is None:
+            raise RepositoryFileError(
+                "repository_unavailable", "The registered repository is unavailable."
+            )
+        summary = await asyncio.to_thread(
+            detect_repository_summary,
+            repository.canonical_root,
+            expected_root_identity=(repository.root_device, repository.root_inode),
+        )
     except RepositoryFileError as error:
         raise _summary_problem(error) from error
     return RepositorySummaryResponse.from_summary(summary)

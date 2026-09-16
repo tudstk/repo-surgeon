@@ -458,7 +458,12 @@ async def test_cancelled_search_releases_admission_for_the_next_search(tmp_path:
             self.started = Event()
             self.cancelled = Event()
 
-        def search(self, canonical_root: str, search_request: SearchRequest) -> SearchResult:
+        def search(
+            self,
+            canonical_root: str,
+            search_request: SearchRequest,
+            expected_root_identity: tuple[int, int] | None = None,
+        ) -> SearchResult:
             self.started.set()
             assert self.cancelled.wait(1)
             return SearchResult(
@@ -473,7 +478,12 @@ async def test_cancelled_search_releases_admission_for_the_next_search(tmp_path:
             self.cancelled.set()
 
     class FastAdapter:
-        def search(self, canonical_root: str, search_request: SearchRequest) -> SearchResult:
+        def search(
+            self,
+            canonical_root: str,
+            search_request: SearchRequest,
+            expected_root_identity: tuple[int, int] | None = None,
+        ) -> SearchResult:
             return SearchResult(
                 query=search_request.query,
                 mode=search_request.mode,
