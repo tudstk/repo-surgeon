@@ -207,7 +207,7 @@ def _detect_tests(
                         ("yarn.lock", "yarn"),
                         ("package-lock.json", "npm"),
                     )
-                    if lock in paths
+                    if lock in root_paths
                 ]
                 if len(managers) > 1:
                     unsupported = True

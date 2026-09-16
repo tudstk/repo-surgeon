@@ -332,7 +332,7 @@ async def run_turn(
     def limited(reason: str) -> AgentTurn:
         return AgentTurn(
             status="limit_reached",
-            answer=answer
+            answer=_validate_answer_citations(answer, events)
             or "The repository summary is partial because the turn limit was reached.",
             stop_reason=reason,
             model_calls=model_calls,

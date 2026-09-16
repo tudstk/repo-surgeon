@@ -96,6 +96,18 @@ def test_ambiguous_languages_and_test_frameworks_are_reported_not_guessed(tmp_pa
     assert result.test_detection == "ambiguous"
 
 
+def test_nested_lockfile_does_not_select_root_package_manager(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text('{"devDependencies":{"vitest":"1.0.0"}}')
+    examples = tmp_path / "examples"
+    examples.mkdir()
+    (examples / "pnpm-lock.yaml").write_text("lockfileVersion: '9.0'\n")
+
+    result = detect_repository_summary(tmp_path, detected_at=DETECTED_AT)
+
+    assert result.test_framework == "vitest"
+    assert result.test_command == "npm exec vitest run"
+
+
 def test_unrecognized_custom_test_script_is_never_promoted_to_a_command(tmp_path: Path) -> None:
     marker = tmp_path / "should-not-exist"
     (tmp_path / "package.json").write_text(

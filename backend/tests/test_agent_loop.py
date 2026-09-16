@@ -210,6 +210,21 @@ async def test_hard_limits_return_a_partial_result(limits: AgentLimits, reason: 
 
 
 @pytest.mark.anyio
+async def test_limit_reached_answers_reject_unavailable_citations() -> None:
+    tools, repository_id = tool_client()
+    provider = FakeModelProvider(
+        [ModelResponse("Partial [README.md:1]", (ModelToolCall("list_files", {}),))]
+    )
+
+    result = await run_turn(
+        provider, tools, repository_id, "Summarize", AgentLimits(max_tool_calls=0)
+    )
+
+    assert result.status == "limit_reached"
+    assert result.answer == "Partial [unsupported citation]"
+
+
+@pytest.mark.anyio
 async def test_invalid_tool_arguments_become_safe_tool_errors() -> None:
     tools, repository_id = tool_client()
     provider = FakeModelProvider(
