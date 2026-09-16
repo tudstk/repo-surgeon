@@ -172,6 +172,7 @@ def _detect_tests(
     Literal["detected", "ambiguous", "not_found", "unsupported"],
 ]:
     paths = {entry.path.lower(): entry.path for entry in entries}
+    root_paths = {path for path in paths if len(PurePath(path).parts) == 1}
     detections: list[tuple[str, str]] = []
     unsupported = False
 
@@ -226,7 +227,7 @@ def _detect_tests(
         detections.append(("go test", "go test ./..."))
     if "cargo.toml" in paths:
         detections.append(("cargo test", "cargo test"))
-    if any(path.endswith(".csproj") for path in paths):
+    if any(path.endswith(".csproj") for path in root_paths):
         detections.append(("dotnet test", "dotnet test"))
 
     unique = list(dict.fromkeys(detections))
