@@ -3,9 +3,27 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from repo_surgeon.application.repository_intelligence import detect_repository_summary
+from repo_surgeon.application.repository_files import RepositoryFileError
 
 DETECTED_AT = datetime(2026, 9, 15, tzinfo=UTC)
+
+
+def test_summary_rejects_a_replaced_registered_root(tmp_path: Path) -> None:
+    root = tmp_path / "repository"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.py").write_text("needle\n")
+    root.rmdir()
+    root.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(RepositoryFileError) as raised:
+        detect_repository_summary(root, detected_at=DETECTED_AT)
+
+    assert raised.value.code == "repository_unavailable"
 
 
 def test_detects_dominant_language_size_lines_and_pytest_without_execution(tmp_path: Path) -> None:

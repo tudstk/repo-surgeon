@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import tomllib
 from collections import defaultdict
@@ -72,7 +73,19 @@ def detect_repository_summary(
     canonical_root: str | Path, *, detected_at: datetime | None = None
 ) -> RepositorySummary:
     """Inspect only bounded safe files and map evidence to fixed catalog entries."""
-    files = ConfinedRepositoryFiles(str(canonical_root))
+    root = Path(canonical_root)
+    try:
+        root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            root_stat = os.fstat(root_fd)
+            root_identity = (root_stat.st_dev, root_stat.st_ino)
+        finally:
+            os.close(root_fd)
+    except OSError as error:
+        raise RepositoryFileError(
+            "repository_unavailable", "The registered repository is unavailable."
+        ) from error
+    files = ConfinedRepositoryFiles(str(root), root_identity)
     listing = files.list_files(
         max_results=MAX_FILE_COUNT,
         ignored_directories=frozenset(directory.lower() for directory in IGNORED_DIRECTORIES),
