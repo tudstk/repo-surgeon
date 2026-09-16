@@ -273,6 +273,97 @@ const CitedSource = ({ citation }: { citation: SearchCitation }) => {
   );
 };
 
+function ProposedDiff() {
+  return (
+    <div className="proposed-diff">
+      <div className="file-heading" id="diff">
+        <strong>
+          <Glyph>▤</Glyph> &nbsp; auth/session.py
+        </strong>
+        <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
+      </div>
+      <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
+      <div className="diff-code" aria-label="Proposed code diff">
+        <div className="code-line">
+          <span>48&nbsp;&nbsp; 48</span>
+          <code>def __init__(self, ttl_seconds: int = 3600) -&gt; None:</code>
+        </div>
+        <div className="code-line">
+          <span>49&nbsp;&nbsp; 49</span>
+          <code> self._ttl = ttl_seconds</code>
+        </div>
+        <div className="code-line removed">
+          <span>50&nbsp;&nbsp; −</span>
+          <code> self._sessions = {'{}'}</code>
+        </div>
+        <div className="code-line added">
+          <span>50&nbsp;&nbsp; +</span>
+          <code> self._store = TokenStore(default_ttl=ttl_seconds)</code>
+        </div>
+        <div className="code-line">
+          <span>51&nbsp;&nbsp; 51</span>
+          <code> self._lock = threading.RLock()</code>
+        </div>
+        <div className="code-line removed">
+          <span>52&nbsp;&nbsp; −</span>
+          <code>def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
+        </div>
+        <div className="code-line added">
+          <span>52&nbsp;&nbsp; +</span>
+          <code>async def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
+        </div>
+        <div className="code-line removed">
+          <span>53&nbsp;&nbsp; −</span>
+          <code> return self._sessions.get(token)</code>
+        </div>
+        <div className="code-line added">
+          <span>53&nbsp;&nbsp; +</span>
+          <code> return await self._store.lookup(token)</code>
+        </div>
+        <div className="code-line">
+          <span>54&nbsp;&nbsp; 54</span>
+          <code>def invalidate(self, token: str) -&gt; bool:</code>
+        </div>
+        <div className="code-line removed">
+          <span>55&nbsp;&nbsp; −</span>
+          <code> return self._sessions.pop(token, None) is not None</code>
+        </div>
+        <div className="code-line added">
+          <span>55&nbsp;&nbsp; +</span>
+          <code> return self._store.revoke(token)</code>
+        </div>
+      </div>
+      <div className="test-result">
+        <span className="test-dot" aria-hidden="true" />{' '}
+        <strong>
+          Sandbox Tests: 14 passing <Glyph>→</Glyph> 14 passing
+        </strong>
+        <span>0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem: 64MB &nbsp; EXIT: 0</span>
+      </div>
+      <div className="approval-panel">
+        <p className="approval-status">
+          <Glyph>⚠</Glyph> WRITE PENDING - proposal has NOT touched local repository disk. &nbsp;{' '}
+          <small>REV 1 · SHA256: 4f8e...9a21</small>
+        </p>
+        <div className="approval-actions">
+          <button type="button" disabled>
+            <Glyph>ⓧ</Glyph> Reject
+          </button>
+          <button type="button" disabled>
+            <Glyph>☷</Glyph> Request Changes
+          </button>
+          <button type="button" disabled>
+            <Glyph>↥</Glyph> Apply to Branch <strong>fix/session-token-store</strong>
+          </button>
+          <button type="button" className="approve-button" disabled>
+            <Glyph>⚙</Glyph> Approve &amp; Open PR
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Bounded effects and the four-pane workspace are intentionally orchestrated here.
 // skipcq: JS-0067, JS-R1005, JS-0415
 export default function Home() {
@@ -761,98 +852,7 @@ export default function Home() {
               +7 −5 &nbsp; <b>SPLIT</b> &nbsp; UNIFIED
             </span>
           </div>
-          {selectedCitation ? (
-            <CitedSource citation={selectedCitation} />
-          ) : (
-            <div className="proposed-diff">
-              <div className="file-heading" id="diff">
-                <strong>
-                  <Glyph>▤</Glyph> &nbsp; auth/session.py
-                </strong>
-                <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
-              </div>
-              <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
-              <div className="diff-code" aria-label="Proposed code diff">
-                <div className="code-line">
-                  <span>48&nbsp;&nbsp; 48</span>
-                  <code>def __init__(self, ttl_seconds: int = 3600) -&gt; None:</code>
-                </div>
-                <div className="code-line">
-                  <span>49&nbsp;&nbsp; 49</span>
-                  <code> self._ttl = ttl_seconds</code>
-                </div>
-                <div className="code-line removed">
-                  <span>50&nbsp;&nbsp; −</span>
-                  <code> self._sessions = {'{}'}</code>
-                </div>
-                <div className="code-line added">
-                  <span>50&nbsp;&nbsp; +</span>
-                  <code> self._store = TokenStore(default_ttl=ttl_seconds)</code>
-                </div>
-                <div className="code-line">
-                  <span>51&nbsp;&nbsp; 51</span>
-                  <code> self._lock = threading.RLock()</code>
-                </div>
-                <div className="code-line removed">
-                  <span>52&nbsp;&nbsp; −</span>
-                  <code>def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
-                </div>
-                <div className="code-line added">
-                  <span>52&nbsp;&nbsp; +</span>
-                  <code>async def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
-                </div>
-                <div className="code-line removed">
-                  <span>53&nbsp;&nbsp; −</span>
-                  <code> return self._sessions.get(token)</code>
-                </div>
-                <div className="code-line added">
-                  <span>53&nbsp;&nbsp; +</span>
-                  <code> return await self._store.lookup(token)</code>
-                </div>
-                <div className="code-line">
-                  <span>54&nbsp;&nbsp; 54</span>
-                  <code>def invalidate(self, token: str) -&gt; bool:</code>
-                </div>
-                <div className="code-line removed">
-                  <span>55&nbsp;&nbsp; −</span>
-                  <code> return self._sessions.pop(token, None) is not None</code>
-                </div>
-                <div className="code-line added">
-                  <span>55&nbsp;&nbsp; +</span>
-                  <code> return self._store.revoke(token)</code>
-                </div>
-              </div>
-              <div className="test-result">
-                <span className="test-dot" aria-hidden="true" />{' '}
-                <strong>
-                  Sandbox Tests: 14 passing <Glyph>→</Glyph> 14 passing
-                </strong>
-                <span>
-                  0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem: 64MB &nbsp; EXIT: 0
-                </span>
-              </div>
-              <div className="approval-panel">
-                <p className="approval-status">
-                  <Glyph>⚠</Glyph> WRITE PENDING - proposal has NOT touched local repository disk.
-                  &nbsp; <small>REV 1 · SHA256: 4f8e...9a21</small>
-                </p>
-                <div className="approval-actions">
-                  <button type="button" disabled>
-                    <Glyph>ⓧ</Glyph> Reject
-                  </button>
-                  <button type="button" disabled>
-                    <Glyph>☷</Glyph> Request Changes
-                  </button>
-                  <button type="button" disabled>
-                    <Glyph>↥</Glyph> Apply to Branch <strong>fix/session-token-store</strong>
-                  </button>
-                  <button type="button" className="approve-button" disabled>
-                    <Glyph>⚙</Glyph> Approve &amp; Open PR
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          {selectedCitation ? <CitedSource citation={selectedCitation} /> : <ProposedDiff />}
         </section>
       </div>
       <h1 className="sr-only">Understand the code. Keep people in control.</h1>
