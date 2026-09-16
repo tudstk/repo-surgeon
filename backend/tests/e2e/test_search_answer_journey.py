@@ -26,11 +26,13 @@ class MemoryRepositoryStore:
     async def get_by_canonical_root(self, canonical_root: str) -> Repository | None:
         return self.repository if canonical_root == self.repository.canonical_root else None
 
-    async def add_local(self, root: ResolvedLocalRepositoryRoot) -> Repository:
+    @staticmethod
+    async def add_local(root: ResolvedLocalRepositoryRoot) -> Repository:
         raise AssertionError("test store does not register repositories")
 
+    @staticmethod
     async def bind_legacy_identity(
-        self, repository_id: UUID, root: ResolvedLocalRepositoryRoot
+        repository_id: UUID, root: ResolvedLocalRepositoryRoot
     ) -> Repository:
         raise AssertionError("test store does not bind repository identities")
 

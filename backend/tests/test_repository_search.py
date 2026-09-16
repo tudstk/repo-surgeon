@@ -56,7 +56,8 @@ class RecordingRunner:
             raise response
         return response
 
-    def cancel(self) -> None:
+    @staticmethod
+    def cancel() -> None:
         return None
 
 
@@ -181,6 +182,7 @@ def test_query_and_glob_are_fixed_arguments_not_shell_syntax(tmp_path: Path) -> 
     file_argv, _, _ = runner.calls[0]
     search_argv, _, _ = runner.calls[1]
     assert "--glob=*.py" in file_argv
+    assert "--no-ignore-parent" in file_argv
     assert "--fixed-strings" in search_argv
     assert search_argv[search_argv.index("--") + 1] == "--hidden $(touch PWNED)"
     assert not (tmp_path / "PWNED").exists()
@@ -427,8 +429,6 @@ def test_search_code_input_is_strict_and_forbids_unknown_arguments() -> None:
 
 @pytest.mark.anyio
 async def test_mcp_search_code_is_typed_bounded_and_repository_scoped(tmp_path: Path) -> None:
-    from repo_surgeon.mcp.search_tools import McpSearchTools
-
     repository_id = uuid4()
     (tmp_path / "safe.py").write_text("needle one\nneedle two\n")
     repository = Repository(repository_id, RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
@@ -451,8 +451,6 @@ async def test_mcp_search_code_is_typed_bounded_and_repository_scoped(tmp_path: 
 
 @pytest.mark.anyio
 async def test_cancelled_search_releases_admission_for_the_next_search(tmp_path: Path) -> None:
-    from repo_surgeon.mcp.search_tools import McpSearchTools
-
     class BlockingAdapter:
         def __init__(self) -> None:
             self.started = Event()
@@ -478,8 +476,8 @@ async def test_cancelled_search_releases_admission_for_the_next_search(tmp_path:
             self.cancelled.set()
 
     class FastAdapter:
+        @staticmethod
         def search(
-            self,
             canonical_root: str,
             search_request: SearchRequest,
             expected_root_identity: tuple[int, int] | None = None,
@@ -492,7 +490,8 @@ async def test_cancelled_search_releases_admission_for_the_next_search(tmp_path:
                 truncated=False,
             )
 
-        def cancel(self) -> None:
+        @staticmethod
+        def cancel() -> None:
             return None
 
     repository_id = uuid4()

@@ -14,6 +14,7 @@ No model API key is required.
 
 - Python 3.14.x and [uv](https://docs.astral.sh/uv/) 0.12.9.
 - Node.js 22.22.2 or newer in the 22.x line and pnpm 10.8.x. The supported ranges are in [frontend/package.json](frontend/package.json).
+- ripgrep 14.1 or newer for bounded repository search.
 - curl for health checks.
 - Docker Engine and Docker Compose only when starting local PostgreSQL.
 

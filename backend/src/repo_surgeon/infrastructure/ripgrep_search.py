@@ -277,6 +277,7 @@ class RipgrepSearchAdapter:
             "-0",
             "--color=never",
             "--hidden",
+            "--no-ignore-parent",
         ]
         # Older ripgrep releases only apply ignore files inside a Git worktree.
         # Pass the repository's root ignore file explicitly so temporary or
@@ -380,7 +381,7 @@ class RipgrepSearchAdapter:
             candidate_search_argv[candidate_search_argv.index("--max-count") + 1] = str(
                 remaining + 1
             )
-            candidate_search = tuple((*candidate_search_argv, "--", request.query, candidate))
+            candidate_search = (*candidate_search_argv, "--", request.query, candidate)
             completed = self._run(candidate_search, root, deadline)
             if completed.returncode not in (0, 1):
                 raise SearchError("search_failed", "Repository search failed.")

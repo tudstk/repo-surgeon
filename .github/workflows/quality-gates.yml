@@ -34,6 +34,12 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
 
+      - name: Install ripgrep runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+          rg --version
+
       - name: Install locked dependencies
         run: uv sync --locked
 
