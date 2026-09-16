@@ -301,13 +301,9 @@ export default function Home() {
         }
         setSelectedRepositoryId((current) => current ?? data[0]?.id ?? null);
       })
-      .catch(
-        // skipcq: JS-0045
-        () => {
-          // skipcq: JS-0045
-          setRepositories([]);
-        },
-      );
+      .catch(() => {
+        setRepositories([]);
+      });
     return () => controller.abort();
   }, []);
 
@@ -316,7 +312,7 @@ export default function Home() {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
     if (!selectedRepositoryId) {
       setRepositorySummary(null);
-      return;
+      return undefined;
     }
     setRepositorySummary(null);
     const controller = new AbortController();
@@ -346,13 +342,9 @@ export default function Home() {
           truncated: data.truncated,
         });
       })
-      // skipcq: JS-0045
-      .catch(
-        // skipcq: JS-0045
-        () => {
-          if (requestActive) setRepositorySummary(null);
-        },
-      );
+      .catch(() => {
+        if (requestActive) setRepositorySummary(null);
+      });
     return () => {
       requestActive = false;
       controller.abort();
@@ -363,7 +355,7 @@ export default function Home() {
     if (!selectedRepositoryId) {
       setSearchActivity(initialSearchActivity);
       setSelectedCitation(null);
-      return;
+      return undefined;
     }
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
     const controller = new AbortController();
@@ -426,21 +418,16 @@ export default function Home() {
           citations,
         });
       })
-      // skipcq: JS-0045
-      .catch(
-        // skipcq: JS-0045
-        (error: unknown) => {
-          // skipcq: JS-0045
-          if (requestActive) {
-            setSearchActivity({
-              ...initialSearchActivity,
-              phase: 'error',
-              summary: 'Searching for SessionManager',
-              errorCode: error instanceof Error ? error.message : 'search_failed',
-            });
-          }
-        },
-      );
+      .catch((error: unknown) => {
+        if (requestActive) {
+          setSearchActivity({
+            ...initialSearchActivity,
+            phase: 'error',
+            summary: 'Searching for SessionManager',
+            errorCode: error instanceof Error ? error.message : 'search_failed',
+          });
+        }
+      });
     return () => {
       requestActive = false;
       controller.abort();
@@ -774,11 +761,10 @@ export default function Home() {
               +7 −5 &nbsp; <b>SPLIT</b> &nbsp; UNIFIED
             </span>
           </div>
-          {/* skipcq: JS-0415 */}
-          {selectedCitation /* skipcq: JS-0415 */ ? (
+          {selectedCitation ? (
             <CitedSource citation={selectedCitation} />
           ) : (
-            <>
+            <div className="proposed-diff">
               <div className="file-heading" id="diff">
                 <strong>
                   <Glyph>▤</Glyph> &nbsp; auth/session.py
@@ -865,7 +851,7 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-            </>
+            </div>
           )}
         </section>
       </div>
