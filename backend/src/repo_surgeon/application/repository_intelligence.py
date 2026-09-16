@@ -107,11 +107,12 @@ def detect_repository_summary(
 
     language, confidence = _select_language(language_scores)
     framework, command, detection = _detect_tests(readable_entries, text_by_path)
+    readable_file_count = len(readable_entries)
     return RepositorySummary(
         language=language,
         language_confidence=confidence,
-        file_count=len(entries),
-        total_bytes=sum(entry.size_bytes for entry in entries),
+        file_count=readable_file_count,
+        total_bytes=sum(entry.size_bytes for entry in readable_entries),
         approximate_lines=approximate_lines,
         test_framework=framework,
         test_command=command,

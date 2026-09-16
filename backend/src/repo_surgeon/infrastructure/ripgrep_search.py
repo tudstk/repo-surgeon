@@ -85,7 +85,12 @@ class SubprocessSearchRunner:
     def run(
         self, argv: tuple[str, ...], cwd: Path, timeout_seconds: float
     ) -> CompletedSearchProcess:
-        cwd_fd = os.open(cwd, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        cwd_fd = os.open(
+            cwd,
+            os.O_RDONLY
+            | getattr(os, "O_DIRECTORY", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+        )
         try:
             process = subprocess.Popen(
                 argv,
