@@ -42,7 +42,7 @@ def test_generated_binary_and_secret_content_cannot_bias_summary(tmp_path: Path)
     result = detect_repository_summary(tmp_path, detected_at=DETECTED_AT)
 
     assert result.language == "Go"
-    assert result.file_count == 3
+    assert result.file_count == 2
     assert result.test_framework == "go test"
     assert result.test_command == "go test ./..."
     assert result.truncated

@@ -45,6 +45,23 @@ def _policy_read_worker(
         connection.close()
 
 
+def _policy_read_many_worker(
+    root: str, candidates: tuple[str, ...], connection: multiprocessing.connection.Connection
+) -> None:
+    results: list[tuple[str, str, str] | tuple[str, str]] = []
+    try:
+        for candidate in candidates:
+            try:
+                ConfinedRepositoryFiles(root).read_file(candidate, 1, 1)
+            except RepositoryFileError as error:
+                results.append((candidate, "error", error.code, error.detail))
+            else:
+                results.append((candidate, "ok"))
+        connection.send(results)
+    finally:
+        connection.close()
+
+
 class SearchProcessTimeout(Exception):
     """The child process was killed and reaped after its deadline."""
 
@@ -94,8 +111,12 @@ class SubprocessSearchRunner:
         try:
             process = subprocess.Popen(
                 argv,
-                cwd=f"/dev/fd/{cwd_fd}",
                 pass_fds=(cwd_fd,),
+                # macOS does not accept /dev/fd/<fd> as a subprocess cwd.
+                # Change directory from the already validated descriptor in
+                # the child so root replacement cannot affect the boundary.
+                cwd=None,
+                preexec_fn=lambda: os.fchdir(cwd_fd),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
@@ -267,13 +288,16 @@ class RipgrepSearchAdapter:
                 candidates.append(candidate)
             except UnicodeDecodeError, SearchError:
                 skipped_files += 1
+        policy_results = self._check_candidate_policies(root, tuple(candidates), deadline)
         searchable: list[str] = []
         for candidate in candidates:
             self._raise_if_cancelled()
             self._raise_if_deadline_exceeded(deadline)
             try:
                 files.path_type(candidate)
-                self._check_candidate_policy(root, candidate, deadline)
+                policy_error = policy_results.get(candidate)
+                if policy_error is not None:
+                    raise RepositoryFileError(policy_error[0], policy_error[1])
             except RepositoryFileError as error:
                 if error.code in {"binary_file", "file_too_large", "file_not_found"}:
                     skipped_files += 1
@@ -410,6 +434,48 @@ class RipgrepSearchAdapter:
             result = parent.recv()
             if result[0] == "error":
                 raise RepositoryFileError(result[1], result[2])
+        finally:
+            with self._state_lock:
+                if self._policy_process is policy_worker:
+                    self._policy_process = None
+            parent.close()
+            if policy_worker.is_alive():
+                policy_worker.terminate()
+            policy_worker.join()
+
+    def _check_candidate_policies(
+        self, root: Path, candidates: tuple[str, ...], deadline: float
+    ) -> dict[str, tuple[str, str]]:
+        self._raise_if_cancelled()
+        if not candidates:
+            return {}
+        parent, child = multiprocessing.Pipe(duplex=False)
+        policy_worker = multiprocessing.Process(
+            target=_policy_read_many_worker,
+            args=(str(root), candidates, child),
+        )
+        policy_worker.start()
+        child.close()
+        with self._state_lock:
+            self._policy_process = policy_worker
+            cancelled = self._cancelled.is_set()
+        if cancelled and policy_worker.is_alive():
+            policy_worker.terminate()
+        try:
+            policy_worker.join(max(0, deadline - time.monotonic()))
+            if policy_worker.is_alive():
+                policy_worker.terminate()
+                policy_worker.join()
+                raise SearchError("search_timed_out", "Repository search timed out.")
+            self._raise_if_cancelled()
+            if not parent.poll():
+                raise SearchError("search_failed", "Repository search failed.")
+            results = parent.recv()
+            return {
+                result[0]: (result[2], result[3])
+                for result in results
+                if len(result) == 4 and result[1] == "error"
+            }
         finally:
             with self._state_lock:
                 if self._policy_process is policy_worker:

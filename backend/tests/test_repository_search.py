@@ -34,7 +34,7 @@ from repo_surgeon.infrastructure.ripgrep_search import (
     SubprocessSearchRunner,
 )
 from repo_surgeon.mcp.file_tools import ToolErrorOutput
-from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
+from repo_surgeon.mcp.search_tools import McpSearchTools, SearchCodeInput, SearchCodeOutput
 
 
 class RecordingRunner:
