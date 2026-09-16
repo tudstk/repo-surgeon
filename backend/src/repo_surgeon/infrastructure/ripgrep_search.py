@@ -580,6 +580,18 @@ class RipgrepSearchAdapter:
 
     @staticmethod
     def _parse_match(raw_line: bytes) -> SearchMatch | None:
+        event = RipgrepSearchAdapter._decode_match_event(raw_line)
+        if event.get("type") != "match":
+            return None
+        data = RipgrepSearchAdapter._match_data(event)
+        path, text, line, submatches = RipgrepSearchAdapter._match_fields(data)
+        first_submatch = submatches[0] if submatches else None
+        start = first_submatch.get("start") if first_submatch else None
+        column = start + 1 if isinstance(start, int) else None
+        return SearchMatch(path=path, line=line, column=column, text=text.rstrip("\r\n"))
+
+    @staticmethod
+    def _decode_match_event(raw_line: bytes) -> dict[str, object]:
         try:
             event = json.loads(raw_line)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -588,11 +600,19 @@ class RipgrepSearchAdapter:
             ) from error
         if not isinstance(event, dict):
             raise SearchError("search_failed", "Repository search returned invalid data.")
-        if event.get("type") != "match":
-            return None
+        return event
+
+    @staticmethod
+    def _match_data(event: dict[str, object]) -> dict[str, object]:
         data = event.get("data")
         if not isinstance(data, dict):
             raise SearchError("search_failed", "Repository search returned invalid data.")
+        return data
+
+    @staticmethod
+    def _match_fields(
+        data: dict[str, object],
+    ) -> tuple[str, str, int, list[dict[str, object]]]:
         path_data = data.get("path")
         lines_data = data.get("lines")
         if not isinstance(path_data, dict) or not isinstance(lines_data, dict):
@@ -611,10 +631,7 @@ class RipgrepSearchAdapter:
             or any(not isinstance(submatch, dict) for submatch in submatches)
         ):
             raise SearchError("search_failed", "Repository search returned invalid data.")
-        first_submatch = submatches[0] if submatches else None
-        start = first_submatch.get("start") if isinstance(first_submatch, dict) else None
-        column = start + 1 if isinstance(start, int) else None
-        return SearchMatch(path=path, line=line, column=column, text=text.rstrip("\r\n"))
+        return path, text, line, submatches
 
     @staticmethod
     def _with_context(
