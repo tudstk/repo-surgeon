@@ -224,6 +224,7 @@ export default function Home() {
     return () => controller.abort();
   }, []);
 
+  /* eslint-disable react-hooks/set-state-in-effect -- reset stale view state when selection changes. */
   useEffect(() => {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
     if (!selectedRepositoryId) {
@@ -296,11 +297,14 @@ export default function Home() {
     })
       .then((response) => {
         if (!response.ok) {
-          return response.json().catch(() => null).then((payload) => {
-            const code =
-              payload && typeof payload.code === 'string' ? payload.code : 'search_failed';
-            throw new Error(code);
-          });
+          return response
+            .json()
+            .catch(() => null)
+            .then((payload) => {
+              const code =
+                payload && typeof payload.code === 'string' ? payload.code : 'search_failed';
+              throw new Error(code);
+            });
         }
         return response.json() as Promise<{
           match_count: number;
@@ -361,6 +365,8 @@ export default function Home() {
       controller.abort();
     };
   }, [selectedRepositoryId]);
+
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     const grid = gridRef.current;
@@ -606,9 +612,8 @@ export default function Home() {
             </div>
             {selectedCitation && (
               <p className="agent-message finding">
-                Found bounded evidence in{' '}
-                <a href="#work-panel">{selectedCitation.label}</a>. See the read-only evidence
-                in the staging chamber on the right <Glyph>→</Glyph>
+                Found bounded evidence in <a href="#work-panel">{selectedCitation.label}</a>. See
+                the read-only evidence in the staging chamber on the right <Glyph>→</Glyph>
               </p>
             )}
             <div className="pending-trace">
@@ -698,8 +703,15 @@ export default function Home() {
               </div>
               <div className="hunk-label">Exact search evidence · read-only</div>
               <div className="diff-code">
-                {[...selectedCitation.before, { number: selectedCitation.matchLine, text: selectedCitation.text }, ...selectedCitation.after].map((line) => (
-                  <div className={`code-line ${line.number === selectedCitation.matchLine ? 'cited-line' : ''}`} key={`${line.number}-${line.text}`}>
+                {[
+                  ...selectedCitation.before,
+                  { number: selectedCitation.matchLine, text: selectedCitation.text },
+                  ...selectedCitation.after,
+                ].map((line) => (
+                  <div
+                    className={`code-line ${line.number === selectedCitation.matchLine ? 'cited-line' : ''}`}
+                    key={`${line.number}-${line.text}`}
+                  >
                     <span>{line.number}</span>
                     <code>{line.text}</code>
                   </div>

@@ -12,7 +12,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from repo_surgeon.application.repositories import RepositoryStore
+from repo_surgeon.application.repositories import RepositoryLookup
 from repo_surgeon.application.repository_files import (
     MAX_FILE_COUNT,
     MAX_LINE_COUNT,
@@ -236,7 +236,7 @@ class McpFileTools:
     environment cannot refresh its lockfile from PyPI.
     """
 
-    def __init__(self, store: RepositoryStore) -> None:
+    def __init__(self, store: RepositoryLookup) -> None:
         self._store = store
         from repo_surgeon.mcp.search_tools import McpSearchTools
 
@@ -336,7 +336,7 @@ def tool_audit_summary(
     }
 
 
-def create_mcp_server(store: RepositoryStore) -> Any:
+def create_mcp_server(store: RepositoryLookup) -> Any:
     """Build the in-process FastMCP server without starting any transport.
 
     The handlers are intentionally thin: FastMCP performs protocol framing while

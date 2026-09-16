@@ -76,7 +76,7 @@ class RepositorySummaryResponse(BaseModel):
     truncated: bool
 
     @classmethod
-    def from_summary(cls, summary: RepositorySummary) -> "RepositorySummaryResponse":
+    def from_summary(cls, summary: RepositorySummary) -> RepositorySummaryResponse:
         return cls(
             language=summary.language,
             language_confidence=summary.language_confidence,

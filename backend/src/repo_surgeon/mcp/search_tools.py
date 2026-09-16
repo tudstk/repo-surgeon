@@ -14,7 +14,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from repo_surgeon.application.repositories import RepositoryStore
+from repo_surgeon.application.repositories import RepositoryLookup
 from repo_surgeon.application.repository_search import (
     DEFAULT_CONTEXT_LINES,
     DEFAULT_MAX_MATCHES,
@@ -61,7 +61,7 @@ class SearchCodeArguments(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def clamp_limits(self) -> SearchCodeInput:
+    def clamp_limits(self) -> SearchCodeArguments:
         self.max_matches = min(self.max_matches, MAX_MATCHES)
         self.context_before = min(self.context_before, MAX_CONTEXT_LINES)
         self.context_after = min(self.context_after, MAX_CONTEXT_LINES)
@@ -248,7 +248,7 @@ class McpSearchTools:
 
     def __init__(
         self,
-        store: RepositoryStore,
+        store: RepositoryLookup,
         adapter_factory: Callable[[], SearchAdapter] = RipgrepSearchAdapter,
     ) -> None:
         self._store = store

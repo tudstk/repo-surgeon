@@ -109,6 +109,6 @@ The workflow runs on pushes and pull requests. It uses `backend/uv.lock` and `fr
 
 ## Learn the foundation
 
-The registration and summary request paths are `curl or frontend -> Uvicorn ASGI server -> FastAPI router -> application use case -> SQLAlchemy adapter -> PostgreSQL`, with bounded repository inspection performed from the registered local root. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
+The registration, summary, and search request paths are `curl or frontend -> Uvicorn ASGI server -> FastAPI router -> application use case -> confined repository inspection`, with registration and repository identity persistence continuing through the SQLAlchemy adapter to PostgreSQL. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
 
-Future work continues with HTTP/API integration, Git context, test sandboxing, proposals, approvals, patch application, audits, and pull requests. The current provider boundary, bounded agent loop, and in-process safe repository tools are not yet connected to the frontend workflow.
+Future work continues with persisted API events, Git context, test sandboxing, proposals, approvals, patch application, audits, and pull requests. The provider boundary, bounded agent loop, and in-process MCP tools are not yet connected to the frontend workflow.

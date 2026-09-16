@@ -38,6 +38,7 @@ from repo_surgeon.mcp.file_tools import (
 )
 from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
+
 @dataclass(frozen=True, slots=True)
 class AgentLimits:
     """Hard limits applied by application code, regardless of provider behavior."""
@@ -289,9 +290,7 @@ def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
             start = int(match.group("start"))
             end = int(match.group("end") or start)
             supported = any(
-                citation.path == path
-                and start >= citation.start_line
-                and end <= citation.end_line
+                citation.path == path and start >= citation.start_line and end <= citation.end_line
                 for citation in allowed
             )
             if not supported:

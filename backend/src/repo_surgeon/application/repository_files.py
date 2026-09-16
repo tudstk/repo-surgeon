@@ -197,9 +197,7 @@ class ConfinedRepositoryFiles:
             end_line=selected_end,
             lines=lines,
             truncated=(
-                len(all_lines) > selected_end
-                if end_line is None
-                else requested_end > selected_end
+                len(all_lines) > selected_end if end_line is None else requested_end > selected_end
             ),
             content_sha256=hashlib.sha256(payload).hexdigest(),
         )

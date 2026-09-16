@@ -48,7 +48,7 @@ def _policy_read_worker(
 def _policy_read_many_worker(
     root: str, candidates: tuple[str, ...], connection: multiprocessing.connection.Connection
 ) -> None:
-    results: list[tuple[str, str, str] | tuple[str, str]] = []
+    results: list[tuple[str, str, str, str] | tuple[str, str]] = []
     try:
         for candidate in candidates:
             try:
@@ -88,8 +88,6 @@ class SearchProcessRunner(Protocol):
 
     def cancel(self) -> None: ...
 
-    def reset(self) -> None: ...
-
 
 class SubprocessSearchRunner:
     """Run one argv without a shell and bound time and captured bytes."""
@@ -104,9 +102,7 @@ class SubprocessSearchRunner:
     ) -> CompletedSearchProcess:
         cwd_fd = os.open(
             cwd,
-            os.O_RDONLY
-            | getattr(os, "O_DIRECTORY", 0)
-            | getattr(os, "O_NOFOLLOW", 0),
+            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
         )
         try:
             process = subprocess.Popen(
@@ -278,11 +274,11 @@ class RipgrepSearchAdapter:
 
         candidates: list[str] = []
         skipped_files = 0
-        for item in discovered.stdout.split(b"\0"):
-            if not item:
+        for raw_candidate in discovered.stdout.split(b"\0"):
+            if not raw_candidate:
                 continue
             try:
-                candidate = self._normalize_search_path(item.decode("utf-8"))
+                candidate = self._normalize_search_path(raw_candidate.decode("utf-8"))
                 if candidate == ".git" or candidate.startswith(".git/"):
                     continue
                 candidates.append(candidate)
@@ -306,7 +302,9 @@ class RipgrepSearchAdapter:
             self._raise_if_deadline_exceeded(deadline)
             searchable.append(candidate)
             if len(searchable) > MAX_SEARCH_FILES:
-                raise SearchError("search_output_limit", "Repository search exceeded its file limit.")
+                raise SearchError(
+                    "search_output_limit", "Repository search exceeded its file limit."
+                )
 
         if not searchable:
             result = SearchResult(
@@ -405,10 +403,7 @@ class RipgrepSearchAdapter:
         if time.monotonic() >= deadline:
             raise SearchError("search_timed_out", "Repository search timed out.")
 
-    def _check_candidate_policy(
-        self,
-        root: Path, candidate: str, deadline: float
-    ) -> None:
+    def _check_candidate_policy(self, root: Path, candidate: str, deadline: float) -> None:
         self._raise_if_cancelled()
         parent, child = multiprocessing.Pipe(duplex=False)
         policy_worker = multiprocessing.Process(

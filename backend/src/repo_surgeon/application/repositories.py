@@ -22,7 +22,14 @@ class LocalRepositoryRootResolver(Protocol):
         """Return the canonical worktree root or raise a registration error."""
 
 
-class RepositoryStore(Protocol):
+class RepositoryLookup(Protocol):
+    """Read-only repository lookup needed by repository-bound tools."""
+
+    async def get(self, repository_id: UUID) -> Repository | None:
+        """Find one repository by its durable identifier."""
+
+
+class RepositoryStore(RepositoryLookup, Protocol):
     """Persistence boundary for repository identities."""
 
     async def get_by_canonical_root(self, canonical_root: str) -> Repository | None:
@@ -30,9 +37,6 @@ class RepositoryStore(Protocol):
 
     async def add_local(self, canonical_root: str) -> Repository:
         """Persist and return a newly registered local repository."""
-
-    async def get(self, repository_id: UUID) -> Repository | None:
-        """Find one repository by its durable identifier."""
 
     async def list_all(self) -> tuple[Repository, ...]:
         """Return all registered repositories in stable order."""

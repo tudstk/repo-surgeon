@@ -46,26 +46,26 @@ export function RepositorySummaryCard({ summary }: { summary: RepositorySummary 
       </div>
       {summary ? (
         <dl>
-        <div>
-          <dt>Language</dt>
-          <dd>
-            {summary.language ?? 'Not detected'}
-            {summary.language && <small>{summary.languageConfidence}</small>}
-          </dd>
-        </div>
-        <div>
-          <dt>Size</dt>
-          <dd>
-            {summary.fileCount} files · {formatLines(summary.approximateLines)}
-          </dd>
-        </div>
-        <div>
-          <dt>Tests</dt>
-          <dd title={summary.testCommand ?? undefined}>
-            {summary.testFramework ?? 'Not detected'}
-            {summary.testFramework && <span className="status-dot" aria-hidden="true" />}
-          </dd>
-        </div>
+          <div>
+            <dt>Language</dt>
+            <dd>
+              {summary.language ?? 'Not detected'}
+              {summary.language && <small>{summary.languageConfidence}</small>}
+            </dd>
+          </div>
+          <div>
+            <dt>Size</dt>
+            <dd>
+              {summary.fileCount} files · {formatLines(summary.approximateLines)}
+            </dd>
+          </div>
+          <div>
+            <dt>Tests</dt>
+            <dd title={summary.testCommand ?? undefined}>
+              {summary.testFramework ?? 'Not detected'}
+              {summary.testFramework && <span className="status-dot" aria-hidden="true" />}
+            </dd>
+          </div>
         </dl>
       ) : (
         <p className="summary-unavailable">Repository summary unavailable.</p>
