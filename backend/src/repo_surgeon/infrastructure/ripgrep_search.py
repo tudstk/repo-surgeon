@@ -6,7 +6,9 @@ import json
 import multiprocessing
 import os
 import selectors
+import stat
 import subprocess
+import sys
 import time
 from contextlib import suppress
 from dataclasses import dataclass, replace
@@ -33,10 +35,13 @@ PROCESS_OUTPUT_LIMIT = 2 * 1024 * 1024
 
 
 def _policy_read_worker(
-    root: str, candidate: str, connection: multiprocessing.connection.Connection
+    root: str,
+    root_identity: tuple[int, int],
+    candidate: str,
+    connection: multiprocessing.connection.Connection,
 ) -> None:
     try:
-        ConfinedRepositoryFiles(root).read_file(candidate, 1, 1)
+        ConfinedRepositoryFiles(root, root_identity).read_file(candidate, 1, 1)
     except RepositoryFileError as error:
         connection.send(("error", error.code, error.detail))
     else:
@@ -46,13 +51,16 @@ def _policy_read_worker(
 
 
 def _policy_read_many_worker(
-    root: str, candidates: tuple[str, ...], connection: multiprocessing.connection.Connection
+    root: str,
+    root_identity: tuple[int, int],
+    candidates: tuple[str, ...],
+    connection: multiprocessing.connection.Connection,
 ) -> None:
     results: list[tuple[str, str, str, str] | tuple[str, str]] = []
     try:
         for candidate in candidates:
             try:
-                ConfinedRepositoryFiles(root).read_file(candidate, 1, 1)
+                ConfinedRepositoryFiles(root, root_identity).read_file(candidate, 1, 1)
             except RepositoryFileError as error:
                 results.append((candidate, "error", error.code, error.detail))
             else:
@@ -100,26 +108,24 @@ class SubprocessSearchRunner:
     def run(
         self, argv: tuple[str, ...], cwd: Path, timeout_seconds: float
     ) -> CompletedSearchProcess:
-        cwd_fd = os.open(
-            cwd,
-            os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0),
+        cwd_stat = os.stat(cwd, follow_symlinks=False)
+        if not stat.S_ISDIR(cwd_stat.st_mode):
+            raise NotADirectoryError(cwd)
+        process = subprocess.Popen(
+            (
+                sys.executable,
+                "-m",
+                "repo_surgeon.infrastructure.confined_process",
+                str(cwd),
+                str(cwd_stat.st_dev),
+                str(cwd_stat.st_ino),
+                *argv,
+            ),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            shell=False,
         )
-        try:
-            process = subprocess.Popen(
-                argv,
-                pass_fds=(cwd_fd,),
-                # macOS does not accept /dev/fd/<fd> as a subprocess cwd.
-                # Change directory from the already validated descriptor in
-                # the child so root replacement cannot affect the boundary.
-                cwd=None,
-                preexec_fn=lambda: os.fchdir(cwd_fd),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                shell=False,
-            )
-        finally:
-            os.close(cwd_fd)
         with self._process_lock:
             self._process = process
             cancelled = self._cancelled.is_set()
@@ -222,12 +228,22 @@ class RipgrepSearchAdapter:
         root = Path(canonical_root)
         deadline = started + request.timeout_ms / 1_000
         try:
-            files = ConfinedRepositoryFiles(str(root))
+            root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                root_stat = os.fstat(root_fd)
+                root_identity = (root_stat.st_dev, root_stat.st_ino)
+            finally:
+                os.close(root_fd)
+            files = ConfinedRepositoryFiles(str(root), root_identity)
             root = files.canonical_root
             normalized_path = self._normalize_search_path(request.path)
             files.path_type(normalized_path)
         except RepositoryFileError as error:
             raise SearchError(error.code, error.detail) from error
+        except OSError as error:
+            raise SearchError(
+                "repository_unavailable", "The registered repository is unavailable."
+            ) from error
         self._validate_glob(request.glob)
         self._raise_if_deadline_exceeded(deadline)
 
@@ -284,7 +300,9 @@ class RipgrepSearchAdapter:
                 candidates.append(candidate)
             except UnicodeDecodeError, SearchError:
                 skipped_files += 1
-        policy_results = self._check_candidate_policies(root, tuple(candidates), deadline)
+        policy_results = self._check_candidate_policies(
+            root, files.root_identity, tuple(candidates), deadline
+        )
         searchable: list[str] = []
         for candidate in candidates:
             self._raise_if_cancelled()
@@ -403,12 +421,18 @@ class RipgrepSearchAdapter:
         if time.monotonic() >= deadline:
             raise SearchError("search_timed_out", "Repository search timed out.")
 
-    def _check_candidate_policy(self, root: Path, candidate: str, deadline: float) -> None:
+    def _check_candidate_policy(
+        self,
+        root: Path,
+        root_identity: tuple[int, int],
+        candidate: str,
+        deadline: float,
+    ) -> None:
         self._raise_if_cancelled()
         parent, child = multiprocessing.Pipe(duplex=False)
         policy_worker = multiprocessing.Process(
             target=_policy_read_worker,
-            args=(str(root), candidate, child),
+            args=(str(root), root_identity, candidate, child),
         )
         policy_worker.start()
         child.close()
@@ -439,7 +463,11 @@ class RipgrepSearchAdapter:
             policy_worker.join()
 
     def _check_candidate_policies(
-        self, root: Path, candidates: tuple[str, ...], deadline: float
+        self,
+        root: Path,
+        root_identity: tuple[int, int],
+        candidates: tuple[str, ...],
+        deadline: float,
     ) -> dict[str, tuple[str, str]]:
         self._raise_if_cancelled()
         if not candidates:
@@ -447,7 +475,7 @@ class RipgrepSearchAdapter:
         parent, child = multiprocessing.Pipe(duplex=False)
         policy_worker = multiprocessing.Process(
             target=_policy_read_many_worker,
-            args=(str(root), candidates, child),
+            args=(str(root), root_identity, candidates, child),
         )
         policy_worker.start()
         child.close()

@@ -17,6 +17,10 @@ import pytest
 from pydantic import ValidationError
 from support import MemoryRepositoryStore
 
+from repo_surgeon.application.repository_files import (
+    ConfinedRepositoryFiles,
+    RepositoryFileError,
+)
 from repo_surgeon.application.repository_search import (
     MAX_CONTEXT_LINES,
     MAX_MATCHES,
@@ -278,6 +282,50 @@ def test_subprocess_runner_cancellation_reaps_the_active_child(tmp_path: Path) -
     assert completed.returncode != 0
     with pytest.raises(ProcessLookupError):
         os.kill(pid, 0)
+
+
+def test_subprocess_runner_rejects_a_symlinked_working_directory(tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    linked_root = tmp_path / "linked-root"
+    linked_root.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(OSError):
+        SubprocessSearchRunner().run((sys.executable, "-c", " pass"), linked_root, 1)
+
+
+def test_search_rejects_replaced_registered_root(tmp_path: Path) -> None:
+    root = tmp_path / "repository"
+    root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("needle outside\n")
+    root.rmdir()
+    root.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(SearchError) as raised:
+        RipgrepSearchAdapter().search(root, request())
+
+    assert raised.value.code == "repository_unavailable"
+
+
+def test_file_reader_rejects_a_root_identity_change(tmp_path: Path) -> None:
+    root = tmp_path / "repository"
+    root.mkdir()
+    (root / "safe.txt").write_text("safe\n")
+    identity = (root.stat().st_dev, root.stat().st_ino)
+    files = ConfinedRepositoryFiles(str(root), identity)
+    replacement = tmp_path / "replacement"
+    replacement.mkdir()
+    (replacement / "safe.txt").write_text("outside\n")
+    (root / "safe.txt").unlink()
+    root.rmdir()
+    replacement.rename(root)
+
+    with pytest.raises(RepositoryFileError) as raised:
+        files.read_file("safe.txt")
+
+    assert raised.value.code == "repository_unavailable"
 
 
 def test_symlink_directory_cannot_escape_repository(tmp_path: Path) -> None:

@@ -86,7 +86,9 @@ class FileRead:
 class ConfinedRepositoryFiles:
     """Read only regular files that resolve under one canonical repository root."""
 
-    def __init__(self, canonical_root: str) -> None:
+    def __init__(
+        self, canonical_root: str, expected_root_identity: tuple[int, int] | None = None
+    ) -> None:
         try:
             self._root = Path(canonical_root).resolve(strict=True)
         except OSError as error:
@@ -97,10 +99,28 @@ class ConfinedRepositoryFiles:
             raise RepositoryFileError(
                 "repository_unavailable", "The registered repository is unavailable."
             )
+        try:
+            root_stat = self._root.stat(follow_symlinks=False)
+        except OSError as error:
+            raise RepositoryFileError(
+                "repository_unavailable", "The registered repository is unavailable."
+            ) from error
+        if expected_root_identity is not None and (
+            root_stat.st_dev,
+            root_stat.st_ino,
+        ) != expected_root_identity:
+            raise RepositoryFileError(
+                "repository_unavailable", "The registered repository changed."
+            )
+        self._root_identity = (root_stat.st_dev, root_stat.st_ino)
 
     @property
     def canonical_root(self) -> Path:
         return self._root
+
+    @property
+    def root_identity(self) -> tuple[int, int]:
+        return self._root_identity
 
     def list_files(
         self,
@@ -214,6 +234,11 @@ class ConfinedRepositoryFiles:
         root_fd = os.open(self._root, directory_flags)
         descriptors = [root_fd]
         try:
+            root_stat = os.fstat(root_fd)
+            if (root_stat.st_dev, root_stat.st_ino) != self._root_identity:
+                raise RepositoryFileError(
+                    "repository_unavailable", "The registered repository changed."
+                )
             parts = relative.parts
             for component in parts[:-1]:
                 descriptors.append(os.open(component, directory_flags, dir_fd=descriptors[-1]))
