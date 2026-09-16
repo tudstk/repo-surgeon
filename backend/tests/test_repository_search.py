@@ -172,9 +172,7 @@ def test_search_skips_candidate_that_becomes_a_directory(tmp_path: Path) -> None
     adapter = RipgrepSearchAdapter(runner=runner)
     original_path_type = ConfinedRepositoryFiles.path_type
 
-    def directory_after_policy(
-        files: ConfinedRepositoryFiles, path: str
-    ) -> str:
+    def directory_after_policy(files: ConfinedRepositoryFiles, path: str) -> str:
         if path == "safe.txt":
             return "directory"
         return original_path_type(files, path)
