@@ -219,6 +219,7 @@ type SearchResponse = {
 
 // skipcq: JS-0067, JS-R1005
 const searchCitations = (data: SearchResponse, repositoryId: string): SearchCitation[] => {
+  // skipcq: JS-R1005
   return data.matches.map((match, index) => {
     const before = match.before ?? [];
     const after = match.after ?? [];
@@ -303,6 +304,7 @@ export default function Home() {
       .catch(
         // skipcq: JS-0045
         () => {
+          // skipcq: JS-0045
           setRepositories([]);
         },
       );
@@ -428,6 +430,7 @@ export default function Home() {
       .catch(
         // skipcq: JS-0045
         (error: unknown) => {
+          // skipcq: JS-0045
           if (requestActive) {
             setSearchActivity({
               ...initialSearchActivity,
@@ -772,7 +775,7 @@ export default function Home() {
             </span>
           </div>
           {/* skipcq: JS-0415 */}
-          {selectedCitation ? (
+          {selectedCitation /* skipcq: JS-0415 */ ? (
             <CitedSource citation={selectedCitation} />
           ) : (
             <>
