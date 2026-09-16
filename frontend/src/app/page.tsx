@@ -203,6 +203,73 @@ function PaneSeparator({
   );
 }
 
+type SearchResponse = {
+  match_count: number;
+  matches: Array<{
+    path: string;
+    line: number;
+    text: string;
+    before: Array<{ number: number; text: string }>;
+    after: Array<{ number: number; text: string }>;
+  }>;
+  truncated: boolean;
+  duration_ms: number;
+  skipped_files: number;
+};
+
+function searchCitations(data: SearchResponse, repositoryId: string): SearchCitation[] {
+  return data.matches.map((match, index) => {
+    const before = match.before ?? [];
+    const after = match.after ?? [];
+    const startLine = before[0]?.number ?? match.line;
+    const endLine = after.at(-1)?.number ?? match.line;
+    return {
+      id: `search-${repositoryId}-${index}`,
+      path: match.path,
+      matchLine: match.line,
+      startLine,
+      endLine,
+      label: `${match.path}:${startLine}${endLine === startLine ? '' : `-${endLine}`}`,
+      text: match.text,
+      before,
+      after,
+    };
+  });
+}
+
+function CitedSource({ citation }: { citation: SearchCitation }) {
+  const lines = [
+    ...citation.before,
+    { number: citation.matchLine, text: citation.text },
+    ...citation.after,
+  ];
+  return (
+    <div className="citation-code-view" aria-label="Cited source">
+      <div className="file-heading">
+        <strong>
+          <Glyph>‹›</Glyph> &nbsp; {citation.path}
+        </strong>
+        <span>
+          L{citation.startLine}
+          {citation.endLine !== citation.startLine && `-${citation.endLine}`}
+        </span>
+      </div>
+      <div className="hunk-label">Exact search evidence · read-only</div>
+      <div className="diff-code">
+        {lines.map((line) => (
+          <div
+            className={`code-line ${line.number === citation.matchLine ? 'cited-line' : ''}`}
+            key={`${line.number}-${line.text}`}
+          >
+            <span>{line.number}</span>
+            <code>{line.text}</code>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Bounded effects and the four-pane workspace are intentionally orchestrated here.
 // skipcq: JS-0067, JS-R1005, JS-0415
 export default function Home() {
@@ -231,7 +298,9 @@ export default function Home() {
         }
         setSelectedRepositoryId((current) => current ?? data[0]?.id ?? null);
       })
-      .catch(() => setRepositories([]));
+      .catch(() => {
+        setRepositories([]);
+      });
     return () => controller.abort();
   }, []);
 
@@ -332,25 +401,9 @@ export default function Home() {
           skipped_files: number;
         }>;
       })
-      .then((data) => {
+      .then((data: SearchResponse) => {
         if (!requestActive) return;
-        const citations = data.matches.map((match, index) => {
-          const before = match.before ?? [];
-          const after = match.after ?? [];
-          const startLine = before[0]?.number ?? match.line;
-          const endLine = after.at(-1)?.number ?? match.line;
-          return {
-            id: `search-${selectedRepositoryId}-${index}`,
-            path: match.path,
-            matchLine: match.line,
-            startLine,
-            endLine,
-            label: `${match.path}:${startLine}${endLine === startLine ? '' : `-${endLine}`}`,
-            text: match.text,
-            before,
-            after,
-          };
-        });
+        const citations = searchCitations(data, selectedRepositoryId);
         setSearchActivity({
           tool: 'search_code',
           phase: 'completed',
@@ -365,13 +418,14 @@ export default function Home() {
       })
       // skipcq: JS-0045
       .catch((error: unknown) => {
-        if (!requestActive) return;
-        setSearchActivity({
-          ...initialSearchActivity,
-          phase: 'error',
-          summary: 'Searching for SessionManager',
-          errorCode: error instanceof Error ? error.message : 'search_failed',
-        });
+        if (requestActive) {
+          setSearchActivity({
+            ...initialSearchActivity,
+            phase: 'error',
+            summary: 'Searching for SessionManager',
+            errorCode: error instanceof Error ? error.message : 'search_failed',
+          });
+        }
       });
     return () => {
       requestActive = false;
@@ -433,6 +487,9 @@ export default function Home() {
       }
     : undefined;
 
+  // The workspace shell deliberately keeps the four-pane layout together so
+  // its responsive grid and pane separators remain one accessible landmark.
+  // skipcq: JS-0415
   return (
     <main className="workspace-shell">
       <header className="global-bar">
@@ -703,34 +760,7 @@ export default function Home() {
             </span>
           </div>
           {selectedCitation ? (
-            <div className="citation-code-view" aria-label="Cited source">
-              <div className="file-heading">
-                <strong>
-                  <Glyph>‹›</Glyph> &nbsp; {selectedCitation.path}
-                </strong>
-                <span>
-                  L{selectedCitation.startLine}
-                  {selectedCitation.endLine !== selectedCitation.startLine &&
-                    `-${selectedCitation.endLine}`}
-                </span>
-              </div>
-              <div className="hunk-label">Exact search evidence · read-only</div>
-              <div className="diff-code">
-                {[
-                  ...selectedCitation.before,
-                  { number: selectedCitation.matchLine, text: selectedCitation.text },
-                  ...selectedCitation.after,
-                ].map((line) => (
-                  <div
-                    className={`code-line ${line.number === selectedCitation.matchLine ? 'cited-line' : ''}`}
-                    key={`${line.number}-${line.text}`}
-                  >
-                    <span>{line.number}</span>
-                    <code>{line.text}</code>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <CitedSource citation={selectedCitation} />
           ) : (
             <>
               <div className="file-heading" id="diff">
