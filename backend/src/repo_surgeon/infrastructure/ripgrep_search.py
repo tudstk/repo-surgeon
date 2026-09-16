@@ -334,7 +334,9 @@ class RipgrepSearchAdapter:
             self._raise_if_cancelled()
             self._raise_if_deadline_exceeded(deadline)
             try:
-                files.path_type(candidate)
+                if files.path_type(candidate) != "file":
+                    skipped_files += 1
+                    continue
                 policy_error = policy_results.get(candidate)
                 if policy_error is not None:
                     raise RepositoryFileError(policy_error[0], policy_error[1])

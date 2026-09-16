@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Event
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -161,6 +162,28 @@ def test_search_rejects_too_many_candidates_before_policy_validation(tmp_path: P
         RipgrepSearchAdapter(runner=runner).search(tmp_path, request())
 
     assert raised.value.code == "search_output_limit"
+    assert len(runner.calls) == 1
+
+
+def test_search_skips_candidate_that_becomes_a_directory(tmp_path: Path) -> None:
+    candidate = tmp_path / "safe.txt"
+    candidate.write_text("needle\n")
+    runner = RecordingRunner([CompletedSearchProcess(0, b"safe.txt\0", b"")])
+    adapter = RipgrepSearchAdapter(runner=runner)
+    original_path_type = ConfinedRepositoryFiles.path_type
+
+    def directory_after_policy(
+        files: ConfinedRepositoryFiles, path: str
+    ) -> str:
+        if path == "safe.txt":
+            return "directory"
+        return original_path_type(files, path)
+
+    with patch.object(ConfinedRepositoryFiles, "path_type", directory_after_policy):
+        result = adapter.search(tmp_path, request())
+
+    assert result.matches == ()
+    assert result.skipped_files == 1
     assert len(runner.calls) == 1
 
 
