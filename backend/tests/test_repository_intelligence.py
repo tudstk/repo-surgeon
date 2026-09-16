@@ -176,6 +176,21 @@ def test_nested_csproj_does_not_define_repository_test_framework(tmp_path: Path)
     assert result.test_detection == "not_found"
 
 
+def test_nested_go_and_rust_manifests_do_not_define_test_framework(
+    tmp_path: Path,
+) -> None:
+    examples = tmp_path / "examples"
+    examples.mkdir()
+    (examples / "go.mod").write_text("module example.test/demo\n")
+    (examples / "Cargo.toml").write_text('[package]\nname = "demo"\n')
+
+    result = detect_repository_summary(tmp_path, detected_at=DETECTED_AT)
+
+    assert result.test_framework is None
+    assert result.test_command is None
+    assert result.test_detection == "not_found"
+
+
 def test_scan_marks_partial_when_file_or_line_caps_are_reached(tmp_path: Path) -> None:
     for index in range(205):
         (tmp_path / f"module_{index:03}.py").write_text("line\n")

@@ -203,7 +203,6 @@ def test_query_and_glob_are_fixed_arguments_not_shell_syntax(tmp_path: Path) -> 
     file_argv, _, _ = runner.calls[0]
     search_argv, _, _ = runner.calls[1]
     assert "--glob=*.py" in file_argv
-    assert "--no-ignore-parent" in file_argv
     assert "--fixed-strings" in search_argv
     assert search_argv[search_argv.index("--") + 1] == "--hidden $(touch PWNED)"
     assert not (tmp_path / "PWNED").exists()

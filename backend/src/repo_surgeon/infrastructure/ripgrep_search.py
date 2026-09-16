@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path, PurePath, PureWindowsPath
 from queue import Empty
 from threading import Event, Lock
-from typing import Protocol, cast
+from typing import Protocol
 
 from repo_surgeon.application.repository_files import (
     ConfinedRepositoryFiles,
@@ -277,7 +277,6 @@ class RipgrepSearchAdapter:
             "-0",
             "--color=never",
             "--hidden",
-            "--no-ignore-parent",
         ]
         # Older ripgrep releases only apply ignore files inside a Git worktree.
         # Pass the repository's root ignore file explicitly so temporary or
@@ -603,7 +602,7 @@ class RipgrepSearchAdapter:
                 raise SearchError("search_failed", "Repository search returned invalid data.")
             column = None
             if submatches and isinstance(submatches[0].get("start"), int):
-                column = cast(int, submatches[0]["start"]) + 1
+                column = submatches[0]["start"] + 1
             matches.append(
                 SearchMatch(path=path, line=line, column=column, text=text.rstrip("\r\n"))
             )

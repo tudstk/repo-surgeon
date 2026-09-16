@@ -230,9 +230,9 @@ def _detect_tests(
                 ):
                     unsupported = True
 
-    if "go.mod" in paths:
+    if "go.mod" in root_paths:
         detections.append(("go test", "go test ./..."))
-    if "cargo.toml" in paths:
+    if "cargo.toml" in root_paths:
         detections.append(("cargo test", "cargo test"))
     if any(path.endswith(".csproj") for path in root_paths):
         detections.append(("dotnet test", "dotnet test"))
