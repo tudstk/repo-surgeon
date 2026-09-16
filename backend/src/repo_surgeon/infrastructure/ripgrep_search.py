@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import multiprocessing
 import os
+from queue import Empty
 import selectors
 import stat
 import subprocess
@@ -54,20 +55,18 @@ def _policy_read_many_worker(
     root: str,
     root_identity: tuple[int, int],
     candidates: tuple[str, ...],
-    connection: multiprocessing.connection.Connection,
+    result_queue: multiprocessing.queues.Queue[tuple[str, str, str, str] | tuple[str, str]],
 ) -> None:
-    results: list[tuple[str, str, str, str] | tuple[str, str]] = []
     try:
         for candidate in candidates:
             try:
                 ConfinedRepositoryFiles(root, root_identity).read_file(candidate, 1, 1)
             except RepositoryFileError as error:
-                results.append((candidate, "error", error.code, error.detail))
+                result_queue.put((candidate, "error", error.code, error.detail))
             else:
-                results.append((candidate, "ok"))
-        connection.send(results)
+                result_queue.put((candidate, "ok"))
     finally:
-        connection.close()
+        result_queue.close()
 
 
 class SearchProcessTimeout(Exception):
@@ -472,28 +471,34 @@ class RipgrepSearchAdapter:
         self._raise_if_cancelled()
         if not candidates:
             return {}
-        parent, child = multiprocessing.Pipe(duplex=False)
+        result_queue: multiprocessing.queues.Queue[
+            tuple[str, str, str, str] | tuple[str, str]
+        ] = multiprocessing.Queue(maxsize=len(candidates))
         policy_worker = multiprocessing.Process(
             target=_policy_read_many_worker,
-            args=(str(root), root_identity, candidates, child),
+            args=(str(root), root_identity, candidates, result_queue),
         )
         policy_worker.start()
-        child.close()
         with self._state_lock:
             self._policy_process = policy_worker
             cancelled = self._cancelled.is_set()
         if cancelled and policy_worker.is_alive():
             policy_worker.terminate()
         try:
-            policy_worker.join(max(0, deadline - time.monotonic()))
-            if policy_worker.is_alive():
-                policy_worker.terminate()
-                policy_worker.join()
-                raise SearchError("search_timed_out", "Repository search timed out.")
-            self._raise_if_cancelled()
-            if not parent.poll():
+            results: list[tuple[str, str, str, str] | tuple[str, str]] = []
+            while True:
+                self._raise_if_cancelled()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise SearchError("search_timed_out", "Repository search timed out.")
+                try:
+                    results.append(result_queue.get(timeout=min(0.01, remaining)))
+                except Empty:
+                    if policy_worker.is_alive():
+                        continue
+                    break
+            if policy_worker.exitcode != 0 or len(results) != len(candidates):
                 raise SearchError("search_failed", "Repository search failed.")
-            results = parent.recv()
             return {
                 result[0]: (result[2], result[3])
                 for result in results
@@ -503,7 +508,8 @@ class RipgrepSearchAdapter:
             with self._state_lock:
                 if self._policy_process is policy_worker:
                     self._policy_process = None
-            parent.close()
+            result_queue.close()
+            result_queue.join_thread()
             if policy_worker.is_alive():
                 policy_worker.terminate()
             policy_worker.join()

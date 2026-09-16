@@ -370,6 +370,17 @@ def test_oversized_matching_file_is_reported_as_skipped(tmp_path: Path) -> None:
     assert result.skipped_files == 1
 
 
+def test_many_rejected_files_do_not_deadlock_policy_validation(tmp_path: Path) -> None:
+    for index in range(200):
+        (tmp_path / f"large-{index:03}.txt").write_bytes(b"needle\n" + b"x" * (64 * 1024))
+
+    result = RipgrepSearchAdapter().search(tmp_path, request(timeout_ms=2_000))
+
+    assert result.matches == ()
+    assert result.match_count == 0
+    assert result.skipped_files == 200
+
+
 def test_non_searchable_files_are_counted_before_search(tmp_path: Path) -> None:
     (tmp_path / "large.txt").write_bytes(b"x" * (64 * 1024 + 1))
     (tmp_path / "binary.dat").write_bytes(b"x\x00y")
