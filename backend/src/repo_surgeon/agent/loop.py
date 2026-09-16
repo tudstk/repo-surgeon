@@ -269,26 +269,44 @@ def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
         return match.group(0) if supported else "[unsupported citation]"
 
     validated = allowed_reference.sub(validate, answer) if allowed_reference else answer
-    fallback_reference = re.compile(
-        r"\[(?P<path>(?!https?://|www\.)(?:[^\]\n]|\](?!\s*(?:and\s*)?\[))+):"
-        r"(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?\]"
+    fallback_shape = re.compile(
+        r"(?P<path>[^\s\n]+):(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?\Z"
     )
-    def reject_unsupported(match: re.Match[str]) -> str:
-        if validated.rfind("[", 0, match.start()) > validated.rfind("]", 0, match.start()):
-            return match.group(0)
-        path = match.group("path")
-        start = int(match.group("start"))
-        end = int(match.group("end") or start)
-        if any(
-            citation.path == path
-            and start >= citation.start_line
-            and end <= citation.end_line
-            for citation in allowed
-        ):
-            return match.group(0)
-        return "[unsupported citation]"
+    replacements: list[tuple[int, int, str]] = []
+    openings: list[int] = []
+    for index, character in enumerate(validated):
+        if character == "[":
+            openings.append(index)
+        elif character == "]" and openings:
+            opening = openings.pop()
+            if openings:
+                continue
+            candidate = validated[opening + 1 : index]
+            match = fallback_shape.fullmatch(candidate)
+            if match is None or candidate.startswith(("http://", "https://", "www.")):
+                continue
+            path = match.group("path")
+            start = int(match.group("start"))
+            end = int(match.group("end") or start)
+            supported = any(
+                citation.path == path
+                and start >= citation.start_line
+                and end <= citation.end_line
+                for citation in allowed
+            )
+            if not supported:
+                replacements.append((opening, index + 1, "[unsupported citation]"))
 
-    return fallback_reference.sub(reject_unsupported, validated)
+    if not replacements:
+        return validated
+    output: list[str] = []
+    cursor = 0
+    for start, end, replacement in replacements:
+        output.append(validated[cursor:start])
+        output.append(replacement)
+        cursor = end
+    output.append(validated[cursor:])
+    return "".join(output)
 
 
 async def run_turn(
