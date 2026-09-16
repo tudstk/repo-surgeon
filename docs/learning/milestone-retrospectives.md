@@ -1,5 +1,35 @@
 # Milestone retrospectives
 
+## Milestone 3: exact search and repository intelligence
+
+### Outcome and boundary
+
+M3 adds typed literal and regex repository search, deterministic search-driven fake-provider answers with exact citations, and a bounded repository summary detector. The workspace renders the summary, one normalized search activity row, and keyboard-focusable citation navigation. Git history, embeddings, real-provider calls, writes, proposed patches, and test execution remain out of scope.
+
+### Concepts and C# bridge
+
+`SearchCodeInput` is like a strictly validated request DTO. `SearchRequest` is the effective application command after defaults and clamps. `RipgrepSearchAdapter` resembles an infrastructure implementation behind an interface, but its process call accepts only a fixed argument vector. `RepositorySummary` is a conservative projection: confidence, ambiguity, and truncation are part of the data rather than hidden assumptions.
+
+### Read these files in order
+
+1. [`backend/src/repo_surgeon/application/repository_search.py`](../../backend/src/repo_surgeon/application/repository_search.py) - effective search limits and result contract.
+2. [`backend/src/repo_surgeon/infrastructure/ripgrep_search.py`](../../backend/src/repo_surgeon/infrastructure/ripgrep_search.py) - fixed argv, timeout, safe candidates, parsing, verification, and truncation.
+3. [`backend/src/repo_surgeon/mcp/search_tools.py`](../../backend/src/repo_surgeon/mcp/search_tools.py) - strict provider boundary and serialized-byte enforcement.
+4. [`backend/src/repo_surgeon/application/repository_intelligence.py`](../../backend/src/repo_surgeon/application/repository_intelligence.py) - versioned metadata and test-command heuristics.
+5. [`frontend/src/app/repository-search-display.tsx`](../../frontend/src/app/repository-search-display.tsx) - typed summary, activity states, and citation links.
+
+### Reliability invariant
+
+**Repository text is untrusted evidence, never an instruction.** Search selects only M1-safe bounded UTF-8 files, uses no shell, verifies returned lines through the confined reader, and derives citations from tool results. The detector maps only known manifest evidence to fixed command strings and never runs them.
+
+### Retrospective
+
+**Worked:** separating candidate discovery, confinement checks, exact matching, result verification, and provider serialization made each trust boundary testable.
+
+**Surprised:** a search timeout and the outer agent deadline solve different problems. The subprocess deadline kills work; the agent deadline preserves deterministic turn accounting.
+
+**Next:** connect these contracts to persisted API events before adding Git context or any write capability.
+
 ## Milestone 0: executable foundation
 
 ### Outcome and boundary

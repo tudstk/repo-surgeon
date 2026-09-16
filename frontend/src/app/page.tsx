@@ -3,18 +3,39 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import {
+  RepositorySummaryCard,
+  SearchActivityRow,
+  type RepositorySummary,
+  type SearchActivity,
+  type SearchCitation,
+} from './repository-search-display';
+
 const STACKED_LAYOUT_QUERY = '(max-width: 1024px)';
 
-const sessions = [
-  { name: 'payments-api', active: true },
-  { name: 'web-dashboard', active: false },
-] as const;
+type RegisteredRepository = {
+  id: string;
+  name: string;
+};
 
-const activity = [
-  { tool: 'search_code', detail: '"SessionManager"', result: '6 hits', time: '38ms' },
-  { tool: 'read_file', detail: 'auth/session.py:40–118', result: '78 LOC', time: '12ms' },
-  { tool: 'run_tests', detail: 'pytest tests/test_session.py', result: '14 pass', time: '2.4s' },
-] as const;
+// Module-scoped helpers are intentional in this client component.
+// skipcq: JS-0067
+function repositoryName(repository: RegisteredRepository | null) {
+  if (!repository) return 'No repository connected';
+  return repository.name;
+}
+
+const initialSearchActivity: SearchActivity = {
+  tool: 'search_code',
+  phase: 'idle',
+  summary: 'No repository selected',
+  matchCount: null,
+  durationMs: null,
+  truncated: false,
+  skippedFiles: 0,
+  errorCode: null,
+  citations: [],
+};
 
 const SEPARATOR_SIZE = 8;
 const DEFAULT_PANE_WIDTHS = [200, 260, 400, 556];
@@ -26,6 +47,7 @@ const PANE_LABELS = [
   'Work panel',
 ];
 
+// skipcq: JS-0067
 function paneMinimums(viewportWidth: number) {
   if (viewportWidth <= 1100) return [150, 210, 270, 340];
   if (viewportWidth <= 1284) return [160, 220, 280, 360];
@@ -34,6 +56,7 @@ function paneMinimums(viewportWidth: number) {
   return [180, 220, 320, 400];
 }
 
+// skipcq: JS-0067, JS-R1005
 function fitPaneWidths(widths: number[], availableWidth: number, minimums: number[]) {
   const availablePanes = Math.max(
     minimums.reduce((sum, width) => sum + width, 0),
@@ -56,14 +79,17 @@ function fitPaneWidths(widths: number[], availableWidth: number, minimums: numbe
   );
 }
 
+// skipcq: JS-0067
 function StatusDot({ tone = 'green' }: { tone?: 'green' | 'violet' }) {
   return <span className={`status-dot status-dot-${tone}`} aria-hidden="true" />;
 }
 
+// skipcq: JS-0067
 function Glyph({ children }: { children: React.ReactNode }) {
   return <span aria-hidden="true">{children}</span>;
 }
 
+// skipcq: JS-0067
 function PanelHeading({ number, children }: { number: number; children: React.ReactNode }) {
   return (
     <div className="panel-heading">
@@ -73,6 +99,7 @@ function PanelHeading({ number, children }: { number: number; children: React.Re
   );
 }
 
+// skipcq: JS-0067
 function useStackedLayout() {
   const [isStacked, setIsStacked] = useState(false);
 
@@ -88,6 +115,7 @@ function useStackedLayout() {
   return isStacked;
 }
 
+// skipcq: JS-0067
 function PaneSeparator({
   index,
   widths,
@@ -175,11 +203,329 @@ function PaneSeparator({
   );
 }
 
+type SearchResponse = {
+  match_count: number;
+  matches: Array<{
+    path: string;
+    line: number;
+    text: string;
+    before: Array<{ number: number; text: string }>;
+    after: Array<{ number: number; text: string }>;
+  }>;
+  truncated: boolean;
+  duration_ms: number;
+  skipped_files: number;
+};
+
+// skipcq: JS-0067, JS-R1005
+const searchCitations = (data: SearchResponse, repositoryId: string): SearchCitation[] => {
+  // skipcq: JS-R1005
+  return data.matches.map((match, index) => {
+    const before = match.before ?? [];
+    const after = match.after ?? [];
+    const startLine = before[0]?.number ?? match.line;
+    const endLine = after.at(-1)?.number ?? match.line;
+    return {
+      id: `search-${repositoryId}-${index}`,
+      path: match.path,
+      matchLine: match.line,
+      startLine,
+      endLine,
+      label: `${match.path}:${startLine}${endLine === startLine ? '' : `-${endLine}`}`,
+      text: match.text,
+      before,
+      after,
+    };
+  });
+};
+
+// skipcq: JS-0067, JS-0415
+const CitedSource = ({ citation }: { citation: SearchCitation }) => {
+  const lines = [
+    ...citation.before,
+    { number: citation.matchLine, text: citation.text },
+    ...citation.after,
+  ];
+  return (
+    <div className="citation-code-view" aria-label="Cited source">
+      <div className="file-heading">
+        <strong>
+          <Glyph>‹›</Glyph> &nbsp; {citation.path}
+        </strong>
+        <span>
+          L{citation.startLine}
+          {citation.endLine !== citation.startLine && `-${citation.endLine}`}
+        </span>
+      </div>
+      <div className="hunk-label">Exact search evidence · read-only</div>
+      <div className="diff-code">
+        {lines.map((line) => (
+          <div
+            className={`code-line ${line.number === citation.matchLine ? 'cited-line' : ''}`}
+            key={`${line.number}-${line.text}`}
+          >
+            <span>{line.number}</span>
+            <code>{line.text}</code>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+function ProposedDiff() {
+  return (
+    <div className="proposed-diff">
+      <div className="file-heading" id="diff">
+        <strong>
+          <Glyph>▤</Glyph> &nbsp; auth/session.py
+        </strong>
+        <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
+      </div>
+      <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
+      <div className="diff-code" aria-label="Proposed code diff">
+        <div className="code-line">
+          <span>48&nbsp;&nbsp; 48</span>
+          <code>def __init__(self, ttl_seconds: int = 3600) -&gt; None:</code>
+        </div>
+        <div className="code-line">
+          <span>49&nbsp;&nbsp; 49</span>
+          <code> self._ttl = ttl_seconds</code>
+        </div>
+        <div className="code-line removed">
+          <span>50&nbsp;&nbsp; −</span>
+          <code> self._sessions = {'{}'}</code>
+        </div>
+        <div className="code-line added">
+          <span>50&nbsp;&nbsp; +</span>
+          <code> self._store = TokenStore(default_ttl=ttl_seconds)</code>
+        </div>
+        <div className="code-line">
+          <span>51&nbsp;&nbsp; 51</span>
+          <code> self._lock = threading.RLock()</code>
+        </div>
+        <div className="code-line removed">
+          <span>52&nbsp;&nbsp; −</span>
+          <code>def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
+        </div>
+        <div className="code-line added">
+          <span>52&nbsp;&nbsp; +</span>
+          <code>async def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
+        </div>
+        <div className="code-line removed">
+          <span>53&nbsp;&nbsp; −</span>
+          <code> return self._sessions.get(token)</code>
+        </div>
+        <div className="code-line added">
+          <span>53&nbsp;&nbsp; +</span>
+          <code> return await self._store.lookup(token)</code>
+        </div>
+        <div className="code-line">
+          <span>54&nbsp;&nbsp; 54</span>
+          <code>def invalidate(self, token: str) -&gt; bool:</code>
+        </div>
+        <div className="code-line removed">
+          <span>55&nbsp;&nbsp; −</span>
+          <code> return self._sessions.pop(token, None) is not None</code>
+        </div>
+        <div className="code-line added">
+          <span>55&nbsp;&nbsp; +</span>
+          <code> return self._store.revoke(token)</code>
+        </div>
+      </div>
+      <div className="test-result">
+        <span className="test-dot" aria-hidden="true" />{' '}
+        <strong>
+          Sandbox Tests: 14 passing <Glyph>→</Glyph> 14 passing
+        </strong>
+        <span>0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem: 64MB &nbsp; EXIT: 0</span>
+      </div>
+      <div className="approval-panel">
+        <p className="approval-status">
+          <Glyph>⚠</Glyph> WRITE PENDING - proposal has NOT touched local repository disk. &nbsp;{' '}
+          <small>REV 1 · SHA256: 4f8e...9a21</small>
+        </p>
+        <div className="approval-actions">
+          <button type="button" disabled>
+            <Glyph>ⓧ</Glyph> Reject
+          </button>
+          <button type="button" disabled>
+            <Glyph>☷</Glyph> Request Changes
+          </button>
+          <button type="button" disabled>
+            <Glyph>↥</Glyph> Apply to Branch <strong>fix/session-token-store</strong>
+          </button>
+          <button type="button" className="approve-button" disabled>
+            <Glyph>⚙</Glyph> Approve &amp; Open PR
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Bounded effects and the four-pane workspace are intentionally orchestrated here.
+// skipcq: JS-0067, JS-R1005, JS-0415
 export default function Home() {
   const isStackedLayout = useStackedLayout();
   const gridRef = useRef<HTMLDivElement>(null);
   const [paneWidths, setPaneWidths] = useState<number[] | null>(null);
   const [paneMinimumBands, setPaneMinimumBands] = useState(DEFAULT_PANE_MINIMUMS);
+  const [selectedCitation, setSelectedCitation] = useState<SearchCitation | null>(null);
+  const [searchActivity, setSearchActivity] = useState<SearchActivity>(initialSearchActivity);
+  const [repositories, setRepositories] = useState<RegisteredRepository[]>([]);
+  const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
+  const [repositorySummary, setRepositorySummary] = useState<RepositorySummary | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+    fetch(`${apiBase}/repositories`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('repository list request failed');
+        return response.json() as Promise<RegisteredRepository[]>;
+      })
+      .then((data) => {
+        setRepositories(data);
+        if (data.length === 0) {
+          setSearchActivity(initialSearchActivity);
+        }
+        setSelectedRepositoryId((current) => current ?? data[0]?.id ?? null);
+      })
+      .catch(() => {
+        setRepositories([]);
+      });
+    return () => controller.abort();
+  }, []);
+
+  /* eslint-disable react-hooks/set-state-in-effect -- reset stale view state when selection changes. */
+  useEffect(() => {
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+    if (!selectedRepositoryId) {
+      setRepositorySummary(null);
+      return undefined;
+    }
+    setRepositorySummary(null);
+    const controller = new AbortController();
+    let requestActive = true;
+    fetch(`${apiBase}/repositories/${selectedRepositoryId}/summary`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error('summary request failed');
+        return response.json() as Promise<{
+          language: string | null;
+          language_confidence: RepositorySummary['languageConfidence'];
+          file_count: number;
+          approximate_lines: number | null;
+          test_framework: string | null;
+          test_command: string | null;
+          truncated: boolean;
+        }>;
+      })
+      .then((data) => {
+        if (!requestActive) return;
+        setRepositorySummary({
+          language: data.language,
+          languageConfidence: data.language_confidence,
+          fileCount: data.file_count,
+          approximateLines: data.approximate_lines,
+          testFramework: data.test_framework,
+          testCommand: data.test_command,
+          truncated: data.truncated,
+        });
+      })
+      .catch(() => {
+        if (requestActive) setRepositorySummary(null);
+      });
+    return () => {
+      requestActive = false;
+      controller.abort();
+    };
+  }, [selectedRepositoryId]);
+
+  useEffect(() => {
+    if (!selectedRepositoryId) {
+      setSearchActivity(initialSearchActivity);
+      setSelectedCitation(null);
+      return undefined;
+    }
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+    const controller = new AbortController();
+    let requestActive = true;
+    setSelectedCitation(null);
+    setSearchActivity({
+      ...initialSearchActivity,
+      phase: 'loading',
+      summary: 'Searching for SessionManager',
+    });
+    fetch(`${apiBase}/repositories/${selectedRepositoryId}/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        query: 'SessionManager',
+        mode: 'literal',
+        context_before: 2,
+        context_after: 2,
+        max_matches: 50,
+      }),
+    })
+      .then((response) => {
+        if (!response.ok) {
+          return response
+            .json()
+            .catch(() => null)
+            .then((payload) => {
+              const code =
+                payload && typeof payload.code === 'string' ? payload.code : 'search_failed';
+              throw new Error(code);
+            });
+        }
+        return response.json() as Promise<{
+          match_count: number;
+          matches: Array<{
+            path: string;
+            line: number;
+            text: string;
+            before: Array<{ number: number; text: string }>;
+            after: Array<{ number: number; text: string }>;
+          }>;
+          truncated: boolean;
+          duration_ms: number;
+          skipped_files: number;
+        }>;
+      })
+      .then((data: SearchResponse) => {
+        if (!requestActive) return;
+        const citations = searchCitations(data, selectedRepositoryId);
+        setSearchActivity({
+          tool: 'search_code',
+          phase: 'completed',
+          summary: 'Searching for SessionManager',
+          matchCount: data.match_count,
+          durationMs: data.duration_ms,
+          truncated: data.truncated,
+          skippedFiles: data.skipped_files,
+          errorCode: null,
+          citations,
+        });
+      })
+      .catch((error: unknown) => {
+        if (requestActive) {
+          setSearchActivity({
+            ...initialSearchActivity,
+            phase: 'error',
+            summary: 'Searching for SessionManager',
+            errorCode: error instanceof Error ? error.message : 'search_failed',
+          });
+        }
+      });
+    return () => {
+      requestActive = false;
+      controller.abort();
+    };
+  }, [selectedRepositoryId]);
+
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
     const grid = gridRef.current;
@@ -188,8 +534,12 @@ export default function Home() {
     const syncWidths = () => {
       const nextMinimums = paneMinimums(window.innerWidth);
       setPaneMinimumBands(nextMinimums);
+      if (isStackedLayout) {
+        setPaneWidths(null);
+        return;
+      }
       const availableWidth = grid.getBoundingClientRect().width;
-      if (!availableWidth || isStackedLayout) return;
+      if (!availableWidth) return;
       setPaneWidths((current) =>
         fitPaneWidths(current ?? DEFAULT_PANE_WIDTHS, availableWidth, nextMinimums),
       );
@@ -229,7 +579,11 @@ export default function Home() {
       }
     : undefined;
 
+  // The workspace shell deliberately keeps the four-pane layout together so
+  // its responsive grid and pane separators remain one accessible landmark.
+  // skipcq: JS-0415
   return (
+    // skipcq: JS-0415
     <main className="workspace-shell">
       <header className="global-bar">
         <div className="brand-lockup">
@@ -238,9 +592,6 @@ export default function Home() {
           </span>
           <span className="brand-name">Repo Surgeon</span>
           <span className="bar-divider" />
-          <button className="repo-switcher" type="button" aria-label="Switch repository" disabled>
-            <Glyph>▣</Glyph> &nbsp; acme/payments-api <Glyph>⌄</Glyph>
-          </button>
           <span className="branch-context">
             <Glyph>⑂</Glyph> &nbsp; main <b>3 behind</b> &nbsp;<Glyph>→</Glyph>&nbsp;{' '}
             <strong>fix/session-token-store</strong>
@@ -316,20 +667,26 @@ export default function Home() {
               CONNECTED REPOS <Glyph>☷</Glyph>
             </div>
             <div className="session-list" role="listbox" aria-label="Connected repositories">
-              {sessions.map((session) => (
-                <button
-                  className={`session-row ${session.active ? 'session-active' : ''}`}
-                  key={session.name}
-                  type="button"
-                  disabled
-                  aria-selected={session.active}
-                  role="option"
-                >
-                  <span aria-hidden="true">{session.active ? '☑' : '□'}</span>
-                  <span>{session.name}</span>
-                  {session.active && <StatusDot />}
-                </button>
-              ))}
+              {repositories.map((repository) => {
+                const active = repository.id === selectedRepositoryId;
+                return (
+                  <button
+                    className={`session-row ${active ? 'session-active' : ''}`}
+                    key={repository.id}
+                    type="button"
+                    aria-selected={active}
+                    role="option"
+                    onClick={() => setSelectedRepositoryId(repository.id)}
+                  >
+                    <span aria-hidden="true">{active ? '☑' : '□'}</span>
+                    <span>{repositoryName(repository)}</span>
+                    {active && <StatusDot />}
+                  </button>
+                );
+              })}
+              {repositories.length === 0 && (
+                <span className="empty-state">No repositories connected.</span>
+              )}
               <button className="connect-row" type="button" disabled>
                 <Glyph>＋</Glyph> Connect a repo...
               </button>
@@ -381,31 +738,7 @@ export default function Home() {
               </b>
             </div>
           </div>
-          <section className="repo-summary" aria-labelledby="repo-summary-title">
-            <h2 id="repo-summary-title">REPO SUMMARY</h2>
-            <dl>
-              <div>
-                <dt>Language</dt>
-                <dd>Python 3.11</dd>
-              </div>
-              <div>
-                <dt>Size</dt>
-                <dd>342 files · 28k LOC</dd>
-              </div>
-              <div>
-                <dt>Tests</dt>
-                <dd>
-                  pytest <StatusDot />
-                </dd>
-              </div>
-              <div>
-                <dt>Vector Index</dt>
-                <dd>
-                  pgvector <Glyph>✓</Glyph>
-                </dd>
-              </div>
-            </dl>
-          </section>
+          <RepositorySummaryCard summary={repositorySummary} />
         </aside>
         {!isStackedLayout && (
           <PaneSeparator
@@ -438,23 +771,14 @@ export default function Home() {
               verify tests before proposing it.
             </p>
             <div className="activity-list" aria-label="Agent activity">
-              {activity.map((item) => (
-                <div className="activity-row" key={item.tool}>
-                  <Glyph>▹</Glyph>
-                  <code>{item.tool}</code>
-                  <span className="activity-detail">{item.detail}</span>
-                  <strong>
-                    <Glyph>✓</Glyph> {item.result}
-                  </strong>
-                  <small>{item.time}</small>
-                </div>
-              ))}
+              <SearchActivityRow activity={searchActivity} onSelectCitation={setSelectedCitation} />
             </div>
-            <p className="agent-message finding">
-              Found the coupling in <a href="#diff">auth/session.py:52</a>. Drafted a patch and
-              verified test suite in Sandbox #89b2. See the diff in the staging chamber on the right{' '}
-              <Glyph>→</Glyph>
-            </p>
+            {selectedCitation && (
+              <p className="agent-message finding">
+                Found bounded evidence in <a href="#work-panel">{selectedCitation.label}</a>. See
+                the read-only evidence in the staging chamber on the right <Glyph>→</Glyph>
+              </p>
+            )}
             <div className="pending-trace">
               proposing patch revision 1, awaiting your approval...
             </div>
@@ -496,20 +820,26 @@ export default function Home() {
             setWidths={resizePanes}
           />
         )}
-        <section className="work-panel" aria-labelledby="work-panel-title">
+        <section className="work-panel" id="work-panel" aria-labelledby="work-panel-title">
           <h2 className="sr-only" id="work-panel-title">
             Work panel
           </h2>
           <div className="work-toolbar">
             <div className="work-tabs" role="tablist" aria-label="Staging views">
-              <button type="button" role="tab" aria-selected="false" disabled>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={selectedCitation !== null}
+                className={selectedCitation ? 'tab-selected' : undefined}
+                disabled
+              >
                 <Glyph>‹›</Glyph> Code
               </button>
               <button
                 type="button"
                 role="tab"
-                aria-selected="true"
-                className="tab-selected"
+                aria-selected={selectedCitation === null}
+                className={selectedCitation ? undefined : 'tab-selected'}
                 disabled
               >
                 <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
@@ -522,90 +852,7 @@ export default function Home() {
               +7 −5 &nbsp; <b>SPLIT</b> &nbsp; UNIFIED
             </span>
           </div>
-          <div className="file-heading" id="diff">
-            <strong>
-              <Glyph>▤</Glyph> &nbsp; auth/session.py
-            </strong>
-            <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
-          </div>
-          <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
-          <div className="diff-code" aria-label="Proposed code diff">
-            <div className="code-line">
-              <span>48&nbsp;&nbsp; 48</span>
-              <code>def __init__(self, ttl_seconds: int = 3600) -&gt; None:</code>
-            </div>
-            <div className="code-line">
-              <span>49&nbsp;&nbsp; 49</span>
-              <code> self._ttl = ttl_seconds</code>
-            </div>
-            <div className="code-line removed">
-              <span>50&nbsp;&nbsp; −</span>
-              <code> self._sessions = {'{}'}</code>
-            </div>
-            <div className="code-line added">
-              <span>50&nbsp;&nbsp; +</span>
-              <code> self._store = TokenStore(default_ttl=ttl_seconds)</code>
-            </div>
-            <div className="code-line">
-              <span>51&nbsp;&nbsp; 51</span>
-              <code> self._lock = threading.RLock()</code>
-            </div>
-            <div className="code-line removed">
-              <span>52&nbsp;&nbsp; −</span>
-              <code>def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
-            </div>
-            <div className="code-line added">
-              <span>52&nbsp;&nbsp; +</span>
-              <code>async def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
-            </div>
-            <div className="code-line removed">
-              <span>53&nbsp;&nbsp; −</span>
-              <code> return self._sessions.get(token)</code>
-            </div>
-            <div className="code-line added">
-              <span>53&nbsp;&nbsp; +</span>
-              <code> return await self._store.lookup(token)</code>
-            </div>
-            <div className="code-line">
-              <span>54&nbsp;&nbsp; 54</span>
-              <code>def invalidate(self, token: str) -&gt; bool:</code>
-            </div>
-            <div className="code-line removed">
-              <span>55&nbsp;&nbsp; −</span>
-              <code> return self._sessions.pop(token, None) is not None</code>
-            </div>
-            <div className="code-line added">
-              <span>55&nbsp;&nbsp; +</span>
-              <code> return self._store.revoke(token)</code>
-            </div>
-          </div>
-          <div className="test-result">
-            <span className="test-dot" aria-hidden="true" />{' '}
-            <strong>
-              Sandbox Tests: 14 passing <Glyph>→</Glyph> 14 passing
-            </strong>
-            <span>0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem: 64MB &nbsp; EXIT: 0</span>
-          </div>
-          <div className="approval-panel">
-            <p className="approval-status">
-              <Glyph>⚠</Glyph> WRITE PENDING - proposal has NOT touched local repository disk.
-              &nbsp; <small>REV 1 · SHA256: 4f8e...9a21</small>
-            </p>
-            <div className="approval-actions">
-              <button type="button" disabled>
-                <Glyph>ⓧ</Glyph> Reject
-              </button>
-              <button type="button" disabled>
-                <Glyph>☷</Glyph> Request Changes
-              </button>
-              <button type="button" disabled>
-                <Glyph>↥</Glyph> Apply to Branch <strong>fix/session-token-store</strong>
-              </button>
-              <button type="button" className="approve-button" disabled>
-                <Glyph>⚙</Glyph> Approve &amp; Open PR
-              </button>
-            </div>
-          </div>
+          {selectedCitation ? <CitedSource citation={selectedCitation} /> : <ProposedDiff />}
         </section>
       </div>
       <h1 className="sr-only">Understand the code. Keep people in control.</h1>

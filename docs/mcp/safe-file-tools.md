@@ -1,6 +1,6 @@
 # Safe file MCP tools
 
-Milestone 2 exposes application-backed, in-process contracts for two read-only tools against a registered repository's persisted canonical root. No tool mutates the repository, starts a shell, or accepts a host path outside that capability.
+The file-tool contract exposes application-backed, in-process read-only tools against a registered repository's persisted canonical root. `list_files` and `read_file` provide bounded file inspection; `search_code` adds bounded exact search as documented in [safe repository search](safe-search-tools.md). No tool mutates the repository, starts a shell, or accepts a host path outside that capability.
 
 - `list_files` accepts a relative directory, optional glob, and a result count clamped to 200. It performs a fixed walk and returns normalized relative paths, regular-file metadata, and truncation state.
 - `read_file` accepts a relative path and one-based line range. It rejects files over 64 KiB and returns at most 200 numbered UTF-8 lines, a SHA-256 content hash, and truncation state.

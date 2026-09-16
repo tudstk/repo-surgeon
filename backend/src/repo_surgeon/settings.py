@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Process configuration with safe local defaults for Milestone 0."""
+    """Process configuration with safe local development defaults."""
 
     app_name: str = "Repo Surgeon API"
     environment: Literal["development", "test", "production"] = "development"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import re
 import time
 from collections import Counter
 from collections.abc import Callable
@@ -31,9 +32,11 @@ from repo_surgeon.mcp.file_tools import (
     ListFilesInput,
     McpFileTools,
     ReadFileInput,
+    ReadFileOutput,
     ToolErrorOutput,
     returned_bytes_limit_error,
 )
+from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,12 +51,32 @@ class AgentLimits:
 
 
 @dataclass(frozen=True, slots=True)
+class Citation:
+    """Repository evidence derived from a validated tool result."""
+
+    citation_id: str
+    repository_id: UUID
+    path: str
+    start_line: int
+    end_line: int
+    label: str
+    source: Literal["search_code", "read_file"]
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
 class ToolEvent:
     """Safe activity trace entry with no raw repository content."""
 
     name: str
     status: Literal["success", "error", "denied"]
     call_id: str = ""
+    summary: str = ""
+    duration_ms: int | None = None
+    match_count: int | None = None
+    truncated: bool = False
+    error_code: str | None = None
+    citations: tuple[Citation, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,8 +107,25 @@ def _json_arguments(arguments: object) -> str | None:
         return None
 
 
-def _normalized_call_key(name: str, arguments: ListFilesInput | ReadFileInput) -> str:
-    normalized_arguments = arguments.model_dump(mode="json")
+def _normalized_call_key(
+    name: str, arguments: ListFilesInput | ReadFileInput | SearchCodeInput
+) -> str:
+    if isinstance(arguments, SearchCodeInput):
+        effective = arguments.to_request(None)
+        normalized_arguments = {
+            "repository_id": str(arguments.repository_id),
+            "query": effective.query,
+            "mode": effective.mode,
+            "path": effective.path,
+            "glob": effective.glob,
+            "max_matches": effective.max_matches,
+            "context_before": effective.context_before,
+            "context_after": effective.context_after,
+            "timeout_ms": effective.timeout_ms,
+            "max_result_bytes": effective.max_result_bytes,
+        }
+    else:
+        normalized_arguments = arguments.model_dump(mode="json")
     path_field = "directory" if isinstance(arguments, ListFilesInput) else "path"
     # Unsafe spellings stay distinct and are still rejected inside the worker.
     with suppress(RepositoryFileError):
@@ -111,6 +151,169 @@ def _validation_error(name: str) -> ToolErrorOutput:
     return ToolErrorOutput(code="invalid_tool_arguments", detail=f"Invalid arguments for {name}.")
 
 
+def _safe_search_summary(query: str) -> str:
+    display = "".join(character if character.isprintable() else " " for character in query)
+    display = " ".join(display.split())[:80]
+    return f"Searching for {display}" if display else "Searching repository"
+
+
+# Bounded event shaping intentionally handles both tool result variants.
+# skipcq: PY-R1000
+def _tool_event(
+    name: str,
+    status: Literal["success", "error", "denied"],
+    call_id: str,
+    result: object,
+    repository_id: UUID,
+) -> ToolEvent:
+    if isinstance(result, SearchCodeOutput):
+        citations = tuple(
+            Citation(
+                citation_id=f"search-{call_id}-{index}",
+                repository_id=repository_id,
+                path=match.path,
+                start_line=match.before[0].number if match.before else match.line,
+                end_line=match.after[-1].number if match.after else match.line,
+                label=(
+                    f"{match.path}:{match.line}"
+                    if not match.before and not match.after
+                    else f"{match.path}:{match.before[0].number if match.before else match.line}"
+                    f"-{match.after[-1].number if match.after else match.line}"
+                ),
+                source="search_code",
+                text="\n".join(
+                    [
+                        *(line.text for line in match.before),
+                        match.text,
+                        *(line.text for line in match.after),
+                    ]
+                ),
+            )
+            for index, match in enumerate(result.matches, start=1)
+        )
+        return ToolEvent(
+            name,
+            status,
+            call_id,
+            summary=_safe_search_summary(result.query),
+            duration_ms=result.duration_ms,
+            match_count=result.match_count,
+            truncated=result.truncated,
+            citations=citations,
+        )
+    if isinstance(result, ReadFileOutput) and result.lines:
+        start_line = result.lines[0].number
+        end_line = result.lines[-1].number
+        label = (
+            f"{result.path}:{start_line}"
+            if start_line == end_line
+            else f"{result.path}:{start_line}-{end_line}"
+        )
+        return ToolEvent(
+            name,
+            status,
+            call_id,
+            citations=(
+                Citation(
+                    citation_id=f"read-{call_id}-1",
+                    repository_id=repository_id,
+                    path=result.path,
+                    start_line=start_line,
+                    end_line=end_line,
+                    label=label,
+                    source="read_file",
+                    text="\n".join(line.text for line in result.lines),
+                ),
+            ),
+            truncated=result.truncated,
+        )
+    if isinstance(result, ToolErrorOutput):
+        return ToolEvent(name, status, call_id, error_code=result.code)
+    return ToolEvent(name, status, call_id)
+
+
+# Citation validation intentionally keeps all evidence checks in one boundary.
+# skipcq: PY-R1000
+def _validate_answer_citations(answer: str, events: list[ToolEvent]) -> str:
+    allowed = tuple(citation for event in events for citation in event.citations)
+
+    allowed_reference = None
+    if allowed:
+        paths = "|".join(
+            sorted((re.escape(citation.path) for citation in allowed), key=len, reverse=True)
+        )
+        allowed_reference = re.compile(
+            r"(?<![\w/])(?P<open>\[)?(?P<path>"
+            + paths
+            + r"):(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?(?P<close>\])?"
+        )
+
+    def validate(match: re.Match[str]) -> str:
+        path = match.group("path")
+        citation = next(
+            (
+                citation
+                for citation in allowed
+                if path == citation.path
+                or path.endswith(f" {citation.path}")
+                or path.endswith(f"[{citation.path}")
+            ),
+            None,
+        )
+        wrapped_suffix = citation is not None and path.endswith(f"[{citation.path}")
+        if bool(match.group("open")) != bool(match.group("close")) and not wrapped_suffix:
+            return "[unsupported citation]"
+        if citation is not None:
+            path = citation.path
+        start = int(match.group("start"))
+        end = int(match.group("end") or start)
+        supported = end >= start and any(
+            citation.path == path and start >= citation.start_line and end <= citation.end_line
+            for citation in allowed
+        )
+        return match.group(0) if supported else "[unsupported citation]"
+
+    validated = allowed_reference.sub(validate, answer) if allowed_reference else answer
+    fallback_shape = re.compile(
+        r"(?P<path>[^\s\n]+):(?P<start>[1-9][0-9]*)(?:-(?P<end>[1-9][0-9]*))?\Z"
+    )
+    replacements: list[tuple[int, int, str]] = []
+    openings: list[int] = []
+    for index, character in enumerate(validated):
+        if character == "[":
+            openings.append(index)
+        elif character == "]" and openings:
+            opening = openings.pop()
+            if openings:
+                continue
+            candidate = validated[opening + 1 : index]
+            match = fallback_shape.fullmatch(candidate)
+            if match is None or candidate.startswith(("http://", "https://", "www.")):
+                continue
+            path = match.group("path")
+            start = int(match.group("start"))
+            end = int(match.group("end") or start)
+            supported = any(
+                citation.path == path and start >= citation.start_line and end <= citation.end_line
+                for citation in allowed
+            )
+            if not supported:
+                replacements.append((opening, index + 1, "[unsupported citation]"))
+
+    if not replacements:
+        return validated
+    output: list[str] = []
+    cursor = 0
+    for start, end, replacement in replacements:
+        output.append(validated[cursor:start])
+        output.append(replacement)
+        cursor = end
+    output.append(validated[cursor:])
+    return "".join(output)
+
+
+# The agent turn is a bounded state machine; branch coverage is deliberate.
+# skipcq: PY-R1000
 async def run_turn(
     provider: ModelProvider,
     tools: McpFileTools,
@@ -135,7 +338,7 @@ async def run_turn(
     def limited(reason: str) -> AgentTurn:
         return AgentTurn(
             status="limit_reached",
-            answer=answer
+            answer=_validate_answer_citations(answer, events)
             or "The repository summary is partial because the turn limit was reached.",
             stop_reason=reason,
             model_calls=model_calls,
@@ -164,7 +367,7 @@ async def run_turn(
                 raise
         except TimeoutError:
             return limited("duration_limit")
-        answer = response.text
+        answer = _validate_answer_citations(response.text, events)
         if not response.tool_calls:
             return AgentTurn(
                 status="complete",
@@ -189,16 +392,17 @@ async def run_turn(
             if tool_calls >= effective_limits.max_tool_calls:
                 return limited("tool_call_limit")
             serialized_arguments = _json_arguments(call.arguments)
-            validated_arguments: ListFilesInput | ReadFileInput | None = None
+            validated_arguments: ListFilesInput | ReadFileInput | SearchCodeInput | None = None
             invalid_arguments = serialized_arguments is None
-            if not invalid_arguments and call.name in {"list_files", "read_file"}:
+            if not invalid_arguments and call.name in {"list_files", "read_file", "search_code"}:
                 try:
                     arguments = {**call.arguments, "repository_id": repository_id}
-                    validated_arguments = (
-                        ListFilesInput.model_validate(arguments)
-                        if call.name == "list_files"
-                        else ReadFileInput.model_validate(arguments)
-                    )
+                    if call.name == "list_files":
+                        validated_arguments = ListFilesInput.model_validate(arguments)
+                    elif call.name == "read_file":
+                        validated_arguments = ReadFileInput.model_validate(arguments)
+                    else:
+                        validated_arguments = SearchCodeInput.model_validate(arguments)
                 except TypeError, ValidationError:
                     invalid_arguments = True
 
@@ -253,7 +457,10 @@ async def run_turn(
                     code="write_operation_denied"
                     if call.name.startswith("write")
                     else "tool_not_allowed",
-                    detail="Only list_files and read_file are permitted in a read-only turn.",
+                    detail=(
+                        "Only list_files, read_file, and search_code are permitted "
+                        "in a read-only turn."
+                    ),
                 )
                 status = "denied"
             else:
@@ -265,9 +472,14 @@ async def run_turn(
                             tools.list_files(validated_arguments, max_bytes=tool_budget),
                             timeout=max(tool_remaining, 0.001),
                         )
-                    else:
+                    elif isinstance(validated_arguments, ReadFileInput):
                         result = await asyncio.wait_for(
                             tools.read_file(validated_arguments, max_bytes=tool_budget),
+                            timeout=max(tool_remaining, 0.001),
+                        )
+                    else:
+                        result = await asyncio.wait_for(
+                            tools.search_code(validated_arguments, max_bytes=tool_budget),
                             timeout=max(tool_remaining, 0.001),
                         )
                     if result is None:
@@ -283,7 +495,7 @@ async def run_turn(
                 status = "error"
                 payload = _serialized(result)
             returned_bytes += len(payload)
-            events.append(ToolEvent(call.name, status, call_id))
+            events.append(_tool_event(call.name, status, call_id, result, repository_id))
             messages.append(
                 {
                     "role": "assistant",

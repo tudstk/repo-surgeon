@@ -1,15 +1,19 @@
 """Minimal, read-only validation of a selected local Git worktree."""
 
+import os
 import subprocess
 from pathlib import Path
 
-from repo_surgeon.application.repositories import RepositoryRegistrationError
+from repo_surgeon.application.repositories import (
+    RepositoryRegistrationError,
+    ResolvedLocalRepositoryRoot,
+)
 
 
 class GitLocalRepositoryRootResolver:
     """Resolve local paths through Git before granting a repository capability."""
 
-    def resolve(self, candidate: str) -> str:
+    def resolve(self, candidate: str) -> ResolvedLocalRepositoryRoot:
         """Return Git's canonical worktree root for one absolute local path."""
         candidate_path = Path(candidate).expanduser()
         if not candidate_path.is_absolute():
@@ -58,9 +62,19 @@ class GitLocalRepositoryRootResolver:
             )
 
         try:
-            return str(Path(completed.stdout.strip()).resolve(strict=True))
+            canonical_root = Path(completed.stdout.strip()).resolve(strict=True)
+            root_fd = os.open(canonical_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                root_stat = os.fstat(root_fd)
+            finally:
+                os.close(root_fd)
         except OSError, RuntimeError:
             raise RepositoryRegistrationError(
                 code="repository_path_invalid",
                 detail="Repository root cannot be resolved.",
             ) from None
+        return ResolvedLocalRepositoryRoot(
+            canonical_root=str(canonical_root),
+            root_device=root_stat.st_dev,
+            root_inode=root_stat.st_ino,
+        )

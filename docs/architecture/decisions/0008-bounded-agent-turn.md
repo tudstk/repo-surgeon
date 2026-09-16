@@ -7,9 +7,10 @@ network is needed.
 
 `run_turn` enforces model-call, tool-call, equivalent-repeat, wall-clock, and
 returned-byte limits in application code. It returns a typed partial result when
-a limit is reached. Only `list_files` and `read_file` are authorized. Unknown
-operations, including writes, become deterministic denied tool results and can
-never mutate the registered repository.
+a limit is reached. `list_files`, `read_file`, and the later `search_code`
+extension are authorized read operations. Unknown operations, including writes,
+become deterministic denied tool results and can never mutate the registered
+repository.
 
 All synchronous repository inspection, including repository-root resolution and
 construction of the confined file service, runs in one process-wide,
@@ -18,9 +19,9 @@ actually finishes, even when its caller is cancelled. Other callers wait for
 that slot without submitting queued work, so timed-out operations can strand at
 most one worker and repeated timeouts cannot accumulate threads or queued
 filesystem calls. Python cannot forcibly terminate an arbitrary blocking syscall
-in a thread, so the turn deadline is a hard caller-visible deadline; the
-underlying operation may finish later. A future killable worker process is
-required before claiming hard termination of filesystem work.
+in a thread, so the turn deadline is a hard caller-visible deadline and a file
+operation may finish later. Exact search separately uses a killable ripgrep child
+with its own deadline, as recorded in ADR 0009.
 
 Every provider-facing tool result uses one canonical JSON encoding. The tool
 adapter refuses work when the remaining budget is smaller than the minimum

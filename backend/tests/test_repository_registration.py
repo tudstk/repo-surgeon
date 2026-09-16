@@ -2,6 +2,7 @@
 
 import asyncio
 import os
+import shutil
 import subprocess
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -73,6 +74,119 @@ async def test_registers_and_retrieves_a_canonical_git_root(
 
     assert retrieved.status_code == 200
     assert retrieved.json() == body
+
+    listed = await client.get("/repositories")
+
+    assert listed.status_code == 200
+    assert listed.json() == [{"id": body["id"], "name": "example"}]
+    assert "canonical_root" not in listed.json()[0]
+
+    preflight = await client.options(
+        "/repositories",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert preflight.status_code == 200
+    assert preflight.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+    blocked = await client.get("/repositories", headers={"Origin": "http://localhost:5173"})
+    assert "access-control-allow-origin" not in blocked.headers
+
+
+@pytest.mark.anyio
+async def test_api_rejects_non_loopback_clients(tmp_path: Path) -> None:
+    database_path = tmp_path / "repositories.sqlite3"
+    app = create_app(Settings(database_url=f"sqlite+aiosqlite:///{database_path}"))
+    transport = httpx.ASGITransport(app=app, client=("192.0.2.1", 1234))
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/health/live")
+
+    assert response.status_code == 403
+    assert response.json()["code"] == "local_only"
+
+
+@pytest.mark.anyio
+async def test_repository_summary_is_derived_from_registered_files(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    repository_root = _initialize_git_repository(tmp_path / "summary")
+    (repository_root / "main.py").write_text("print('hello')\n")
+
+    created = await client.post("/repositories", json={"path": str(repository_root)})
+    summary = await client.get(f"/repositories/{created.json()['id']}/summary")
+
+    assert summary.status_code == 200
+    assert summary.json()["language"] == "Python"
+    assert summary.json()["file_count"] == 1
+    assert summary.json()["approximate_lines"] == 1
+
+    search = await client.post(
+        f"/repositories/{created.json()['id']}/search",
+        json={"query": "hello", "context_before": 1, "context_after": 1},
+    )
+
+    assert search.status_code == 200
+    assert search.json()["match_count"] == 1
+    assert search.json()["matches"][0]["text"] == "print('hello')"
+    assert search.json()["matches"][0]["before"] == []
+    assert search.json()["matches"][0]["after"] == []
+
+    duplicate_identity = await client.post(
+        f"/repositories/{created.json()['id']}/search",
+        json={"repository_id": str(created.json()["id"]), "query": "hello"},
+    )
+    assert duplicate_identity.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_repository_summary_reports_unavailable_registered_root(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    repository_root = _initialize_git_repository(tmp_path / "removed")
+    created = await client.post("/repositories", json={"path": str(repository_root)})
+    shutil.rmtree(repository_root)
+
+    summary = await client.get(f"/repositories/{created.json()['id']}/summary")
+
+    assert summary.status_code == 503
+    assert summary.json() == {
+        "type": "https://repo-surgeon.local/problems/repository_unavailable",
+        "title": "Repository summary failed",
+        "status": 503,
+        "detail": "The registered repository could not be inspected.",
+        "code": "repository_unavailable",
+    }
+
+
+@pytest.mark.anyio
+async def test_registered_root_identity_rejects_a_directory_replacement(
+    client: httpx.AsyncClient, tmp_path: Path
+) -> None:
+    repository_root = _initialize_git_repository(tmp_path / "registered")
+    (repository_root / "safe.txt").write_text("registered content\n")
+    created = await client.post("/repositories", json={"path": str(repository_root)})
+    repository_id = created.json()["id"]
+
+    original_root = tmp_path / "original"
+    repository_root.rename(original_root)
+    replacement_root = _initialize_git_repository(repository_root)
+    (replacement_root / "safe.txt").write_text("replacement content\n")
+
+    summary = await client.get(f"/repositories/{repository_id}/summary")
+    search = await client.post(
+        f"/repositories/{repository_id}/search", json={"query": "replacement"}
+    )
+    repeated_registration = await client.post("/repositories", json={"path": str(replacement_root)})
+
+    assert summary.status_code == 503
+    assert summary.json()["code"] == "repository_unavailable"
+    assert search.status_code == 422
+    assert search.json()["code"] == "repository_unavailable"
+    assert repeated_registration.status_code == 422
+    assert repeated_registration.json()["code"] == "repository_identity_changed"
 
 
 @pytest.mark.anyio

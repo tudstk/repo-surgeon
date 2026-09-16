@@ -1,11 +1,62 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
+import { vi } from 'vitest';
 
 import Home from './page';
 
 describe('Home', () => {
-  it('renders workspace landmarks and the human-control boundary', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: string, init?: RequestInit) =>
+        Promise.resolve(
+          new Response(
+            init?.method === 'POST'
+              ? JSON.stringify({
+                  match_count: 1,
+                  matches: [
+                    {
+                      path: 'auth/session.py',
+                      line: 52,
+                      text: 'async def resolve(self, token: str) -> Optional[SessionData]:',
+                      before: [{ number: 51, text: 'class SessionManager:' }],
+                      after: [{ number: 53, text: '    return session' }],
+                    },
+                  ],
+                  truncated: false,
+                  duration_ms: 38,
+                  skipped_files: 0,
+                })
+              : input.endsWith('/summary')
+                ? JSON.stringify({
+                    language: 'Python',
+                    language_confidence: 'high',
+                    file_count: 342,
+                    approximate_lines: 28000,
+                    test_framework: 'pytest',
+                    test_command: 'pytest -q',
+                    truncated: false,
+                  })
+                : JSON.stringify([
+                    {
+                      id: 'repository-1',
+                      name: 'payments-api',
+                    },
+                  ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it('renders workspace landmarks and the human-control boundary', async () => {
     render(<Home />);
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
@@ -21,9 +72,11 @@ describe('Home', () => {
       'aria-current',
       'page',
     );
-    expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
-      'aria-selected',
-      'true',
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
     );
     expect(screen.getByRole('option', { name: 'payments-api' })).not.toHaveAttribute(
       'aria-current',
@@ -37,11 +90,16 @@ describe('Home', () => {
     expect(screen.getByText(/Sandbox Tests: 14 passing/i)).toBeInTheDocument();
   });
 
-  it('keeps read-only controls unavailable and the composer inert', () => {
+  it('keeps read-only controls unavailable and the composer inert', async () => {
     render(<Home />);
 
     expect(screen.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Switch repository' })).toBeDisabled();
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
+    );
     expect(screen.getByRole('button', { name: 'Staging Chamber' })).toBeDisabled();
 
     const composer = screen.getByRole('textbox', { name: 'Agent instruction' });
@@ -61,8 +119,60 @@ describe('Home', () => {
     expect(screen.getByLabelText('Sandbox HEAD')).toHaveTextContent('9b4ec8f');
     expect(screen.getByText('GIT DAG LINEAGE')).toBeInTheDocument();
     expect(screen.getByText(/INDEX 47b91e\.\.\.c892fa 100644/)).toBeInTheDocument();
-    expect(screen.getByText(/pgvector/)).toBeInTheDocument();
+    expect(screen.getByText('Repository summary unavailable.')).toBeInTheDocument();
     expect(screen.queryByText(/STATIC PREVIEW|\(PREVIEW\)/i)).not.toBeInTheDocument();
+  });
+
+  it('renders repository-derived summary data from the selected repository API', async () => {
+    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', 'http://api.test');
+    const fetchMock = vi.fn((input: string) =>
+      Promise.resolve(
+        new Response(
+          input.endsWith('/summary')
+            ? JSON.stringify({
+                language: 'Go',
+                language_confidence: 'high',
+                file_count: 3,
+                approximate_lines: 42,
+                test_framework: 'go test',
+                test_command: 'go test ./...',
+                truncated: false,
+              })
+            : JSON.stringify([{ id: 'repository-1', name: 'go-service' }]),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<Home />);
+
+    await waitFor(() => expect(screen.getByText(/3 files · 42 LOC/i)).toBeInTheDocument());
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.test/repositories',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.test/repositories/repository-1/summary',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+
+  it('opens the exact cited context in the work panel', async () => {
+    render(<Home />);
+
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'auth/session.py:51-53' })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('link', { name: 'auth/session.py:51-53' }));
+
+    expect(screen.getByRole('region', { name: 'Work panel' })).toHaveTextContent('auth/session.py');
+    expect(screen.getByRole('region', { name: 'Work panel' })).toHaveTextContent('L51-53');
+    expect(screen.getByRole('region', { name: 'Work panel' })).toHaveTextContent(
+      'class SessionManager:',
+    );
+    expect(screen.getByRole('region', { name: 'Work panel' })).toHaveTextContent('return session');
+    expect(screen.getByRole('tab', { name: /Code/ })).toHaveAttribute('aria-selected', 'true');
   });
 
   it('hides commit nodes from assistive technology because they are decorative', () => {
@@ -97,6 +207,32 @@ describe('Home', () => {
       'data-layout',
       'stacked',
     );
+    expect(screen.queryAllByRole('separator')).toHaveLength(0);
+
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
+    window.matchMedia = originalMatchMedia;
+  });
+
+  it('clears desktop inline widths at a narrow mobile width', () => {
+    const originalWidth = window.innerWidth;
+    const originalMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 500 });
+    window.matchMedia = ((query: string) => ({
+      matches: query === '(max-width: 1024px)',
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as typeof window.matchMedia;
+
+    render(<Home />);
+
+    const grid = screen.getByRole('main').querySelector('.workspace-grid');
+    expect(grid).toHaveAttribute('data-layout', 'stacked');
+    expect(grid).not.toHaveAttribute('style');
     expect(screen.queryAllByRole('separator')).toHaveLength(0);
 
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalWidth });
@@ -180,13 +316,15 @@ describe('Home', () => {
     fireEvent.pointerUp(window);
   });
 
-  it('exposes the workspace safety boundary without preview labeling', () => {
+  it('exposes the workspace safety boundary without preview labeling', async () => {
     render(<Home />);
 
     expect(screen.getByText(/READ-ONLY \(SAFE SANDBOX\)/i)).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
-      'aria-selected',
-      'true',
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
     );
     expect(screen.getByRole('option', { name: /Refactor session module/ })).toHaveAttribute(
       'aria-selected',

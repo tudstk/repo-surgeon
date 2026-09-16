@@ -84,6 +84,10 @@ Re-run the matrix in a network-enabled environment with Docker daemon access, th
 
 Passing this document establishes only the executable foundation described above.
 
-Milestone 1 is responsible for repository registration and safe read access.
-
-All agent, model, MCP, sandbox, proposal, approval, application, audit, and production-readiness claims remain roadmap work until their own implementation and acceptance evidence exist.
+At the M0 target commit, Milestone 1 was responsible for repository registration
+and safe read access. Later milestones have implemented registration, bounded
+safe reading, exact search, and repository intelligence; see the current
+[product scope](../product/scope.md) and [safe search contract](../mcp/safe-search-tools.md)
+for the present boundary. All sandbox, proposal, approval, application, audit,
+and production-readiness claims still require their own implementation and
+acceptance evidence.

@@ -4,9 +4,9 @@ Repo Surgeon is a local-first, human-controlled coding assistant for understandi
 
 ## Implemented status
 
-This checkout provides an executable foundation: a typed FastAPI process, a strict TypeScript and Next.js frontend, local PostgreSQL through Docker Compose, and CI quality gates. It also registers an existing local Git working tree and persists its resolved canonical root. The backend includes bounded, read-only repository file tools and a deterministic model-provider agent loop, in addition to process health and repository registration and retrieval.
+This checkout provides an executable foundation: a typed FastAPI process, a strict TypeScript and Next.js frontend, local PostgreSQL through Docker Compose, and CI quality gates. It also registers an existing local Git working tree and persists its resolved canonical root. The backend includes bounded read-only file and exact-search tools, deterministic repository intelligence, and a deterministic model-provider agent loop.
 
-Registration validates only the selected path and Git worktree boundary. The file tools read bounded safe content through an in-process MCP adapter, and the agent loop can use only those read-only tools through a provider boundary. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. The frontend remains a visual shell with static example repositories, activity, tests, and diff content. See [product scope](docs/product/scope.md) for the broader roadmap.
+Registration validates only the selected path and Git worktree boundary. The MCP tools read and search bounded safe content, and the agent loop can use only those read-only capabilities through a provider boundary. Repository intelligence maps bounded manifest evidence to versioned language and test-command catalogs without executing repository code. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. The frontend now loads registered repository names and bounded summary metadata from the backend, alongside typed search activity and exact citation states. See [safe search](docs/mcp/safe-search-tools.md) and [product scope](docs/product/scope.md).
 
 No model API key is required.
 
@@ -14,6 +14,7 @@ No model API key is required.
 
 - Python 3.14.x and [uv](https://docs.astral.sh/uv/) 0.12.9.
 - Node.js 22.22.2 or newer in the 22.x line and pnpm 10.8.x. The supported ranges are in [frontend/package.json](frontend/package.json).
+- ripgrep 14.1 or newer for bounded repository search.
 - curl for health checks.
 - Docker Engine and Docker Compose only when starting local PostgreSQL.
 
@@ -44,7 +45,7 @@ uv sync --locked
 uv run uvicorn repo_surgeon.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The API listens on `127.0.0.1:8000`. In another terminal, run the health checks:
+The API listens on `127.0.0.1:8000` and rejects non-loopback clients. Repository metadata and source search are unauthenticated within this local development trust boundary, so do not expose the process through a proxy, container port, or non-loopback bind. In another terminal, run the health checks:
 
 ```sh
 curl --fail --silent --show-error http://127.0.0.1:8000/health/live
@@ -80,7 +81,7 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open <http://localhost:3000>. The rendered workspace data is static preview content and does not invoke the backend or perform agent actions.
+Open <http://localhost:3000>. The workspace selector requests `GET /repositories`, and the selected summary card requests `GET /repositories/<id>/summary`. The backend and PostgreSQL must be running for live repository data. Development CORS permits only `http://localhost:3000` and `http://127.0.0.1:3000`; the frontend uses `NEXT_PUBLIC_API_BASE_URL` when the API is not at `http://127.0.0.1:8000`. The frontend remains read-only and does not perform agent actions.
 
 ## Verify quality gates
 
@@ -109,6 +110,6 @@ The workflow runs on pushes and pull requests. It uses `backend/uv.lock` and `fr
 
 ## Learn the foundation
 
-The registration request path is `curl -> Uvicorn ASGI server -> FastAPI router -> application use case -> SQLAlchemy adapter -> PostgreSQL`. The frontend is independent. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
+The registration, summary, and search request paths are `curl or frontend -> Uvicorn ASGI server -> FastAPI router -> application use case -> confined repository inspection`, with registration and repository identity persistence continuing through the SQLAlchemy adapter to PostgreSQL. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
 
-Future work continues with HTTP/API integration, repository indexing, test sandboxing, proposals, approvals, patch application, audits, and pull requests. The current provider boundary, bounded agent loop, and in-process safe file tools are not yet connected to the frontend workflow.
+Future work continues with persisted API events, Git context, test sandboxing, proposals, approvals, patch application, audits, and pull requests. The provider boundary, bounded agent loop, and in-process MCP tools are not yet connected to the frontend workflow.

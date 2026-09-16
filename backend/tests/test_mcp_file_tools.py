@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -13,7 +14,7 @@ from uuid import UUID, uuid4
 import pytest
 from pydantic import ValidationError
 
-from repo_surgeon.application.repositories import RepositoryStore
+from repo_surgeon.application.repositories import RepositoryStore, ResolvedLocalRepositoryRoot
 from repo_surgeon.application.repository_files import ConfinedRepositoryFiles
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.mcp.file_tools import (
@@ -26,6 +27,7 @@ from repo_surgeon.mcp.file_tools import (
     ToolErrorOutput,
     tool_audit_summary,
 )
+from repo_surgeon.mcp.search_tools import SearchCodeOutput
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "repos" / "m1-repository-safety"
 
@@ -34,16 +36,30 @@ class MemoryRepositoryStore(RepositoryStore):
     """Minimal application port fake used by the in-process tool client."""
 
     def __init__(self, repository: Repository) -> None:
+        root_stat = Path(repository.canonical_root).stat()
+        repository = replace(
+            repository,
+            root_device=root_stat.st_dev,
+            root_inode=root_stat.st_ino,
+        )
         self._repository = repository
 
     async def get_by_canonical_root(self, canonical_root: str) -> Repository | None:
         return self._repository if canonical_root == self._repository.canonical_root else None
 
-    async def add_local(self, canonical_root: str) -> Repository:
+    async def add_local(self, root: ResolvedLocalRepositoryRoot) -> Repository:
         raise AssertionError("The safe file tools must not register repositories.")
+
+    async def bind_legacy_identity(
+        self, repository_id: UUID, root: ResolvedLocalRepositoryRoot
+    ) -> Repository:
+        raise AssertionError("The safe file tools must not bind repository identities.")
 
     async def get(self, repository_id: UUID) -> Repository | None:
         return self._repository if repository_id == self._repository.id else None
+
+    async def list_all(self) -> tuple[Repository, ...]:
+        return (self._repository,)
 
 
 def tool_client(root: Path = FIXTURE_ROOT) -> tuple[McpFileTools, UUID]:
@@ -81,6 +97,27 @@ async def test_list_files_and_read_file_return_typed_bounded_results() -> None:
     assert len(result.content_sha256) == 64
     assert str(FIXTURE_ROOT) not in result.model_dump_json()
     assert tool_audit_summary(result)["line_count"] == 20
+
+
+def test_tool_audit_summary_projects_search_results_without_content() -> None:
+    result = SearchCodeOutput(
+        query="needle",
+        mode="literal",
+        matches=(),
+        match_count=0,
+        truncated=False,
+        truncation_reasons=(),
+        duration_ms=4,
+        skipped_files=2,
+    )
+
+    assert tool_audit_summary(result) == {
+        "success": True,
+        "operation": "search_code",
+        "match_count": 0,
+        "truncated": False,
+        "skipped_files": 2,
+    }
 
 
 @pytest.mark.anyio
@@ -239,13 +276,32 @@ async def test_fastmcp_in_process_client_exposes_flat_schema_and_invokes_handler
         assert {"repository_id", "path", "start_line", "end_line"} <= set(
             tools["read_file"].inputSchema["properties"]
         )
+        assert {
+            "repository_id",
+            "query",
+            "mode",
+            "path",
+            "glob",
+            "max_matches",
+            "context_before",
+            "context_after",
+            "timeout_ms",
+            "max_result_bytes",
+        } <= set(tools["search_code"].inputSchema["properties"])
         result = await mcp_client.call_tool(
             "read_file", {"repository_id": str(repository_id), "path": "README.md"}
+        )
+        search_result = await mcp_client.call_tool(
+            "search_code",
+            {"repository_id": str(repository_id), "query": "Repository safety fixture"},
         )
 
     assert result.is_error is False
     assert result.structured_content is not None
     assert result.structured_content["path"] == "README.md"
+    assert search_result.is_error is False
+    assert search_result.structured_content is not None
+    assert search_result.structured_content["match_count"] == 1
 
 
 def test_pydantic_contracts_reject_unknown_fields_and_clamp_valid_bounds() -> None:

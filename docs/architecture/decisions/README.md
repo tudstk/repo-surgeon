@@ -11,6 +11,7 @@ These records capture decisions that guide future implementation. They are not e
 | [0005](0005-sse-persistence-and-reconnection.md)      | Persisted, sequenced application events             | First streamed run           |
 | [0006](0006-repository-confinement-and-storage.md)    | Confined roots and app-managed clones               | Repository registration      |
 | [0007](0007-privacy-retention-and-redaction.md)       | Explicit provider retention and redacted audit data | First provider or audit data |
-| [0008](0008-bounded-agent-turn.md)                    | Bounded read-only agent turns                   | First agent slice            |
+| [0008](0008-bounded-agent-turn.md)                    | Bounded read-only agent turns                        | First agent slice            |
+| [0009](0009-fixed-argument-repository-search.md)      | Fixed-argument exact search and detection catalogs   | Repository search slice      |
 
 The master build plan remains authoritative. Update an ADR through a new decision when evidence changes a foundational choice.
