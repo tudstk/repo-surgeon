@@ -23,6 +23,7 @@ from repo_surgeon.application.repository_files import (
     RepositoryFileError,
 )
 from repo_surgeon.application.repository_search import (
+    DEFAULT_SEARCH_TIMEOUT_MS,
     MAX_CONTEXT_LINES,
     MAX_MATCHES,
     MAX_SEARCH_FILES,
@@ -82,6 +83,10 @@ def test_search_request_clamps_each_independent_limit() -> None:
     assert result.context_after == MAX_CONTEXT_LINES
     assert result.timeout_ms == MAX_SEARCH_TIMEOUT_MS
     assert result.max_result_bytes == MAX_SEARCH_RESULT_BYTES
+
+
+def test_search_request_uses_reliable_default_timeout() -> None:
+    assert request().timeout_ms == DEFAULT_SEARCH_TIMEOUT_MS == 3_000
 
 
 @pytest.mark.parametrize("query", ["", "x\x00y", "x" * 4097])

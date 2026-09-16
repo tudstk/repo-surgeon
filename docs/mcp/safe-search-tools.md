@@ -6,7 +6,7 @@ Milestone 3 adds `search_code`, a typed read-only MCP tool over a registered rep
 
 | Bound | Default | Hard limit | Result when reached |
 | --- | ---: | ---: | --- |
-| Search duration | 1,000 ms | 5,000 ms | `search_timed_out`; the child is killed and reaped |
+| Search duration | 3,000 ms | 5,000 ms | `search_timed_out`; the child is killed and reaped |
 | Matches | 50 | 200 | Successful result with `matches` truncation |
 | Context, each side | 2 lines | 10 lines | Successful result with `context` truncation if bytes require removal |
 | Search result | 64 KiB | 128 KiB | Context and then matches are removed at model boundaries |
