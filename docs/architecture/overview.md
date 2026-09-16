@@ -8,7 +8,7 @@ browser -> Next.js on localhost:3000 -> typed summary and search activity displa
 agent -> ModelProvider -> bounded agent loop -> in-process MCP tools -> confined files / killable ripgrep
 ```
 
-`backend/src/repo_surgeon/main.py` creates the FastAPI application and includes the health and repository routers. `backend/src/repo_surgeon/api/health.py` returns deterministic `live` and `ready` responses. `backend/src/repo_surgeon/settings.py` supplies typed settings. The agent package owns the provider protocol and bounded turn orchestration; the MCP package owns typed, read-only file adapters.
+`backend/src/repo_surgeon/main.py` creates the FastAPI application and includes the health and repository routers. `backend/src/repo_surgeon/api/health.py` returns deterministic `live` and `ready` responses. `backend/src/repo_surgeon/settings.py` supplies typed settings. The agent package owns the provider protocol and bounded turn orchestration; the MCP package owns typed, read-only file and search adapters.
 
 `frontend/src/app/page.tsx` loads the registered repository list, fetches bounded summary metadata for the selected repository, and submits the fixed `SessionManager` search projection to the selected repository search endpoint. Search citations render the returned match and context lines in the read-only work panel. It does not execute tests or create patches.
 
