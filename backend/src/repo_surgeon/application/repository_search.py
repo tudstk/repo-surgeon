@@ -25,7 +25,7 @@ SearchMode = Literal["literal", "regex"]
 TruncationReason = Literal["matches", "context", "bytes"]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class SearchError(Exception):
     """Stable content-free search failure safe for an untrusted caller."""
 

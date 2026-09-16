@@ -276,10 +276,19 @@ class RipgrepSearchAdapter:
             "--files",
             "-0",
             "--color=never",
-            "--no-require-git",
             "--no-ignore-parent",
             "--hidden",
         ]
+        # Older ripgrep releases only apply ignore files inside a Git worktree.
+        # Pass the repository's root ignore file explicitly so temporary or
+        # otherwise untracked repositories retain the same safety behavior.
+        try:
+            files.path_type(".gitignore")
+        except RepositoryFileError as error:
+            if error.code != "file_not_found":
+                raise SearchError(error.code, error.detail) from error
+        else:
+            file_argv.append("--ignore-file=.gitignore")
         if request.glob is not None:
             file_argv.append(f"--glob={request.glob}")
         file_argv.extend(
