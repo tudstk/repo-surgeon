@@ -35,6 +35,7 @@ const paneMinimums = (viewportWidth: number) => {
   // resize, while keeping the conversation and diff panes readable.
   return [180, 220, 320, 400];
 };
+};
   // Leave enough surplus at wide desktop sizes for every adjacent pair to
   // resize, while keeping the conversation and diff panes readable.
   return [180, 220, 320, 400];

@@ -3,7 +3,7 @@ import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { vi } from 'vitest';
 
-import { Home } from './page';
+import Home from './page';
 
 describe('Home', () => {
   beforeEach(() => {
