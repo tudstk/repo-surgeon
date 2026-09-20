@@ -250,57 +250,71 @@ const CitedSource = ({ citation }: { citation: SearchCitation }) => {
     <div className="citation-code-view" aria-label="Cited source">
       <div className="file-heading">
         <strong>
-          <Glyph>‹›</Glyph> &nbsp; {citation.path}
-        </strong>
-        <span>
-          L{citation.startLine}
-          {citation.endLine !== citation.startLine && `-${citation.endLine}`}
-        </span>
+const FileHeader = ({ icon, path, meta, id }) => (
+  <div className="file-heading" {...(id ? { id } : {})}>
+    <strong>
+      <Glyph>{icon}</Glyph> &nbsp; {path}
+    </strong>
+    {meta}
+  </div>
+);
+
+const DiffLines = ({ lines, matchLine, ariaLabel }) => (
+  <div className="diff-code" {...(ariaLabel ? { 'aria-label': ariaLabel } : {})}>
+    {lines.map((line) => (
+      <div
+        className={`code-line ${matchLine !== undefined && line.number === matchLine ? 'cited-line' : ''}${line.type ? ` ${line.type}` : ''}`}
+        key={`${line.number}-${line.text}`}
+      >
+        <span>{line.number}</span>
+        <code>{line.text}</code>
       </div>
+    ))}
+  </div>
+);
+
+export const ExactDiff = ({ citation, lines }) => {
+  return (
+    <div className="diff">
+      <FileHeader
+        icon="‹›"
+        path={citation.path}
+        meta={
+          <span>
+            L{citation.startLine}
+            {citation.endLine !== citation.startLine && `-${citation.endLine}`}
+          </span>
+        }
+      />
       <div className="hunk-label">Exact search evidence · read-only</div>
-      <div className="diff-code">
-        {lines.map((line) => (
-          <div
-            className={`code-line ${line.number === citation.matchLine ? 'cited-line' : ''}`}
-            key={`${line.number}-${line.text}`}
-          >
-            <span>{line.number}</span>
-            <code>{line.text}</code>
-          </div>
-        ))}
-      </div>
+      <DiffLines lines={lines} matchLine={citation.matchLine} />
     </div>
   );
 };
 
-function ProposedDiff() {
+export function ProposedDiff() {
   return (
     <div className="proposed-diff">
-      <div className="file-heading" id="diff">
-        <strong>
-          <Glyph>▤</Glyph> &nbsp; auth/session.py
-        </strong>
-        <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
-      </div>
+      <FileHeader
+        icon="▤"
+        path="auth/session.py"
+        id="diff"
+        meta={
+          <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
+        }
+      />
       <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
-      <div className="diff-code" aria-label="Proposed code diff">
-        <div className="code-line">
-          <span>48&nbsp;&nbsp; 48</span>
-          <code>def __init__(self, ttl_seconds: int = 3600) -&gt; None:</code>
-        </div>
-        <div className="code-line">
-          <span>49&nbsp;&nbsp; 49</span>
-          <code> self._ttl = ttl_seconds</code>
-        </div>
-        <div className="code-line removed">
-          <span>50&nbsp;&nbsp; −</span>
-          <code> self._sessions = {'{}'}</code>
-        </div>
-        <div className="code-line added">
-          <span>50&nbsp;&nbsp; +</span>
-          <code> self._store = TokenStore(default_ttl=ttl_seconds)</code>
-        </div>
-        <div className="code-line">
+      <DiffLines
+        lines={[
+          { number: '48  48', text: 'def __init__(self, ttl_seconds: int = 3600) -> None:' },
+          { number: '49  49', text: ' self._ttl = ttl_seconds' },
+          { number: '50  −', text: ' self._sessions = {}', type: 'removed' },
+          { number: '50  +', text: ' self._store = TokenStore(default_ttl=ttl_seconds)', type: 'added' },
+        ]}
+      />
+    </div>
+  );
+}
           <span>51&nbsp;&nbsp; 51</span>
           <code> self._lock = threading.RLock()</code>
         </div>
