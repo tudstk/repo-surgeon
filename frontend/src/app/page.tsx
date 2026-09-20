@@ -28,9 +28,13 @@ const PANE_LABELS = [
 ];
 
 // skipcq: JS-0067
-function paneMinimums(viewportWidth: number) {
+const paneMinimums = (viewportWidth: number) => {
   if (viewportWidth <= 1100) return [150, 210, 270, 340];
   if (viewportWidth <= 1284) return [160, 220, 280, 360];
+  // Leave enough surplus at wide desktop sizes for every adjacent pair to
+  // resize, while keeping the conversation and diff panes readable.
+  return [180, 220, 320, 400];
+};
   // Leave enough surplus at wide desktop sizes for every adjacent pair to
   // resize, while keeping the conversation and diff panes readable.
   return [180, 220, 320, 400];
