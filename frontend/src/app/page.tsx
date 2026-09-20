@@ -1,34 +1,12 @@
-'use client';
-
 import React from 'react';
 
 export default function Home() {
   return (
-    <div>Welcome to the Home Page</div>
+    <main className="container">
+      <h1>Home Page</h1>
+    </main>
   );
 }
-  SearchActivityRow,
-  type RepositorySummary,
-  type SearchActivity,
-  type SearchCitation,
-} from './repository-search-display';
-
-const STACKED_LAYOUT_QUERY = '(max-width: 1024px)';
-
-type RegisteredRepository = {
-  id: string;
-  name: string;
-};
-
-// Module-scoped helpers are intentional in this client component.
-// skipcq: JS-0067
-function repositoryName(repository: RegisteredRepository | null) {
-  if (!repository) return 'No repository connected';
-  return repository.name;
-}
-
-const initialSearchActivity: SearchActivity = {
-  tool: 'search_code',
   phase: 'idle',
   summary: 'No repository selected',
   matchCount: null,
