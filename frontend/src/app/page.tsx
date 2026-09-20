@@ -1,10 +1,12 @@
 'use client';
 
-import Link from 'next/link';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import React from 'react';
 
-import {
-  RepositorySummaryCard,
+export default function Home() {
+  return (
+    <div>Welcome to the Home Page</div>
+  );
+}
   SearchActivityRow,
   type RepositorySummary,
   type SearchActivity,
@@ -223,19 +225,19 @@ const searchCitations = (data: SearchResponse, repositoryId: string): SearchCita
   return data.matches.map((match, index) => {
     const before = match.before ?? [];
     const after = match.after ?? [];
-    const startLine = before[0]?.number ?? match.line;
-    const endLine = after.at(-1)?.number ?? match.line;
-    return {
-      id: `search-${repositoryId}-${index}`,
-      path: match.path,
-      matchLine: match.line,
-      startLine,
-      endLine,
-      label: `${match.path}:${startLine}${endLine === startLine ? '' : `-${endLine}`}`,
-      text: match.text,
-      before,
-      after,
-    };
+    return matches.map((match, index) => {
+      return {
+        id: `search-${repositoryId}-${index}`,
+        path: match.path,
+        matchLine: match.line,
+        startLine,
+        endLine,
+        label: `${match.path}:${startLine}${endLine === startLine ? '' : `-${endLine}`}`,
+        text: match.text,
+        before,
+        after,
+      };
+    });
   });
 };
 
@@ -274,6 +276,8 @@ const DiffLines = ({ lines, matchLine, ariaLabel }) => (
 );
 
 export const ExactDiff = ({ citation, lines }) => {
+  return (
+    <div className="diff">
   return (
     <div className="diff">
       <FileHeader

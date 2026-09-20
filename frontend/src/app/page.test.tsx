@@ -3,13 +3,13 @@ import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { vi } from 'vitest';
 
-import Home from './page';
+import { Home } from './page';
 
 describe('Home', () => {
   beforeEach(() => {
     vi.stubGlobal(
       'fetch',
-      vi.fn((input: string, init?: RequestInit) =>
+      vi.fn((input, init) =>
         Promise.resolve(
           new Response(
             init?.method === 'POST'
@@ -19,7 +19,7 @@ describe('Home', () => {
                     {
                       path: 'auth/session.py',
                       line: 52,
-                      text: 'async def resolve(self, token: str) -> Optional[SessionData]:',
+                      text: 'async def resolve(self, token: str) -> Optional<SessionData>:',
                       before: [{ number: 51, text: 'class SessionManager:' }],
                       after: [{ number: 53, text: '    return session' }],
                     },
