@@ -1,6 +1,6 @@
 # Glossary
 
-This glossary covers concepts implemented through Milestone 2. Sandboxing, proposals, and approvals remain roadmap-only.
+This glossary covers concepts implemented through Milestone 3. Sandboxing, proposals, and approvals remain roadmap-only.
 
 | Term | Meaning here | C#/.NET bridge |
 | --- | --- | --- |

@@ -8,7 +8,7 @@ Repository content is untrusted input. Local paths may contain symlinks, secrets
 
 ## Decision
 
-Register a local repository only after resolving and persisting its canonical root. Every filesystem operation resolves relative to that registered root and verifies containment after symlink resolution. Reject absolute paths, traversal, escapes, disallowed Git internals, device files, sockets, unsafe or secret-matched paths, binary files where text is required, and inputs beyond configured size or result limits.
+Register a local repository only after resolving its canonical root and persisting both the path and its filesystem device/inode identity. Every filesystem operation verifies that the current root still has the registered identity, then resolves relative paths and checks containment after symlink resolution. Reject a directory replacement at the same pathname, including an attempt to register the replacement as the existing capability. Legacy rows without an identity remain unavailable until explicit re-registration binds their current root. Reject absolute paths, traversal, escapes, disallowed Git internals, device files, sockets, unsafe or secret-matched paths, binary files where text is required, and inputs beyond configured size or result limits.
 
 Public URL clones go into app-managed storage. The application must never apply a proposal to the connected local working tree. Exact ignore rules, storage layout, limit values, and cloning implementation are later decisions constrained by these guarantees.
 

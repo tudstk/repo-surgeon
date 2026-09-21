@@ -35,6 +35,7 @@ from repo_surgeon.mcp.file_tools import (
     ToolErrorOutput,
     returned_bytes_limit_error,
 )
+from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
 FIXTURE_ROOT = Path(__file__).parent / "fixtures" / "repos" / "m1-repository-safety"
 
@@ -82,6 +83,89 @@ async def test_summary_turn_completes_after_safe_reads() -> None:
 
 
 @pytest.mark.anyio
+async def test_search_driven_answer_has_deterministic_activity_and_exact_citations() -> None:
+    tools, repository_id = tool_client()
+    provider = FakeModelProvider(
+        [
+            ModelResponse(
+                "Searching.",
+                (
+                    ModelToolCall(
+                        "search_code",
+                        {
+                            "query": "Repository safety fixture",
+                            "mode": "literal",
+                            "path": ".",
+                            "context_before": 0,
+                            "context_after": 0,
+                        },
+                        "search-1",
+                    ),
+                ),
+            ),
+            ModelResponse("The README describes the fixture repository [README.md:1]."),
+        ]
+    )
+
+    result = await run_turn(provider, tools, repository_id, "What does this repository do?")
+
+    assert result.status == "complete"
+    assert result.answer.endswith("[README.md:1].")
+    assert result.events[0].summary == "Searching for Repository safety fixture"
+    assert result.events[0].match_count == 1
+    assert result.events[0].citations[0].path == "README.md"
+    assert result.events[0].citations[0].start_line == 1
+    assert result.events[0].citations[0].end_line == 1
+
+
+@pytest.mark.anyio
+async def test_search_answer_accepts_citations_for_paths_with_spaces(tmp_path: Path) -> None:
+    repository_id = uuid4()
+    repository = Repository(repository_id, RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
+    tools = McpFileTools(MemoryRepositoryStore(repository))
+    spaced_path = tmp_path / "docs" / "api specs" / "@scope" / "C++" / "a:b[1].cpp"
+    spaced_path.parent.mkdir(parents=True)
+    spaced_path.write_text("Repository safety fixture\n")
+    provider = FakeModelProvider(
+        [
+            ModelResponse(
+                "Searching.",
+                (
+                    ModelToolCall(
+                        "search_code",
+                        {
+                            "query": "Repository safety fixture",
+                            "mode": "literal",
+                            "path": "docs",
+                            "context_before": 0,
+                            "context_after": 0,
+                        },
+                        "search-spaced",
+                    ),
+                ),
+            ),
+            ModelResponse(
+                "The file contains the fixture [docs/api specs/@scope/C++/a:b[1].cpp:1]."
+            ),
+        ]
+    )
+
+    result = await run_turn(provider, tools, repository_id, "Find the fixture.")
+
+    assert result.answer.endswith("[docs/api specs/@scope/C++/a:b[1].cpp:1].")
+
+
+@pytest.mark.anyio
+async def test_answer_preserves_unrelated_colon_number_prose() -> None:
+    tools, repository_id = tool_client()
+    provider = FakeModelProvider([ModelResponse("See http://host:8080 for details.")])
+
+    result = await run_turn(provider, tools, repository_id, "Explain the repository.")
+
+    assert result.answer == "See http://host:8080 for details."
+
+
+@pytest.mark.anyio
 async def test_write_requests_are_denied_by_application_code() -> None:
     tools, repository_id = tool_client()
     before = (FIXTURE_ROOT / "README.md").read_bytes()
@@ -123,6 +207,21 @@ async def test_hard_limits_return_a_partial_result(limits: AgentLimits, reason: 
     assert result.status == "limit_reached"
     assert result.stop_reason == reason
     assert result.answer == "Partial"
+
+
+@pytest.mark.anyio
+async def test_limit_reached_answers_reject_unavailable_citations() -> None:
+    tools, repository_id = tool_client()
+    provider = FakeModelProvider(
+        [ModelResponse("Partial [README.md:1]", (ModelToolCall("list_files", {}),))]
+    )
+
+    result = await run_turn(
+        provider, tools, repository_id, "Summarize", AgentLimits(max_tool_calls=0)
+    )
+
+    assert result.status == "limit_reached"
+    assert result.answer == "Partial [unsupported citation]"
 
 
 @pytest.mark.anyio
@@ -422,6 +521,56 @@ async def test_repeat_limit_uses_normalized_application_arguments(
 
 
 @pytest.mark.anyio
+async def test_search_repeat_limit_uses_effective_defaults_clamps_and_paths() -> None:
+    tools, repository_id = tool_client()
+    dispatches = 0
+    original_search = tools.search_code
+
+    async def counted_search(
+        arguments: SearchCodeInput, max_bytes: int | None = None
+    ) -> SearchCodeOutput | ToolErrorOutput | None:
+        nonlocal dispatches
+        dispatches += 1
+        return await original_search(arguments, max_bytes)
+
+    tools.search_code = counted_search  # type: ignore[method-assign]
+    provider = FakeModelProvider(
+        [
+            ModelResponse(
+                "Searching",
+                (
+                    ModelToolCall("search_code", {"query": "fixture", "timeout_ms": 1}),
+                    ModelToolCall(
+                        "search_code",
+                        {
+                            "query": "fixture",
+                            "path": "./",
+                            "mode": "literal",
+                            "max_matches": 50,
+                            "context_before": 2,
+                            "context_after": 2,
+                            "timeout_ms": 100,
+                            "max_result_bytes": 65_536,
+                        },
+                    ),
+                ),
+            )
+        ]
+    )
+
+    result = await run_turn(
+        provider,
+        tools,
+        repository_id,
+        "Summarize",
+        AgentLimits(max_repeated_tool_calls=1),
+    )
+
+    assert result.stop_reason == "repeated_tool_call_limit"
+    assert dispatches == 1
+
+
+@pytest.mark.anyio
 async def test_slow_tool_is_cancelled_at_turn_deadline() -> None:
     tools, repository_id = tool_client()
     started = asyncio.Event()
@@ -638,14 +787,18 @@ async def test_blocking_repository_construction_obeys_deadline_and_global_admiss
     counter_lock = Lock()
     original_init = ConfinedRepositoryFiles.__init__
 
-    def blocked_init(service: ConfinedRepositoryFiles, canonical_root: str) -> None:
+    def blocked_init(
+        service: ConfinedRepositoryFiles,
+        canonical_root: str,
+        expected_root_identity: tuple[int, int] | None = None,
+    ) -> None:
         nonlocal constructor_calls
         with counter_lock:
             constructor_calls += 1
         constructor_started.set()
         release_constructor.wait(timeout=1)
         try:
-            original_init(service, canonical_root)
+            original_init(service, canonical_root, expected_root_identity)
         finally:
             constructor_finished.set()
 

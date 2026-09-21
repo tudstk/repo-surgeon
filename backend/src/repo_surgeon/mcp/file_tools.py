@@ -7,12 +7,12 @@ import json
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
 from threading import BoundedSemaphore
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from repo_surgeon.application.repositories import RepositoryStore
+from repo_surgeon.application.repositories import RepositoryLookup
 from repo_surgeon.application.repository_files import (
     MAX_FILE_COUNT,
     MAX_LINE_COUNT,
@@ -21,6 +21,9 @@ from repo_surgeon.application.repository_files import (
     FileRead,
     RepositoryFileError,
 )
+
+if TYPE_CHECKING:
+    from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
 
 class ListFilesInput(BaseModel):
@@ -190,20 +193,36 @@ _FILE_WORKER_SLOT = BoundedSemaphore(value=1)
 
 def _list_repository_files(
     canonical_root: str,
+    root_identity: tuple[int, int],
     directory: str,
     glob: str | None,
     max_results: int,
 ) -> FileListing:
-    return ConfinedRepositoryFiles(canonical_root).list_files(directory, glob, max_results)
+    return ConfinedRepositoryFiles(canonical_root, root_identity).list_files(
+        directory, glob, max_results
+    )
 
 
 def _read_repository_file(
     canonical_root: str,
+    root_identity: tuple[int, int],
     path: str,
     start_line: int,
     end_line: int | None,
 ) -> FileRead:
-    return ConfinedRepositoryFiles(canonical_root).read_file(path, start_line, end_line)
+    return ConfinedRepositoryFiles(canonical_root, root_identity).read_file(
+        path, start_line, end_line
+    )
+
+
+def _repository_root_identity(repository: object) -> tuple[int, int]:
+    root_device = getattr(repository, "root_device", None)
+    root_inode = getattr(repository, "root_inode", None)
+    if root_device is None or root_inode is None:
+        raise RepositoryFileError(
+            "repository_unavailable", "The registered repository is unavailable."
+        )
+    return root_device, root_inode
 
 
 async def _run_blocking[BlockingResult](
@@ -233,8 +252,11 @@ class McpFileTools:
     environment cannot refresh its lockfile from PyPI.
     """
 
-    def __init__(self, store: RepositoryStore) -> None:
+    def __init__(self, store: RepositoryLookup) -> None:
         self._store = store
+        from repo_surgeon.mcp.search_tools import McpSearchTools
+
+        self._search_tools = McpSearchTools(store)
 
     async def list_files(
         self, arguments: ListFilesInput, max_bytes: int | None = None
@@ -256,6 +278,7 @@ class McpFileTools:
                 await _run_blocking(
                     _list_repository_files,
                     repository.canonical_root,
+                    _repository_root_identity(repository),
                     arguments.directory,
                     arguments.glob,
                     arguments.max_results,
@@ -286,6 +309,7 @@ class McpFileTools:
                 await _run_blocking(
                     _read_repository_file,
                     repository.canonical_root,
+                    _repository_root_identity(repository),
                     arguments.path,
                     arguments.start_line,
                     arguments.end_line,
@@ -296,15 +320,31 @@ class McpFileTools:
         result = ReadFileOutput.from_read(read)
         return _bound_read_result(result, max_bytes)
 
+    async def search_code(
+        self, arguments: SearchCodeInput, max_bytes: int | None = None
+    ) -> SearchCodeOutput | ToolErrorOutput | None:
+        """Expose search through the repository tool suite used by the agent loop."""
+        return await self._search_tools.search_code(arguments, max_bytes)
+
 
 def tool_audit_summary(
-    result: ListFilesOutput | ReadFileOutput | ToolErrorOutput,
+    result: ListFilesOutput | ReadFileOutput | ToolErrorOutput | SearchCodeOutput,
 ) -> dict[str, Any]:
     """Return a sanitized result summary with no file content or host paths."""
     if isinstance(result, ToolErrorOutput):
         return {"success": False, "code": result.code}
     if isinstance(result, ListFilesOutput):
         return {"success": True, "operation": "list_files", "result_count": len(result.entries)}
+    from repo_surgeon.mcp.search_tools import SearchCodeOutput
+
+    if isinstance(result, SearchCodeOutput):
+        return {
+            "success": True,
+            "operation": "search_code",
+            "match_count": result.match_count,
+            "truncated": result.truncated,
+            "skipped_files": result.skipped_files,
+        }
     return {
         "success": True,
         "operation": "read_file",
@@ -314,7 +354,7 @@ def tool_audit_summary(
     }
 
 
-def create_mcp_server(store: RepositoryStore) -> Any:
+def create_mcp_server(store: RepositoryLookup) -> Any:
     """Build the in-process FastMCP server without starting any transport.
 
     The handlers are intentionally thin: FastMCP performs protocol framing while
@@ -322,6 +362,8 @@ def create_mcp_server(store: RepositoryStore) -> Any:
     and confinement.
     """
     from fastmcp import FastMCP
+
+    from repo_surgeon.mcp.search_tools import SearchCodeInput
 
     tools = McpFileTools(store)
     server = FastMCP("Repo Surgeon")
@@ -361,6 +403,39 @@ def create_mcp_server(store: RepositoryStore) -> Any:
                 path=path,
                 start_line=start_line,
                 end_line=end_line,
+            )
+        )
+        assert result is not None
+        return cast(dict[str, object], result.model_dump(mode="json"))
+
+    @server.tool(
+        name="search_code",
+        description="Search bounded safe repository text with literal or regex semantics.",
+    )
+    async def search_code(
+        repository_id: UUID,
+        query: str,
+        mode: Literal["literal", "regex"] = "literal",
+        path: str = ".",
+        glob: str | None = None,
+        max_matches: int = 50,
+        context_before: int = 2,
+        context_after: int = 2,
+        timeout_ms: int = 1_000,
+        max_result_bytes: int | None = None,
+    ) -> dict[str, object]:
+        result = await tools.search_code(
+            SearchCodeInput(
+                repository_id=repository_id,
+                query=query,
+                mode=mode,
+                path=path,
+                glob=glob,
+                max_matches=max_matches,
+                context_before=context_before,
+                context_after=context_after,
+                timeout_ms=timeout_ms,
+                max_result_bytes=max_result_bytes,
             )
         )
         assert result is not None

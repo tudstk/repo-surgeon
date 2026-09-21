@@ -20,3 +20,5 @@ class Repository:
     source: RepositorySource
     canonical_root: str
     created_at: datetime
+    root_device: int | None = None
+    root_inode: int | None = None

@@ -11,6 +11,7 @@ from pathlib import Path, PurePath
 from typing import Literal
 
 MAX_FILE_COUNT = 200
+MAX_DIRECTORY_COUNT = 2_000
 MAX_FILE_BYTES = 64 * 1024
 MAX_LINE_COUNT = 200
 
@@ -85,7 +86,9 @@ class FileRead:
 class ConfinedRepositoryFiles:
     """Read only regular files that resolve under one canonical repository root."""
 
-    def __init__(self, canonical_root: str) -> None:
+    def __init__(
+        self, canonical_root: str, expected_root_identity: tuple[int, int] | None = None
+    ) -> None:
         try:
             self._root = Path(canonical_root).resolve(strict=True)
         except OSError as error:
@@ -96,18 +99,55 @@ class ConfinedRepositoryFiles:
             raise RepositoryFileError(
                 "repository_unavailable", "The registered repository is unavailable."
             )
+        try:
+            root_stat = self._root.stat(follow_symlinks=False)
+        except OSError as error:
+            raise RepositoryFileError(
+                "repository_unavailable", "The registered repository is unavailable."
+            ) from error
+        if (
+            expected_root_identity is not None
+            and (
+                root_stat.st_dev,
+                root_stat.st_ino,
+            )
+            != expected_root_identity
+        ):
+            raise RepositoryFileError(
+                "repository_unavailable", "The registered repository changed."
+            )
+        self._root_identity = (root_stat.st_dev, root_stat.st_ino)
+
+    @property
+    def canonical_root(self) -> Path:
+        return self._root
+
+    @property
+    def root_identity(self) -> tuple[int, int]:
+        return self._root_identity
 
     def list_files(
-        self, directory: str = ".", glob: str | None = None, max_results: int = 50
+        self,
+        directory: str = ".",
+        glob: str | None = None,
+        max_results: int = 50,
+        ignored_directories: frozenset[str] = frozenset(),
     ) -> FileListing:
         """Return safe regular files below a confined directory using a fixed walk."""
         visible_directory, normalized_directory = self._resolve_directory(directory)
         limit = min(max_results, MAX_FILE_COUNT)
         entries: list[FileEntry] = []
+        visited_directories = 0
         for current_root, directories, files in os.walk(visible_directory, followlinks=False):
+            visited_directories += 1
+            if visited_directories > MAX_DIRECTORY_COUNT:
+                return FileListing(normalized_directory, tuple(entries), truncated=True)
             current = Path(current_root)
             directories[:] = sorted(
-                child for child in directories if self._is_visible_directory(current / child)
+                child
+                for child in directories
+                if child.lower() not in ignored_directories
+                and self._is_visible_directory(current / child)
             )
             for filename in sorted(files):
                 try:
@@ -124,6 +164,34 @@ class ConfinedRepositoryFiles:
                     return FileListing(normalized_directory, tuple(entries), truncated=True)
                 entries.append(FileEntry(path=relative, entry_type="file", size_bytes=size))
         return FileListing(normalized_directory, tuple(entries), truncated=False)
+
+    def path_type(self, path: str) -> Literal["file", "directory"]:
+        """Validate one visible path without walking its descendants."""
+        candidate, relative = self._resolve_requested_path(path)
+        try:
+            resolved = candidate.resolve(strict=True)
+        except FileNotFoundError as error:
+            raise RepositoryFileError(
+                "file_not_found", "The requested file was not found."
+            ) from error
+        except OSError as error:
+            raise RepositoryFileError(
+                "unsafe_path", "The requested path cannot be inspected safely."
+            ) from error
+        self._ensure_contained(resolved)
+        self._ensure_visible_relative(relative)
+        self._ensure_visible_relative(resolved.relative_to(self._root).as_posix())
+        try:
+            mode = resolved.stat().st_mode
+        except OSError as error:
+            raise RepositoryFileError(
+                "file_not_found", "The requested file was not found."
+            ) from error
+        if stat.S_ISDIR(mode):
+            return "directory"
+        if stat.S_ISREG(mode):
+            return "file"
+        raise RepositoryFileError("unsafe_path", "The requested path is not a regular file.")
 
     def read_file(self, path: str, start_line: int = 1, end_line: int | None = None) -> FileRead:
         """Read from a root-anchored descriptor after canonical policy checks."""
@@ -152,7 +220,9 @@ class ConfinedRepositoryFiles:
             start_line=start_line,
             end_line=selected_end,
             lines=lines,
-            truncated=requested_end > selected_end,
+            truncated=(
+                len(all_lines) > selected_end if end_line is None else requested_end > selected_end
+            ),
             content_sha256=hashlib.sha256(payload).hexdigest(),
         )
 
@@ -168,6 +238,11 @@ class ConfinedRepositoryFiles:
         root_fd = os.open(self._root, directory_flags)
         descriptors = [root_fd]
         try:
+            root_stat = os.fstat(root_fd)
+            if (root_stat.st_dev, root_stat.st_ino) != self._root_identity:
+                raise RepositoryFileError(
+                    "repository_unavailable", "The registered repository changed."
+                )
             parts = relative.parts
             for component in parts[:-1]:
                 descriptors.append(os.open(component, directory_flags, dir_fd=descriptors[-1]))
