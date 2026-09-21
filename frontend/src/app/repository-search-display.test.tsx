@@ -3,6 +3,7 @@ import { vi } from 'vitest';
 
 import {
   RepositorySummaryCard,
+  InvestigationPanel,
   SearchActivityRow,
   type SearchActivity,
 } from './repository-search-display';
@@ -85,4 +86,44 @@ describe('SearchActivityRow', () => {
       expect(screen.getByText(label)).toBeInTheDocument();
     },
   );
+});
+
+describe('InvestigationPanel', () => {
+  it('selects supporting evidence in the work panel', () => {
+    const onSelectEvidence = vi.fn();
+    const evidence = {
+      citation_id: 'search-investigation-1-1',
+      path: 'auth/session.py',
+      start_line: 51,
+      end_line: 53,
+      label: 'auth/session.py:51-53',
+      excerpt: 'def expire(token):',
+    };
+    render(
+      <InvestigationPanel
+        result={{
+          status: 'complete',
+          question: 'Why?',
+          summary: 'Evidence found.',
+          hypotheses: [
+            {
+              rank: 1,
+              title: 'Expiry path',
+              explanation: 'The retrieved code is a lead.',
+              confidence: 'high',
+              evidence: [evidence],
+              verification_suggestions: ['Add a regression test.'],
+            },
+          ],
+          tool_calls: 1,
+          returned_bytes: 100,
+          stop_reason: null,
+        }}
+        onSelectEvidence={onSelectEvidence}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('link', { name: /auth\/session.py:51-53/ }));
+    expect(onSelectEvidence).toHaveBeenCalledWith(evidence);
+  });
 });

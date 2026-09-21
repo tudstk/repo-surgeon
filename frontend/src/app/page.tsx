@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   RepositorySummaryCard,
   InvestigationPanel,
+  type InvestigationEvidence,
   type InvestigationResult,
   SearchActivityRow,
   type RepositorySummary,
@@ -274,6 +275,20 @@ const CitedSource = ({ citation }: { citation: SearchCitation }) => {
     </div>
   );
 };
+
+function evidenceCitation(evidence: InvestigationEvidence): SearchCitation {
+  return {
+    id: evidence.citation_id,
+    path: evidence.path,
+    matchLine: evidence.start_line,
+    startLine: evidence.start_line,
+    endLine: evidence.end_line,
+    label: evidence.label,
+    text: evidence.excerpt,
+    before: [],
+    after: [],
+  };
+}
 
 function ProposedDiff() {
   return (
@@ -892,7 +907,10 @@ export default function Home() {
           {selectedCitation ? (
             <CitedSource citation={selectedCitation} />
           ) : investigation ? (
-            <InvestigationPanel result={investigation} />
+            <InvestigationPanel
+              result={investigation}
+              onSelectEvidence={(evidence) => setSelectedCitation(evidenceCitation(evidence))}
+            />
           ) : (
             <ProposedDiff />
           )}

@@ -8,7 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from repo_surgeon.agent.loop import AgentLimits, ToolEvent, _serialized, _tool_event
+from repo_surgeon.agent.loop import AgentLimits, Citation, ToolEvent, _serialized, _tool_event
 from repo_surgeon.mcp.file_tools import McpFileTools
 from repo_surgeon.mcp.search_tools import SearchCodeInput
 
@@ -60,6 +60,7 @@ class _SearchPlan:
     query: str
     title: str
     explanation: str
+    evidence_terms: tuple[str, ...]
     confidence: Literal["high", "medium", "low"]
     verification: str
 
@@ -73,15 +74,17 @@ def _plans(question: str) -> tuple[_SearchPlan, ...]:
                 "Expiry path may leave stale session state",
                 "The expiry path is the strongest lead because it controls when a session "
                 "stops being valid.",
+                ("expire", "seeded bug"),
                 "high",
                 "Add a focused test that advances time past expiry and asserts the token is "
                 "rejected.",
             ),
             _SearchPlan(
-                "sessions",
+                "session",
                 "In-memory session state may be the source of the mismatch",
                 "The session store is a second lead because reads and expiry must agree on "
                 "the same state.",
+                ("session", "seeded bug"),
                 "medium",
                 "Exercise two requests with the same token before and after expiry and inspect "
                 "store state.",
@@ -93,6 +96,7 @@ def _plans(question: str) -> tuple[_SearchPlan, ...]:
             "The seeded bug marker identifies the failing path",
             "The repository's explicit bug marker is the most direct starting point for "
             "investigation.",
+            ("seeded bug",),
             "high",
             "Turn the marker into a regression test that reproduces the reported behavior.",
         ),
@@ -101,10 +105,19 @@ def _plans(question: str) -> tuple[_SearchPlan, ...]:
             "An unfinished branch may explain the observed behavior",
             "An unfinished branch is a plausible contributing cause, but needs a reproducer "
             "before changes are considered.",
+            ("todo", "seeded bug"),
             "low",
             "Trace callers into this branch and compare expected versus observed values in a "
             "focused test.",
         ),
+    )
+
+
+def _validated_citations(event: ToolEvent, plan: _SearchPlan) -> tuple[Citation, ...]:
+    return tuple(
+        citation
+        for citation in event.citations
+        if all(term in citation.text.lower() for term in plan.evidence_terms)
     )
 
 
@@ -141,7 +154,8 @@ async def investigate_repository(
         )
         events.append(event)
         returned_bytes += len(_serialized(result))
-        if event.citations:
+        citations = _validated_citations(event, plan)
+        if citations:
             hypotheses.append(
                 Hypothesis(
                     rank=len(hypotheses) + 1,
@@ -157,7 +171,7 @@ async def investigate_repository(
                             label=c.label,
                             excerpt=c.text,
                         )
-                        for c in event.citations
+                        for c in citations
                     ),
                     verification_suggestions=(plan.verification,),
                 )

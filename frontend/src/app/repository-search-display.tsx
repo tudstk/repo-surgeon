@@ -60,7 +60,13 @@ export type InvestigationResult = {
   stop_reason: string | null;
 };
 
-export function InvestigationPanel({ result }: { result: InvestigationResult | null }) {
+export function InvestigationPanel({
+  result,
+  onSelectEvidence,
+}: {
+  result: InvestigationResult | null;
+  onSelectEvidence: (evidence: InvestigationEvidence) => void;
+}) {
   if (!result) {
     return (
       <p className="investigation-empty">Ask why the seeded bug occurs to see ranked leads.</p>
@@ -89,7 +95,11 @@ export function InvestigationPanel({ result }: { result: InvestigationResult | n
             <div className="evidence-label">SUPPORTING EVIDENCE</div>
             <div className="evidence-list">
               {hypothesis.evidence.map((evidence) => (
-                <a href={`#evidence-${evidence.citation_id}`} key={evidence.citation_id}>
+                <a
+                  href="#work-panel"
+                  key={evidence.citation_id}
+                  onClick={() => onSelectEvidence(evidence)}
+                >
                   <code>{evidence.label}</code>
                   <span>{evidence.excerpt}</span>
                 </a>
