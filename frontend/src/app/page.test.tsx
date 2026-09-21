@@ -103,9 +103,9 @@ describe('Home', () => {
     expect(screen.getByRole('button', { name: 'Staging Chamber' })).toBeDisabled();
 
     const composer = screen.getByRole('textbox', { name: 'Agent instruction' });
-    expect(composer).toHaveAttribute('readonly');
+    expect(composer).not.toHaveAttribute('readonly');
     expect(composer).toHaveAccessibleDescription(
-      'This field is read-only and cannot send instructions.',
+      'Investigation is read-only and cannot modify the connected repository.',
     );
     const form = composer.closest('form');
     expect(form).not.toBeNull();

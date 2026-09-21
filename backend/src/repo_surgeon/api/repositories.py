@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from repo_surgeon.agent.investigation import InvestigationResult, investigate_repository
 from repo_surgeon.application.repositories import (
     GetRepository,
     ListRepositories,
@@ -25,6 +26,7 @@ from repo_surgeon.application.repository_intelligence import (
 from repo_surgeon.domain.repositories import Repository
 from repo_surgeon.infrastructure.local_repository_root import GitLocalRepositoryRootResolver
 from repo_surgeon.infrastructure.repository_store import SqlAlchemyRepositoryStore
+from repo_surgeon.mcp.file_tools import McpFileTools
 from repo_surgeon.mcp.search_tools import (
     McpSearchTools,
     SearchCodeArguments,
@@ -91,6 +93,12 @@ class RepositorySummaryResponse(BaseModel):
         )
 
 
+class InvestigationRequest(BaseModel):
+    """A user question routed through the bounded read-only investigator."""
+
+    question: str = Field(min_length=3, max_length=2_000)
+
+
 class ProblemDetail(BaseModel):
     """Stable, typed problem response for expected client errors."""
 
@@ -126,6 +134,31 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
 
 
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
+
+
+@router.post(
+    "/{repository_id}/investigations",
+    response_model=InvestigationResult,
+    responses={404: {"model": ProblemDetail}},
+    summary="Investigate a repository bug with bounded read-only evidence",
+)
+async def investigate_repository_bug(
+    repository_id: UUID, body: InvestigationRequest, session: SessionDependency
+) -> InvestigationResult:
+    repository = await GetRepository(SqlAlchemyRepositoryStore(session)).execute(repository_id)
+    if repository is None:
+        raise RepositoryProblem(
+            ProblemDetail(
+                type="https://repo-surgeon.local/problems/repository_not_found",
+                title="Repository not found",
+                status=404,
+                detail="No registered repository has this identifier.",
+                code="repository_not_found",
+            )
+        )
+    return await investigate_repository(
+        McpFileTools(SqlAlchemyRepositoryStore(session)), repository_id, body.question
+    )
 
 
 def _registration_problem(error: RepositoryRegistrationError) -> RepositoryProblem:

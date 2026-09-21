@@ -234,6 +234,138 @@ textarea:focus-visible {
   overflow: hidden;
   border-right: 1px solid var(--line);
 }
+.investigation-panel {
+  height: 100%;
+  overflow: auto;
+  padding: 18px;
+  background: #111722;
+}
+.investigation-summary {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+}
+.investigation-summary strong {
+  display: block;
+  margin-top: 9px;
+  font-size: 16px;
+}
+.investigation-summary p {
+  color: var(--muted);
+  margin: 6px 0 0;
+}
+.read-only-chip,
+.confidence-pill {
+  display: inline-block;
+  border: 1px solid #276d55;
+  border-radius: 999px;
+  color: var(--green);
+  font:
+    10px ui-monospace,
+    monospace;
+  letter-spacing: 0.06em;
+  padding: 4px 7px;
+  text-transform: uppercase;
+}
+.hypothesis-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+.hypothesis-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #171d27;
+}
+.hypothesis-topline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.hypothesis-topline h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 14px;
+}
+.hypothesis-rank {
+  color: var(--violet);
+  font:
+    700 12px ui-monospace,
+    monospace;
+}
+.confidence-pill {
+  margin-left: auto;
+  color: #d8b06a;
+  border-color: #785928;
+}
+.confidence-high {
+  color: var(--green);
+  border-color: #276d55;
+}
+.confidence-low {
+  color: var(--muted);
+  border-color: #475263;
+}
+.hypothesis-card p {
+  color: #b5bfce;
+  margin: 10px 0;
+}
+.evidence-label {
+  color: var(--faint);
+  font:
+    10px ui-monospace,
+    monospace;
+  letter-spacing: 0.1em;
+  margin-top: 12px;
+}
+.evidence-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 7px;
+}
+.evidence-list a {
+  display: grid;
+  gap: 2px;
+  border-left: 2px solid var(--violet);
+  padding: 5px 8px;
+  color: var(--text);
+  text-decoration: none;
+  background: #1d2430;
+  min-width: 0;
+}
+.evidence-list code {
+  color: #a5a5ff;
+}
+.evidence-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.hypothesis-card ul {
+  color: var(--muted);
+  margin: 7px 0 0;
+  padding-left: 20px;
+}
+.investigation-budget,
+.investigation-empty {
+  color: var(--faint);
+  display: block;
+  padding: 18px 0;
+}
+.investigation-loading {
+  color: var(--green);
+  padding: 12px 18px;
+  font:
+    11px ui-monospace,
+    monospace;
+}
+.composer-error {
+  color: #ee8b8b;
+  margin: 7px 0 0;
+}
 .workspace-rail {
   position: relative;
   display: flex;

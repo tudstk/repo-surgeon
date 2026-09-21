@@ -32,6 +32,86 @@ export type SearchActivity = {
   citations: readonly SearchCitation[];
 };
 
+export type InvestigationEvidence = {
+  citation_id: string;
+  path: string;
+  start_line: number;
+  end_line: number;
+  label: string;
+  excerpt: string;
+};
+
+export type InvestigationHypothesis = {
+  rank: number;
+  title: string;
+  explanation: string;
+  confidence: 'high' | 'medium' | 'low';
+  evidence: InvestigationEvidence[];
+  verification_suggestions: string[];
+};
+
+export type InvestigationResult = {
+  status: 'complete' | 'partial';
+  question: string;
+  summary: string;
+  hypotheses: InvestigationHypothesis[];
+  tool_calls: number;
+  returned_bytes: number;
+  stop_reason: string | null;
+};
+
+export function InvestigationPanel({ result }: { result: InvestigationResult | null }) {
+  if (!result) {
+    return (
+      <p className="investigation-empty">Ask why the seeded bug occurs to see ranked leads.</p>
+    );
+  }
+  return (
+    <div className="investigation-panel" aria-label="Bug investigation results">
+      <div className="investigation-summary">
+        <span className="read-only-chip">READ-ONLY INVESTIGATION</span>
+        <strong>
+          {result.status === 'complete' ? 'Evidence review complete' : 'Evidence review partial'}
+        </strong>
+        <p>{result.summary}</p>
+      </div>
+      <div className="hypothesis-list">
+        {result.hypotheses.map((hypothesis) => (
+          <article className="hypothesis-card" key={`${hypothesis.rank}-${hypothesis.title}`}>
+            <div className="hypothesis-topline">
+              <span className="hypothesis-rank">#{hypothesis.rank}</span>
+              <h3>{hypothesis.title}</h3>
+              <span className={`confidence-pill confidence-${hypothesis.confidence}`}>
+                {hypothesis.confidence} confidence
+              </span>
+            </div>
+            <p>{hypothesis.explanation}</p>
+            <div className="evidence-label">SUPPORTING EVIDENCE</div>
+            <div className="evidence-list">
+              {hypothesis.evidence.map((evidence) => (
+                <a href={`#evidence-${evidence.citation_id}`} key={evidence.citation_id}>
+                  <code>{evidence.label}</code>
+                  <span>{evidence.excerpt}</span>
+                </a>
+              ))}
+            </div>
+            <div className="evidence-label">VERIFY NEXT</div>
+            <ul>
+              {hypothesis.verification_suggestions.map((suggestion) => (
+                <li key={suggestion}>{suggestion}</li>
+              ))}
+            </ul>
+          </article>
+        ))}
+      </div>
+      <small className="investigation-budget">
+        Bounded trace · {result.tool_calls} read tool calls · {result.returned_bytes} bytes · no
+        writes permitted
+      </small>
+    </div>
+  );
+}
+
 // Module-scoped helpers are intentional in this client component.
 // skipcq: JS-0067
 function formatLines(lines: number | null) {

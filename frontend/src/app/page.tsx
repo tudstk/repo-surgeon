@@ -5,6 +5,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   RepositorySummaryCard,
+  InvestigationPanel,
+  type InvestigationResult,
   SearchActivityRow,
   type RepositorySummary,
   type SearchActivity,
@@ -376,6 +378,36 @@ export default function Home() {
   const [repositories, setRepositories] = useState<RegisteredRepository[]>([]);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [repositorySummary, setRepositorySummary] = useState<RepositorySummary | null>(null);
+  const [investigationQuestion, setInvestigationQuestion] = useState(
+    'Why do users get logged out?',
+  );
+  const [investigation, setInvestigation] = useState<InvestigationResult | null>(null);
+  const [investigationLoading, setInvestigationLoading] = useState(false);
+  const [investigationError, setInvestigationError] = useState<string | null>(null);
+
+  const investigate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedRepositoryId || investigationQuestion.trim().length < 3) return;
+    setInvestigationLoading(true);
+    setInvestigationError(null);
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+    try {
+      const response = await fetch(
+        `${apiBase}/repositories/${selectedRepositoryId}/investigations`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: investigationQuestion.trim() }),
+        },
+      );
+      if (!response.ok) throw new Error('investigation_failed');
+      setInvestigation((await response.json()) as InvestigationResult);
+    } catch {
+      setInvestigationError('Investigation unavailable. Check the local API and try again.');
+    } finally {
+      setInvestigationLoading(false);
+    }
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -759,16 +791,14 @@ export default function Home() {
             <div className="message-meta">
               YOU <time>14:28:01</time>
             </div>
-            <div className="user-message">
-              Refactor the session module to use the new token store, and keep tests green.
-            </div>
+            <div className="user-message">{investigationQuestion}</div>
             <div className="message-meta agent-meta">
               REPO SURGEON <span>sub-agent: refactor-core</span>
               <time>14:28:04</time>
             </div>
             <p className="agent-message">
-              I&apos;ll locate the session logic, draft the change in an isolated sandbox, and
-              verify tests before proposing it.
+              I&apos;ll inspect bounded repository evidence, rank likely causes, and suggest a
+              focused verification step. This investigation cannot modify files.
             </p>
             <div className="activity-list" aria-label="Agent activity">
               <SearchActivityRow activity={searchActivity} onSelectCitation={setSelectedCitation} />
@@ -783,7 +813,7 @@ export default function Home() {
               proposing patch revision 1, awaiting your approval...
             </div>
           </div>
-          <form className="composer" onSubmit={(event) => event.preventDefault()}>
+          <form className="composer" onSubmit={investigate}>
             <div className="slash-hints">
               <kbd>/explain diff</kbd>
               <kbd>/run-fuzz-tests</kbd>
@@ -793,11 +823,12 @@ export default function Home() {
             <textarea
               aria-label="Agent instruction"
               aria-describedby="composer-note"
-              readOnly
-              placeholder="Instruct agent or type '/' for surgical tools..."
+              value={investigationQuestion}
+              onChange={(event) => setInvestigationQuestion(event.target.value)}
+              placeholder="Ask why the seeded bug occurs..."
             />
             <p className="sr-only" id="composer-note">
-              This field is read-only and cannot send instructions.
+              Investigation is read-only and cannot modify the connected repository.
             </p>
             <div className="composer-controls">
               <button type="button" disabled aria-label="Model selector unavailable">
@@ -806,10 +837,16 @@ export default function Home() {
               <button className="abort" type="button" disabled>
                 <Glyph>⊘</Glyph> Abort [Esc]
               </button>
-              <button className="send" type="submit" aria-label="Send instruction" disabled>
+              <button
+                className="send"
+                type="submit"
+                aria-label="Send instruction"
+                disabled={investigationLoading || !selectedRepositoryId}
+              >
                 <Glyph>↑</Glyph>
               </button>
             </div>
+            {investigationError && <p className="composer-error">{investigationError}</p>}
           </form>
         </section>
         {!isStackedLayout && (
@@ -852,7 +889,16 @@ export default function Home() {
               +7 −5 &nbsp; <b>SPLIT</b> &nbsp; UNIFIED
             </span>
           </div>
-          {selectedCitation ? <CitedSource citation={selectedCitation} /> : <ProposedDiff />}
+          {selectedCitation ? (
+            <CitedSource citation={selectedCitation} />
+          ) : investigation ? (
+            <InvestigationPanel result={investigation} />
+          ) : (
+            <ProposedDiff />
+          )}
+          {investigationLoading && (
+            <div className="investigation-loading">Retrieving bounded evidence...</div>
+          )}
         </section>
       </div>
       <h1 className="sr-only">Understand the code. Keep people in control.</h1>
