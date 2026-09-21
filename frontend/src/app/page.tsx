@@ -1,12 +1,32 @@
-import React from 'react';
+'use client';
 
-export default function Home() {
-  return (
-    <main className="container">
-      <h1>Home Page</h1>
-    </main>
-  );
+import Link from 'next/link';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+import {
+  RepositorySummaryCard,
+  SearchActivityRow,
+  type RepositorySummary,
+  type SearchActivity,
+  type SearchCitation,
+} from './repository-search-display';
+
+const STACKED_LAYOUT_QUERY = '(max-width: 1024px)';
+
+type RegisteredRepository = {
+  id: string;
+  name: string;
+};
+
+// Module-scoped helpers are intentional in this client component.
+// skipcq: JS-0067
+function repositoryName(repository: RegisteredRepository | null) {
+  if (!repository) return 'No repository connected';
+  return repository.name;
 }
+
+const initialSearchActivity: SearchActivity = {
+  tool: 'search_code',
   phase: 'idle',
   summary: 'No repository selected',
   matchCount: null,
@@ -28,14 +48,9 @@ const PANE_LABELS = [
 ];
 
 // skipcq: JS-0067
-const paneMinimums = (viewportWidth: number) => {
+function paneMinimums(viewportWidth: number) {
   if (viewportWidth <= 1100) return [150, 210, 270, 340];
   if (viewportWidth <= 1284) return [160, 220, 280, 360];
-  // Leave enough surplus at wide desktop sizes for every adjacent pair to
-  // resize, while keeping the conversation and diff panes readable.
-  return [180, 220, 320, 400];
-};
-};
   // Leave enough surplus at wide desktop sizes for every adjacent pair to
   // resize, while keeping the conversation and diff panes readable.
   return [180, 220, 320, 400];
@@ -208,19 +223,19 @@ const searchCitations = (data: SearchResponse, repositoryId: string): SearchCita
   return data.matches.map((match, index) => {
     const before = match.before ?? [];
     const after = match.after ?? [];
-    return matches.map((match, index) => {
-      return {
-        id: `search-${repositoryId}-${index}`,
-        path: match.path,
-        matchLine: match.line,
-        startLine,
-        endLine,
-        label: `${match.path}:${startLine}${endLine === startLine ? '' : `-${endLine}`}`,
-        text: match.text,
-        before,
-        after,
-      };
-    });
+    const startLine = before[0]?.number ?? match.line;
+    const endLine = after.at(-1)?.number ?? match.line;
+    return {
+      id: `search-${repositoryId}-${index}`,
+      path: match.path,
+      matchLine: match.line,
+      startLine,
+      endLine,
+      label: `${match.path}:${startLine}${endLine === startLine ? '' : `-${endLine}`}`,
+      text: match.text,
+      before,
+      after,
+    };
   });
 };
 
@@ -235,73 +250,57 @@ const CitedSource = ({ citation }: { citation: SearchCitation }) => {
     <div className="citation-code-view" aria-label="Cited source">
       <div className="file-heading">
         <strong>
-const FileHeader = ({ icon, path, meta, id }) => (
-  <div className="file-heading" {...(id ? { id } : {})}>
-    <strong>
-      <Glyph>{icon}</Glyph> &nbsp; {path}
-    </strong>
-    {meta}
-  </div>
-);
-
-const DiffLines = ({ lines, matchLine, ariaLabel }) => (
-  <div className="diff-code" {...(ariaLabel ? { 'aria-label': ariaLabel } : {})}>
-    {lines.map((line) => (
-      <div
-        className={`code-line ${matchLine !== undefined && line.number === matchLine ? 'cited-line' : ''}${line.type ? ` ${line.type}` : ''}`}
-        key={`${line.number}-${line.text}`}
-      >
-        <span>{line.number}</span>
-        <code>{line.text}</code>
+          <Glyph>‹›</Glyph> &nbsp; {citation.path}
+        </strong>
+        <span>
+          L{citation.startLine}
+          {citation.endLine !== citation.startLine && `-${citation.endLine}`}
+        </span>
       </div>
-    ))}
-  </div>
-);
-
-export const ExactDiff = ({ citation, lines }) => {
-  return (
-    <div className="diff">
-  return (
-    <div className="diff">
-      <FileHeader
-        icon="‹›"
-        path={citation.path}
-        meta={
-          <span>
-            L{citation.startLine}
-            {citation.endLine !== citation.startLine && `-${citation.endLine}`}
-          </span>
-        }
-      />
       <div className="hunk-label">Exact search evidence · read-only</div>
-      <DiffLines lines={lines} matchLine={citation.matchLine} />
+      <div className="diff-code">
+        {lines.map((line) => (
+          <div
+            className={`code-line ${line.number === citation.matchLine ? 'cited-line' : ''}`}
+            key={`${line.number}-${line.text}`}
+          >
+            <span>{line.number}</span>
+            <code>{line.text}</code>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
 
-export function ProposedDiff() {
+function ProposedDiff() {
   return (
     <div className="proposed-diff">
-      <FileHeader
-        icon="▤"
-        path="auth/session.py"
-        id="diff"
-        meta={
-          <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
-        }
-      />
+      <div className="file-heading" id="diff">
+        <strong>
+          <Glyph>▤</Glyph> &nbsp; auth/session.py
+        </strong>
+        <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
+      </div>
       <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
-      <DiffLines
-        lines={[
-          { number: '48  48', text: 'def __init__(self, ttl_seconds: int = 3600) -> None:' },
-          { number: '49  49', text: ' self._ttl = ttl_seconds' },
-          { number: '50  −', text: ' self._sessions = {}', type: 'removed' },
-          { number: '50  +', text: ' self._store = TokenStore(default_ttl=ttl_seconds)', type: 'added' },
-        ]}
-      />
-    </div>
-  );
-}
+      <div className="diff-code" aria-label="Proposed code diff">
+        <div className="code-line">
+          <span>48&nbsp;&nbsp; 48</span>
+          <code>def __init__(self, ttl_seconds: int = 3600) -&gt; None:</code>
+        </div>
+        <div className="code-line">
+          <span>49&nbsp;&nbsp; 49</span>
+          <code> self._ttl = ttl_seconds</code>
+        </div>
+        <div className="code-line removed">
+          <span>50&nbsp;&nbsp; −</span>
+          <code> self._sessions = {'{}'}</code>
+        </div>
+        <div className="code-line added">
+          <span>50&nbsp;&nbsp; +</span>
+          <code> self._store = TokenStore(default_ttl=ttl_seconds)</code>
+        </div>
+        <div className="code-line">
           <span>51&nbsp;&nbsp; 51</span>
           <code> self._lock = threading.RLock()</code>
         </div>
