@@ -160,7 +160,7 @@ async def investigate_repository(
                 Hypothesis(
                     rank=len(hypotheses) + 1,
                     title=plan.title,
-                    explanation=f"{plan.explanation} Evidence shows {event.citations[0].label}.",
+                    explanation=f"{plan.explanation} Evidence shows {citations[0].label}.",
                     confidence=plan.confidence,
                     evidence=tuple(
                         Evidence(
