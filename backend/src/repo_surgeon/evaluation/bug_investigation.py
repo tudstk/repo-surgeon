@@ -1,3 +1,4 @@
+import importlib.util
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -24,10 +25,22 @@ def seeded_behavioral_proof(
 ) -> SeededBehavioralProof | None:
     if Path(canonical_root).resolve() != CANONICAL_SEEDED_FIXTURE.resolve():
         return None
+    module_spec = importlib.util.spec_from_file_location(
+        "repo_surgeon_m4_seeded_session", CANONICAL_SEEDED_FIXTURE / "session.py"
+    )
+    if module_spec is None or module_spec.loader is None:
+        return None
+    module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(module)
+    expire = getattr(module, "expire", None)
+    if not callable(expire):
+        return None
     expired_token = "m4-session-token"
-    returned_token = expired_token
-    user_visible_session_remains_active = returned_token is not None
-    if not user_visible_session_remains_active:
+    returned_token = expire(expired_token)
+    expected_expired_state = None
+    failure_observed = returned_token != expected_expired_state
+    user_visible_session_remains_active = returned_token == expired_token
+    if not (failure_observed and user_visible_session_remains_active):
         return None
     return (
         CANONICAL_SEEDED_PROOF

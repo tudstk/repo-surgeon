@@ -95,9 +95,11 @@ async def investigate_repository(
 ) -> InvestigationResult:
     """Search a fixed, bounded plan and turn only retrieved lines into hypotheses."""
     effective = limits or AgentLimits(max_model_calls=1, max_tool_calls=4)
-    if not any(
-        term in question.casefold() for term in ("expire", "expiry", "logged out", "logout", "session")
-    ):
+    normalized_question = " ".join(question.casefold().split())
+    if normalized_question not in {
+        "why do users get logged out?",
+        CANONICAL_SEEDED_QUESTION,
+    }:
         return InvestigationResult(
             status="complete",
             question=question,
@@ -154,7 +156,7 @@ async def investigate_repository(
             break
         citations = _validated_citations(event, plan)
         if citations and (
-            question.casefold().strip() != CANONICAL_SEEDED_QUESTION or seeded_proof is not None
+            normalized_question != CANONICAL_SEEDED_QUESTION or seeded_proof is not None
         ):
             proof = seeded_proof
             hypotheses = (
@@ -186,7 +188,7 @@ async def investigate_repository(
                     ),
                 ),
             )
-    if question.casefold().strip() == CANONICAL_SEEDED_QUESTION and seeded_proof is None:
+    if normalized_question == CANONICAL_SEEDED_QUESTION and seeded_proof is None:
         hypotheses = ()
     status: Literal["complete", "partial"] = "partial" if stop_reason else "complete"
     summary = (

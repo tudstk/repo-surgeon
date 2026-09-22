@@ -108,6 +108,19 @@ async def test_unsupported_question_returns_insufficient_evidence(tmp_path: Path
 
 
 @pytest.mark.anyio
+async def test_keyword_overlap_does_not_select_expiry_plan(tmp_path: Path) -> None:
+    (tmp_path / "session.py").write_text("def expire(token):\n    return token\n")
+    repository = Repository(uuid4(), RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
+
+    result = await investigate_repository(
+        McpFileTools(MemoryStore(repository)), repository.id, "Why is session storage slow?"
+    )
+
+    assert result.hypotheses == ()
+    assert result.tool_calls == 0
+
+
+@pytest.mark.anyio
 async def test_investigation_stops_at_returned_byte_budget(tmp_path: Path) -> None:
     (tmp_path / "session.py").write_text("def expire(token):\n    return token\n")
     repository = Repository(uuid4(), RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
