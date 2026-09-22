@@ -234,8 +234,16 @@ describe('Home', () => {
                   }
                 : input.toString().endsWith('/search')
                   ? {
-                      match_count: 0,
-                      matches: [],
+                      match_count: 1,
+                      matches: [
+                        {
+                          path: 'auth/session.py',
+                          line: 52,
+                          text: 'async def resolve(self, token: str):',
+                          before: [],
+                          after: [],
+                        },
+                      ],
                       truncated: false,
                       duration_ms: 1,
                       skipped_files: 0,
@@ -254,6 +262,7 @@ describe('Home', () => {
     );
     fireEvent.submit(screen.getByRole('textbox', { name: 'Agent instruction' }).closest('form')!);
     await waitFor(() => expect(screen.getByText('Expiry path')).toBeInTheDocument());
+    expect(screen.queryByRole('link', { name: 'auth/session.py:52' })).not.toBeInTheDocument();
     expect(screen.queryByText(/WRITE PENDING/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/proposing patch revision/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/\+7 −5/)).not.toBeInTheDocument();
