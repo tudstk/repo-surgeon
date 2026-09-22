@@ -1,4 +1,7 @@
-import importlib.util
+import hashlib
+import os
+import stat
+import types
 from collections.abc import Callable
 from pathlib import Path
 from typing import Protocol
@@ -32,6 +35,9 @@ class _Session(Protocol):
 
 _SessionFactory = Callable[[str], _Session]
 _Expire = Callable[[_Session, str], str | None]
+_CANONICAL_SESSION_SHA256 = (
+    "54b9a57b499e29177a2b7e721b66e28725336049bed2a961adfe7b50f9ca70ad"
+)
 
 
 def seeded_behavioral_proof(
@@ -54,13 +60,29 @@ def seeded_behavioral_proof(
         return None
     if (identity.st_dev, identity.st_ino) != (expected_root_device, expected_root_inode):
         return None
-    module_spec = importlib.util.spec_from_file_location(
-        "repo_surgeon_m4_seeded_session", CANONICAL_SEEDED_FIXTURE / "session.py"
-    )
-    if module_spec is None or module_spec.loader is None:
+    session_path = CANONICAL_SEEDED_FIXTURE / "session.py"
+    descriptor = -1
+    try:
+        descriptor = os.open(session_path, os.O_RDONLY | os.O_NOFOLLOW)
+        session_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(session_stat.st_mode):
+            return None
+        with os.fdopen(descriptor, "rb") as session_file:
+            descriptor = -1
+            source = session_file.read()
+    except (OSError, UnicodeError):
         return None
-    module = importlib.util.module_from_spec(module_spec)
-    module_spec.loader.exec_module(module)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if hashlib.sha256(source).hexdigest() != _CANONICAL_SESSION_SHA256:
+        return None
+    try:
+        module = types.ModuleType("repo_surgeon_m4_seeded_session")
+        module.__file__ = str(session_path)
+        exec(compile(source, str(session_path), "exec"), module.__dict__)
+    except (SyntaxError, UnicodeError):
+        return None
     session_type = getattr(module, "SessionState", None)
     if not callable(session_type):
         return None

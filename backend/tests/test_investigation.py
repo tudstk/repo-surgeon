@@ -1,3 +1,4 @@
+import os
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,6 +10,7 @@ from repo_surgeon.agent.investigation import investigate_repository
 from repo_surgeon.agent.loop import AgentLimits
 from repo_surgeon.application.repositories import ResolvedLocalRepositoryRoot
 from repo_surgeon.domain.repositories import Repository, RepositorySource
+import repo_surgeon.evaluation.bug_investigation as bug_investigation
 from repo_surgeon.evaluation.bug_investigation import (
     CANONICAL_SEEDED_QUESTION,
     seeded_behavioral_proof,
@@ -131,16 +133,13 @@ def test_seeded_behavioral_proof_rejects_changed_root_identity_before_import(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     fixture_root = Path(__file__).parent / "fixtures" / "repos" / "m4-session-expiry"
-    importlib_calls: list[object] = []
+    open_calls: list[object] = []
 
-    def fail_if_imported(*args: object, **kwargs: object) -> None:
-        importlib_calls.append((args, kwargs))
-        raise AssertionError("canonical proof imported a stale repository root")
+    def fail_if_opened(*args: object, **kwargs: object) -> None:
+        open_calls.append((args, kwargs))
+        raise AssertionError("canonical proof opened a stale repository root")
 
-    monkeypatch.setattr(
-        "repo_surgeon.evaluation.bug_investigation.importlib.util.spec_from_file_location",
-        fail_if_imported,
-    )
+    monkeypatch.setattr(bug_investigation.os, "open", fail_if_opened)
 
     assert (
         seeded_behavioral_proof(
@@ -151,7 +150,43 @@ def test_seeded_behavioral_proof_rejects_changed_root_identity_before_import(
         )
         is None
     )
-    assert importlib_calls == []
+    assert open_calls == []
+
+
+def test_seeded_behavioral_proof_rejects_replacement_snapshot_without_execution(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fixture_root = Path(__file__).parent / "fixtures" / "repos" / "m4-session-expiry"
+    marker = tmp_path / "executed.txt"
+    replacement = tmp_path / "session.py"
+    replacement.write_text(
+        "from pathlib import Path\n"
+        f"Path({str(marker)!r}).write_text('executed')\n"
+        "class SessionState:\n"
+        "    def __init__(self, token):\n"
+        "        self.active = True\n"
+        "def expire(session, token):\n"
+        "    return token\n"
+    )
+    real_open = os.open
+
+    def open_replacement(path: str | os.PathLike[str], flags: int, mode: int = 0o777) -> int:
+        if str(path).endswith("/session.py"):
+            return real_open(replacement, flags & ~getattr(os, "O_NOFOLLOW", 0), mode)
+        return real_open(path, flags, mode)
+
+    monkeypatch.setattr(bug_investigation.os, "open", open_replacement)
+
+    assert (
+        seeded_behavioral_proof(
+            CANONICAL_SEEDED_QUESTION,
+            str(fixture_root),
+            expected_root_device=fixture_root.stat().st_dev,
+            expected_root_inode=fixture_root.stat().st_ino,
+        )
+        is None
+    )
+    assert not marker.exists()
 
 
 @pytest.mark.anyio
