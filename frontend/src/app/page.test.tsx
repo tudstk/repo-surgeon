@@ -249,6 +249,9 @@ describe('Home', () => {
     await waitFor(() => expect(screen.getByRole('option', { name: 'payments-api' })).toBeInTheDocument());
     fireEvent.submit(screen.getByRole('textbox', { name: 'Agent instruction' }).closest('form')!);
     await waitFor(() => expect(screen.getByText('Expiry path')).toBeInTheDocument());
+    expect(screen.queryByText(/WRITE PENDING/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/proposing patch revision/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/READ-ONLY INVESTIGATION/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: /session.py:51-53/ }));
 
     const citedLine = screen.getByText('def expire(session, token):').closest('.cited-line');

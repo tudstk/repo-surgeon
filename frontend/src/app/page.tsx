@@ -387,6 +387,20 @@ function ProposedDiff() {
   );
 }
 
+function ReadOnlyInvestigationState({ loading }: { loading: boolean }) {
+  return (
+    <div className="investigation-empty" aria-label="Read-only investigation status">
+      <span className="read-only-chip">READ-ONLY INVESTIGATION</span>
+      <strong>{loading ? 'Retrieving bounded evidence...' : 'Evidence review unavailable'}</strong>
+      <p>
+        {loading
+          ? 'No files will be changed while the bounded repository evidence is retrieved.'
+          : 'No proposal was created. Check the local API and try the investigation again.'}
+      </p>
+    </div>
+  );
+}
+
 // Bounded effects and the four-pane workspace are intentionally orchestrated here.
 // skipcq: JS-0067, JS-R1005, JS-0415
 export default function Home() {
@@ -859,9 +873,11 @@ export default function Home() {
                 the read-only evidence in the staging chamber on the right <Glyph>→</Glyph>
               </p>
             )}
-            <div className="pending-trace">
-              proposing patch revision 1, awaiting your approval...
-            </div>
+            {!submittedInvestigationQuestion && (
+              <div className="pending-trace">
+                proposing patch revision 1, awaiting your approval...
+              </div>
+            )}
           </div>
           <form className="composer" onSubmit={investigate}>
             <div className="slash-hints">
@@ -925,15 +941,27 @@ export default function Home() {
               >
                 <Glyph>‹›</Glyph> Code
               </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={selectedCitation === null}
-                className={selectedCitation ? undefined : 'tab-selected'}
-                disabled
-              >
-                <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
-              </button>
+              {submittedInvestigationQuestion ? (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedCitation === null}
+                  className={selectedCitation ? undefined : 'tab-selected'}
+                  disabled
+                >
+                  <Glyph>◌</Glyph> Evidence
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedCitation === null}
+                  className={selectedCitation ? undefined : 'tab-selected'}
+                  disabled
+                >
+                  <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
+                </button>
+              )}
               <button type="button" role="tab" aria-selected="false" disabled>
                 <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS</span>
               </button>
@@ -949,6 +977,8 @@ export default function Home() {
               result={investigation}
               onSelectEvidence={(evidence) => setSelectedCitation(evidenceCitation(evidence))}
             />
+          ) : submittedInvestigationQuestion ? (
+            <ReadOnlyInvestigationState loading={investigationLoading} />
           ) : (
             <ProposedDiff />
           )}

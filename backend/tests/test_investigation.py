@@ -9,7 +9,10 @@ from repo_surgeon.agent.investigation import investigate_repository
 from repo_surgeon.agent.loop import AgentLimits
 from repo_surgeon.application.repositories import ResolvedLocalRepositoryRoot
 from repo_surgeon.domain.repositories import Repository, RepositorySource
-from repo_surgeon.evaluation.bug_investigation import seeded_behavioral_proof
+from repo_surgeon.evaluation.bug_investigation import (
+    CANONICAL_SEEDED_QUESTION,
+    seeded_behavioral_proof,
+)
 from repo_surgeon.mcp.file_tools import McpFileTools
 
 
@@ -82,12 +85,17 @@ async def test_canonical_question_requires_behavioral_proof(tmp_path: Path) -> N
         McpFileTools(MemoryStore(repository)),
         repository.id,
         question,
-        seeded_proof=seeded_behavioral_proof(question, repository.canonical_root),
+        seeded_proof=seeded_behavioral_proof(
+            question,
+            repository.canonical_root,
+            expected_root_device=fixture_root.stat().st_dev,
+            expected_root_inode=fixture_root.stat().st_ino,
+        ),
     )
 
     assert result.hypotheses[0].title == "Expiry path may leave stale session state"
     assert result.hypotheses[0].confidence == "medium"
-    assert result.hypotheses[0].evidence[0].match_line == 5
+    assert result.hypotheses[0].evidence[0].match_line == 7
     assert "def expire" in result.hypotheses[0].evidence[0].excerpt
     assert "return token" in result.hypotheses[0].evidence[0].excerpt
 
@@ -108,7 +116,42 @@ async def test_unsupported_question_returns_insufficient_evidence(tmp_path: Path
 def test_seeded_behavioral_proof_rejects_unsupported_question_before_execution() -> None:
     fixture_root = Path(__file__).parent / "fixtures" / "repos" / "m4-session-expiry"
 
-    assert seeded_behavioral_proof("Why is session storage slow?", str(fixture_root)) is None
+    assert (
+        seeded_behavioral_proof(
+            "Why is session storage slow?",
+            str(fixture_root),
+            expected_root_device=fixture_root.stat().st_dev,
+            expected_root_inode=fixture_root.stat().st_ino,
+        )
+        is None
+    )
+
+
+def test_seeded_behavioral_proof_rejects_changed_root_identity_before_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixture_root = Path(__file__).parent / "fixtures" / "repos" / "m4-session-expiry"
+    importlib_calls: list[object] = []
+
+    def fail_if_imported(*args: object, **kwargs: object) -> None:
+        importlib_calls.append((args, kwargs))
+        raise AssertionError("canonical proof imported a stale repository root")
+
+    monkeypatch.setattr(
+        "repo_surgeon.evaluation.bug_investigation.importlib.util.spec_from_file_location",
+        fail_if_imported,
+    )
+
+    assert (
+        seeded_behavioral_proof(
+            CANONICAL_SEEDED_QUESTION,
+            str(fixture_root),
+            expected_root_device=fixture_root.stat().st_dev,
+            expected_root_inode=fixture_root.stat().st_ino + 1,
+        )
+        is None
+    )
+    assert importlib_calls == []
 
 
 @pytest.mark.anyio

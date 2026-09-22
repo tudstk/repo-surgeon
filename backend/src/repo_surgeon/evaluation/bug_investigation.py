@@ -34,11 +34,25 @@ _SessionFactory = Callable[[str], _Session]
 _Expire = Callable[[_Session, str], str | None]
 
 
-def seeded_behavioral_proof(question: str, canonical_root: str) -> SeededBehavioralProof | None:
+def seeded_behavioral_proof(
+    question: str,
+    canonical_root: str,
+    *,
+    expected_root_device: int | None = None,
+    expected_root_inode: int | None = None,
+) -> SeededBehavioralProof | None:
     normalized_question = " ".join(question.casefold().split())
     if normalized_question != CANONICAL_SEEDED_QUESTION:
         return None
     if Path(canonical_root).resolve() != CANONICAL_SEEDED_FIXTURE.resolve():
+        return None
+    if expected_root_device is None or expected_root_inode is None:
+        return None
+    try:
+        identity = Path(canonical_root).stat()
+    except OSError:
+        return None
+    if (identity.st_dev, identity.st_ino) != (expected_root_device, expected_root_inode):
         return None
     module_spec = importlib.util.spec_from_file_location(
         "repo_surgeon_m4_seeded_session", CANONICAL_SEEDED_FIXTURE / "session.py"
