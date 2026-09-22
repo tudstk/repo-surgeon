@@ -4,4 +4,4 @@ Repo Surgeon is a local-first coding agent that investigates repositories, propo
 
 The MVP begins with bounded read-only repository inspection and preserves backend-enforced human control for every write.
 
-Milestone 3 provides bounded exact repository search, evidence-backed citations, and a read-only repository summary projection. The frontend can select a registered repository, display its bounded summary, and show search evidence; sandboxing, proposals, approvals, patch application, audits, and pull requests remain roadmap work.
+Milestone 4 provides a bounded read-only bug-investigation workflow over the Milestone 3 search and repository-summary contracts. The frontend can submit a question for a registered repository and display ranked hypotheses with retrieved evidence, confidence labels, and verification suggestions; unsupported questions remain insufficient-evidence results, and the canonical seeded fixture requires deterministic behavioral proof. Sandboxing, proposals, approvals, patch application, audits, and pull requests remain roadmap work.

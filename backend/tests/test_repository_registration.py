@@ -142,6 +142,34 @@ async def test_repository_summary_is_derived_from_registered_files(
 
 
 @pytest.mark.anyio
+async def test_seeded_investigation_journey_returns_ranked_hypothesis(
+    client: httpx.AsyncClient,
+) -> None:
+    fixture_root = Path(__file__).parent / "fixtures" / "repos" / "m4-session-expiry"
+    git_metadata = fixture_root / ".git"
+    subprocess.run(["git", "init", "--quiet", str(fixture_root)], check=True)
+    try:
+        registered = await client.post("/repositories", json={"path": str(fixture_root)})
+        assert registered.status_code == 201
+
+        investigation = await client.post(
+            f"/repositories/{registered.json()['id']}/investigations",
+            json={"question": "Why do users get logged out after their session expires?"},
+        )
+
+        assert investigation.status_code == 200
+        result = investigation.json()
+        assert result["status"] == "complete"
+        assert result["question"] == "Why do users get logged out after their session expires?"
+        assert result["hypotheses"][0]["title"] == "Expiry path may leave stale session state"
+        assert result["hypotheses"][0]["confidence"] == "medium"
+        assert "def expire" in result["hypotheses"][0]["evidence"][0]["excerpt"]
+        assert "return token" in result["hypotheses"][0]["evidence"][0]["excerpt"]
+    finally:
+        shutil.rmtree(git_metadata, ignore_errors=True)
+
+
+@pytest.mark.anyio
 async def test_repository_summary_reports_unavailable_registered_root(
     client: httpx.AsyncClient, tmp_path: Path
 ) -> None:

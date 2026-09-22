@@ -57,11 +57,14 @@ class Citation:
     citation_id: str
     repository_id: UUID
     path: str
+    match_line: int
     start_line: int
     end_line: int
     label: str
     source: Literal["search_code", "read_file"]
     text: str
+    before: tuple[str, ...] = ()
+    after: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,6 +175,7 @@ def _tool_event(
                 citation_id=f"search-{call_id}-{index}",
                 repository_id=repository_id,
                 path=match.path,
+                match_line=match.line,
                 start_line=match.before[0].number if match.before else match.line,
                 end_line=match.after[-1].number if match.after else match.line,
                 label=(
@@ -181,13 +185,9 @@ def _tool_event(
                     f"-{match.after[-1].number if match.after else match.line}"
                 ),
                 source="search_code",
-                text="\n".join(
-                    [
-                        *(line.text for line in match.before),
-                        match.text,
-                        *(line.text for line in match.after),
-                    ]
-                ),
+                text=match.text,
+                before=tuple(line.text for line in match.before),
+                after=tuple(line.text for line in match.after),
             )
             for index, match in enumerate(result.matches, start=1)
         )
@@ -218,6 +218,7 @@ def _tool_event(
                     citation_id=f"read-{call_id}-1",
                     repository_id=repository_id,
                     path=result.path,
+                    match_line=start_line,
                     start_line=start_line,
                     end_line=end_line,
                     label=label,

@@ -114,6 +114,7 @@ async def test_search_driven_answer_has_deterministic_activity_and_exact_citatio
     assert result.events[0].summary == "Searching for Repository safety fixture"
     assert result.events[0].match_count == 1
     assert result.events[0].citations[0].path == "README.md"
+    assert result.events[0].citations[0].match_line == 1
     assert result.events[0].citations[0].start_line == 1
     assert result.events[0].citations[0].end_line == 1
 

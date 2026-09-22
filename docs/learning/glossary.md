@@ -1,6 +1,6 @@
 # Glossary
 
-This glossary covers concepts implemented through Milestone 3. Sandboxing, proposals, and approvals remain roadmap-only.
+This glossary covers concepts implemented through Milestone 4. Sandboxing, proposals, and approvals remain roadmap-only.
 
 | Term | Meaning here | C#/.NET bridge |
 | --- | --- | --- |
@@ -16,5 +16,7 @@ This glossary covers concepts implemented through Milestone 3. Sandboxing, propo
 | Strict TypeScript | Compile-time frontend checking with no emitted JavaScript. | Similar to C# checks, but types are erased for browser execution. |
 | Docker Compose | Local PostgreSQL service, volume, port, and health-check definition. | A repeatable local dependency environment. |
 | Quality gate | Required automated CI verification. | A pull-request validation pipeline. |
+| Bug investigation | A bounded read-only search that turns retrieved evidence into ranked hypotheses. | Similar to a diagnostic application service with explicit evidence rather than unrestricted code execution. |
+| Behavioral proof | A deterministic, fixture-bound check used to strengthen one seeded hypothesis. | Similar to a focused characterization test, but owned by the evaluation boundary. |
 
 ASGI supports asynchronous handlers, but the M0 health handlers are synchronous because they do no I/O. Python `async` work becomes relevant when later milestones add I/O-bound services.

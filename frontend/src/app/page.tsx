@@ -5,6 +5,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   RepositorySummaryCard,
+  InvestigationPanel,
+  type InvestigationEvidence,
+  type InvestigationResult,
   SearchActivityRow,
   type RepositorySummary,
   type SearchActivity,
@@ -273,6 +276,26 @@ const CitedSource = ({ citation }: { citation: SearchCitation }) => {
   );
 };
 
+function evidenceCitation(evidence: InvestigationEvidence): SearchCitation {
+  const excerptLines = evidence.excerpt.split('\n').map((text, index) => ({
+    number: evidence.start_line + index,
+    text,
+  }));
+  const matchIndex = evidence.match_line - evidence.start_line;
+  const matchedLine = excerptLines[matchIndex];
+  return {
+    id: evidence.citation_id,
+    path: evidence.path,
+    matchLine: evidence.match_line,
+    startLine: evidence.start_line,
+    endLine: evidence.end_line,
+    label: evidence.label,
+    text: matchedLine?.text ?? '',
+    before: excerptLines.slice(0, matchIndex),
+    after: excerptLines.slice(matchIndex + 1),
+  };
+}
+
 function ProposedDiff() {
   return (
     <div className="proposed-diff">
@@ -364,6 +387,20 @@ function ProposedDiff() {
   );
 }
 
+function ReadOnlyInvestigationState({ loading }: { loading: boolean }) {
+  return (
+    <div className="investigation-empty" aria-label="Read-only investigation status">
+      <span className="read-only-chip">READ-ONLY INVESTIGATION</span>
+      <strong>{loading ? 'Retrieving bounded evidence...' : 'Evidence review unavailable'}</strong>
+      <p>
+        {loading
+          ? 'No files will be changed while the bounded repository evidence is retrieved.'
+          : 'No proposal was created. Check the local API and try the investigation again.'}
+      </p>
+    </div>
+  );
+}
+
 // Bounded effects and the four-pane workspace are intentionally orchestrated here.
 // skipcq: JS-0067, JS-R1005, JS-0415
 export default function Home() {
@@ -376,6 +413,56 @@ export default function Home() {
   const [repositories, setRepositories] = useState<RegisteredRepository[]>([]);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [repositorySummary, setRepositorySummary] = useState<RepositorySummary | null>(null);
+  const [investigationQuestion, setInvestigationQuestion] = useState(
+    'Why do users get logged out?',
+  );
+  const [submittedInvestigationQuestion, setSubmittedInvestigationQuestion] = useState<
+    string | null
+  >(null);
+  const [investigation, setInvestigation] = useState<InvestigationResult | null>(null);
+  const [investigationLoading, setInvestigationLoading] = useState(false);
+  const [investigationError, setInvestigationError] = useState<string | null>(null);
+  const investigationRequestId = useRef(0);
+  const investigationQuestionVersion = useRef(0);
+
+  const investigate = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedRepositoryId || investigationQuestion.trim().length < 3) return;
+    const repositoryId = selectedRepositoryId;
+    const question = investigationQuestion.trim();
+    const requestId = ++investigationRequestId.current;
+    const questionVersion = investigationQuestionVersion.current;
+    setSubmittedInvestigationQuestion(question);
+    setInvestigationLoading(true);
+    setInvestigationError(null);
+    setInvestigation(null);
+    setSelectedCitation(null);
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
+    try {
+      const response = await fetch(`${apiBase}/repositories/${repositoryId}/investigations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      if (!response.ok) throw new Error('investigation_failed');
+      const result = (await response.json()) as InvestigationResult;
+      if (
+        requestId === investigationRequestId.current &&
+        questionVersion === investigationQuestionVersion.current
+      ) {
+        setInvestigation(result);
+      }
+    } catch {
+      if (
+        requestId === investigationRequestId.current &&
+        questionVersion === investigationQuestionVersion.current
+      ) {
+        setInvestigationError('Investigation unavailable. Check the local API and try again.');
+      }
+    } finally {
+      if (requestId === investigationRequestId.current) setInvestigationLoading(false);
+    }
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -443,15 +530,22 @@ export default function Home() {
   }, [selectedRepositoryId]);
 
   useEffect(() => {
+    investigationRequestId.current += 1;
+    setInvestigationLoading(false);
     if (!selectedRepositoryId) {
       setSearchActivity(initialSearchActivity);
       setSelectedCitation(null);
+      setInvestigation(null);
+      setSubmittedInvestigationQuestion(null);
       return undefined;
     }
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
     const controller = new AbortController();
     let requestActive = true;
     setSelectedCitation(null);
+    setInvestigation(null);
+    setInvestigationError(null);
+    setSubmittedInvestigationQuestion(null);
     setSearchActivity({
       ...initialSearchActivity,
       phase: 'loading',
@@ -760,15 +854,15 @@ export default function Home() {
               YOU <time>14:28:01</time>
             </div>
             <div className="user-message">
-              Refactor the session module to use the new token store, and keep tests green.
+              {submittedInvestigationQuestion ?? investigationQuestion}
             </div>
             <div className="message-meta agent-meta">
               REPO SURGEON <span>sub-agent: refactor-core</span>
               <time>14:28:04</time>
             </div>
             <p className="agent-message">
-              I&apos;ll locate the session logic, draft the change in an isolated sandbox, and
-              verify tests before proposing it.
+              I&apos;ll inspect bounded repository evidence, rank likely causes, and suggest a
+              focused verification step. This investigation cannot modify files.
             </p>
             <div className="activity-list" aria-label="Agent activity">
               <SearchActivityRow activity={searchActivity} onSelectCitation={setSelectedCitation} />
@@ -779,11 +873,13 @@ export default function Home() {
                 the read-only evidence in the staging chamber on the right <Glyph>→</Glyph>
               </p>
             )}
-            <div className="pending-trace">
-              proposing patch revision 1, awaiting your approval...
-            </div>
+            {!submittedInvestigationQuestion && (
+              <div className="pending-trace">
+                proposing patch revision 1, awaiting your approval...
+              </div>
+            )}
           </div>
-          <form className="composer" onSubmit={(event) => event.preventDefault()}>
+          <form className="composer" onSubmit={investigate}>
             <div className="slash-hints">
               <kbd>/explain diff</kbd>
               <kbd>/run-fuzz-tests</kbd>
@@ -793,11 +889,15 @@ export default function Home() {
             <textarea
               aria-label="Agent instruction"
               aria-describedby="composer-note"
-              readOnly
-              placeholder="Instruct agent or type '/' for surgical tools..."
+              value={investigationQuestion}
+              onChange={(event) => {
+                investigationQuestionVersion.current += 1;
+                setInvestigationQuestion(event.target.value);
+              }}
+              placeholder="Ask why the seeded bug occurs..."
             />
             <p className="sr-only" id="composer-note">
-              This field is read-only and cannot send instructions.
+              Investigation is read-only and cannot modify the connected repository.
             </p>
             <div className="composer-controls">
               <button type="button" disabled aria-label="Model selector unavailable">
@@ -806,10 +906,16 @@ export default function Home() {
               <button className="abort" type="button" disabled>
                 <Glyph>⊘</Glyph> Abort [Esc]
               </button>
-              <button className="send" type="submit" aria-label="Send instruction" disabled>
+              <button
+                className="send"
+                type="submit"
+                aria-label="Send instruction"
+                disabled={investigationLoading || !selectedRepositoryId}
+              >
                 <Glyph>↑</Glyph>
               </button>
             </div>
+            {investigationError && <p className="composer-error">{investigationError}</p>}
           </form>
         </section>
         {!isStackedLayout && (
@@ -835,15 +941,27 @@ export default function Home() {
               >
                 <Glyph>‹›</Glyph> Code
               </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={selectedCitation === null}
-                className={selectedCitation ? undefined : 'tab-selected'}
-                disabled
-              >
-                <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
-              </button>
+              {submittedInvestigationQuestion ? (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedCitation === null}
+                  className={selectedCitation ? undefined : 'tab-selected'}
+                  disabled
+                >
+                  <Glyph>◌</Glyph> Evidence
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selectedCitation === null}
+                  className={selectedCitation ? undefined : 'tab-selected'}
+                  disabled
+                >
+                  <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
+                </button>
+              )}
               <button type="button" role="tab" aria-selected="false" disabled>
                 <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS</span>
               </button>
@@ -852,7 +970,21 @@ export default function Home() {
               +7 −5 &nbsp; <b>SPLIT</b> &nbsp; UNIFIED
             </span>
           </div>
-          {selectedCitation ? <CitedSource citation={selectedCitation} /> : <ProposedDiff />}
+          {selectedCitation ? (
+            <CitedSource citation={selectedCitation} />
+          ) : investigation ? (
+            <InvestigationPanel
+              result={investigation}
+              onSelectEvidence={(evidence) => setSelectedCitation(evidenceCitation(evidence))}
+            />
+          ) : submittedInvestigationQuestion ? (
+            <ReadOnlyInvestigationState loading={investigationLoading} />
+          ) : (
+            <ProposedDiff />
+          )}
+          {investigationLoading && (
+            <div className="investigation-loading">Retrieving bounded evidence...</div>
+          )}
         </section>
       </div>
       <h1 className="sr-only">Understand the code. Keep people in control.</h1>
