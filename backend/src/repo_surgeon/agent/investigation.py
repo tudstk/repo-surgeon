@@ -95,10 +95,7 @@ def _normalize_question(question: str) -> str:
 
 
 def _is_question_supported(normalized_question: str) -> bool:
-    return normalized_question in {
-        "why do users get logged out?",
-        CANONICAL_SEEDED_QUESTION,
-    }
+    return normalized_question == CANONICAL_SEEDED_QUESTION
 
 
 def _unsupported_question_result(question: str) -> InvestigationResult:
@@ -179,21 +176,14 @@ async def investigate_repository(
             stop_reason = "search_result_truncated"
             break
         citations = _validated_citations(event, plan)
-        if citations and (
-            normalized_question != CANONICAL_SEEDED_QUESTION or seeded_proof is not None
-        ):
+        if citations and seeded_proof is not None:
             proof = seeded_proof
             hypotheses = (
                 Hypothesis(
                     rank=1,
-                    title=proof.title if proof else "Unverified expiry-path lead",
-                    explanation=(
-                        proof.explanation
-                        if proof
-                        else "Retrieved source suggests an expiry-path lead, but it does not "
-                        "establish the observed failure or user-visible impact."
-                    ),
-                    confidence="medium" if proof else "low",
+                    title=proof.title,
+                    explanation=proof.explanation,
+                    confidence="medium",
                     evidence=tuple(
                         Evidence(
                             citation_id=c.citation_id,
@@ -206,18 +196,9 @@ async def investigate_repository(
                         )
                         for c in citations
                     ),
-                    verification_suggestions=(
-                        proof.verification_suggestion
-                        if proof
-                        else (
-                            "Run a focused expiry test that asserts the token is rejected "
-                            "after expiry."
-                        ),
-                    ),
+                    verification_suggestions=(proof.verification_suggestion,),
                 ),
             )
-    if normalized_question == CANONICAL_SEEDED_QUESTION and seeded_proof is None:
-        hypotheses = ()
     status: Literal["complete", "partial"] = "partial" if stop_reason else "complete"
     summary = (
         "The strongest leads are ranked below from bounded repository evidence. "

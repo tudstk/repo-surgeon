@@ -85,6 +85,9 @@ describe('Home', () => {
       'aria-selected',
       'true',
     );
+    expect(screen.getByRole('textbox', { name: 'Agent instruction' })).toHaveValue(
+      'Why do users get logged out after their session expires?',
+    );
     expect(screen.getByText(/WRITE PENDING/i)).toBeInTheDocument();
     expect(screen.getByText(/NOT touched local repository disk/i)).toBeInTheDocument();
     expect(screen.getByText(/Sandbox Tests: 14 passing/i)).toBeInTheDocument();

@@ -45,7 +45,9 @@ class MemoryStore:
 
 
 @pytest.mark.anyio
-async def test_investigation_ranks_only_retrieved_evidence_and_never_writes(tmp_path: Path) -> None:
+async def test_unsupported_generic_logout_question_returns_insufficient_evidence(
+    tmp_path: Path,
+) -> None:
     (tmp_path / "session.py").write_text("def expire(token):\n    return token\n")
     (tmp_path / "test_session.py").write_text(
         "def test_expired_session_is_rejected():\n    assert expire('token') is None\n"
@@ -54,10 +56,8 @@ async def test_investigation_ranks_only_retrieved_evidence_and_never_writes(tmp_
     result = await investigate_repository(
         McpFileTools(MemoryStore(repository)), repository.id, "Why do users get logged out?"
     )
-    assert result.hypotheses
-    assert result.hypotheses[0].confidence == "low"
-    assert result.hypotheses[0].evidence[0].label.startswith("session.py:")
-    assert result.tool_calls == 1
+    assert result.hypotheses == ()
+    assert result.tool_calls == 0
     assert (tmp_path / "session.py").read_text() == ("def expire(token):\n    return token\n")
 
 
@@ -68,7 +68,7 @@ async def test_unvalidated_keyword_evidence_does_not_create_a_hypothesis(tmp_pat
     repository = Repository(uuid4(), RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
 
     result = await investigate_repository(
-        McpFileTools(MemoryStore(repository)), repository.id, "Why do users get logged out?"
+        McpFileTools(MemoryStore(repository)), repository.id, CANONICAL_SEEDED_QUESTION
     )
 
     assert result.hypotheses == ()
@@ -209,7 +209,7 @@ async def test_investigation_stops_at_returned_byte_budget(tmp_path: Path) -> No
     result = await investigate_repository(
         McpFileTools(MemoryStore(repository)),
         repository.id,
-        "Why do users get logged out?",
+        CANONICAL_SEEDED_QUESTION,
         AgentLimits(max_model_calls=1, max_tool_calls=4, max_returned_bytes=1),
     )
 

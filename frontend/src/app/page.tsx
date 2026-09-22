@@ -414,7 +414,7 @@ export default function Home() {
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [repositorySummary, setRepositorySummary] = useState<RepositorySummary | null>(null);
   const [investigationQuestion, setInvestigationQuestion] = useState(
-    'Why do users get logged out?',
+    'Why do users get logged out after their session expires?',
   );
   const [submittedInvestigationQuestion, setSubmittedInvestigationQuestion] = useState<
     string | null
@@ -825,7 +825,7 @@ export default function Home() {
                 Where is auth handled?
               </span>
               <span role="option" aria-selected="false">
-                Why do users get logged out?
+                Why do users get logged out after their session expires?
               </span>
               <b role="option" aria-selected="true">
                 Refactor session module... <StatusDot tone="violet" />
