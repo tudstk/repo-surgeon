@@ -35,6 +35,7 @@ export type SearchActivity = {
 export type InvestigationEvidence = {
   citation_id: string;
   path: string;
+  match_line: number;
   start_line: number;
   end_line: number;
   label: string;

@@ -32,6 +32,7 @@ class Evidence(BaseModel):
 
     citation_id: str
     path: str
+    match_line: int = Field(ge=1)
     start_line: int = Field(ge=1)
     end_line: int = Field(ge=1)
     label: str
@@ -155,12 +156,13 @@ async def investigate_repository(
                 context_after=2,
                 max_matches=6,
             ),
-            max_bytes=remaining_bytes,
+            max_bytes=effective.max_returned_bytes - returned_bytes,
         )
         if result is None:
             stop_reason = "returned_bytes_limit"
             break
         serialized_result = _serialized(result)
+        remaining_bytes = effective.max_returned_bytes - returned_bytes
         if len(serialized_result) > remaining_bytes:
             stop_reason = "returned_bytes_limit"
             break
@@ -199,6 +201,7 @@ async def investigate_repository(
                         Evidence(
                             citation_id=c.citation_id,
                             path=c.path,
+                            match_line=c.match_line,
                             start_line=c.start_line,
                             end_line=c.end_line,
                             label=c.label,

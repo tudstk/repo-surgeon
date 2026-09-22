@@ -35,6 +35,9 @@ _Expire = Callable[[_Session, str], str | None]
 
 
 def seeded_behavioral_proof(question: str, canonical_root: str) -> SeededBehavioralProof | None:
+    normalized_question = " ".join(question.casefold().split())
+    if normalized_question != CANONICAL_SEEDED_QUESTION:
+        return None
     if Path(canonical_root).resolve() != CANONICAL_SEEDED_FIXTURE.resolve():
         return None
     module_spec = importlib.util.spec_from_file_location(
@@ -49,16 +52,15 @@ def seeded_behavioral_proof(question: str, canonical_root: str) -> SeededBehavio
         return None
     expired_token = "m4-session-token"
     session = session_type(expired_token)
-    expire_method = getattr(session, "expire", None)
-    if not callable(expire_method):
+    expire = getattr(module, "expire", None)
+    if not callable(expire):
         return None
-    returned_token = expire_method(expired_token)
+    returned_token = expire(session, expired_token)
     failure_observed = returned_token == expired_token
     user_visible_session_remains_active = session.active is True
     if not (failure_observed and user_visible_session_remains_active):
         return None
-    normalized_question = " ".join(question.casefold().split())
-    return CANONICAL_SEEDED_PROOF if normalized_question == CANONICAL_SEEDED_QUESTION else None
+    return CANONICAL_SEEDED_PROOF
 
 
 class InvestigationEvaluation(BaseModel):

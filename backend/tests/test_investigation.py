@@ -87,6 +87,7 @@ async def test_canonical_question_requires_behavioral_proof(tmp_path: Path) -> N
 
     assert result.hypotheses[0].title == "Expiry path may leave stale session state"
     assert result.hypotheses[0].confidence == "medium"
+    assert result.hypotheses[0].evidence[0].match_line == 5
     assert "def expire" in result.hypotheses[0].evidence[0].excerpt
     assert "return token" in result.hypotheses[0].evidence[0].excerpt
 
@@ -102,6 +103,12 @@ async def test_unsupported_question_returns_insufficient_evidence(tmp_path: Path
 
     assert result.hypotheses == ()
     assert result.tool_calls == 0
+
+
+def test_seeded_behavioral_proof_rejects_unsupported_question_before_execution() -> None:
+    fixture_root = Path(__file__).parent / "fixtures" / "repos" / "m4-session-expiry"
+
+    assert seeded_behavioral_proof("Why is session storage slow?", str(fixture_root)) is None
 
 
 @pytest.mark.anyio

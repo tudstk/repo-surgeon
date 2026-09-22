@@ -284,7 +284,7 @@ function evidenceCitation(evidence: InvestigationEvidence): SearchCitation {
   return {
     id: evidence.citation_id,
     path: evidence.path,
-    matchLine: evidence.start_line,
+    matchLine: evidence.match_line,
     startLine: evidence.start_line,
     endLine: evidence.end_line,
     label: evidence.label,

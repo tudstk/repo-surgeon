@@ -94,6 +94,7 @@ describe('InvestigationPanel', () => {
     const evidence = {
       citation_id: 'search-investigation-1-1',
       path: 'auth/session.py',
+      match_line: 52,
       start_line: 51,
       end_line: 53,
       label: 'auth/session.py:51-53',
