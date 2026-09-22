@@ -400,9 +400,9 @@ export default function Home() {
   const [investigationQuestion, setInvestigationQuestion] = useState(
     'Why do users get logged out?',
   );
-  const [submittedInvestigationQuestion, setSubmittedInvestigationQuestion] = useState<string | null>(
-    null,
-  );
+  const [submittedInvestigationQuestion, setSubmittedInvestigationQuestion] = useState<
+    string | null
+  >(null);
   const [investigation, setInvestigation] = useState<InvestigationResult | null>(null);
   const [investigationLoading, setInvestigationLoading] = useState(false);
   const [investigationError, setInvestigationError] = useState<string | null>(null);
@@ -423,14 +423,11 @@ export default function Home() {
     setSelectedCitation(null);
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
     try {
-      const response = await fetch(
-        `${apiBase}/repositories/${repositoryId}/investigations`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question }),
-        },
-      );
+      const response = await fetch(`${apiBase}/repositories/${repositoryId}/investigations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
       if (!response.ok) throw new Error('investigation_failed');
       const result = (await response.json()) as InvestigationResult;
       if (
