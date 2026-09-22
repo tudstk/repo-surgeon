@@ -3,8 +3,10 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from repo_surgeon.agent.investigation import InvestigationResult, SeededBehavioralProof
-
+from repo_surgeon.agent.investigation import (
+    InvestigationResult,
+    SeededBehavioralProof,
+)
 
 CANONICAL_SEEDED_QUESTION = "why do users get logged out after their session expires?"
 CANONICAL_SEEDED_FIXTURE = (
@@ -16,13 +18,13 @@ CANONICAL_SEEDED_PROOF = SeededBehavioralProof(
         "The seeded fixture's deterministic behavioral proof shows expiry returning the "
         "session token, leaving the user-visible session active after expiry."
     ),
-    verification_suggestion="Run the seeded expiry test and inspect the session state after expiry.",
+    verification_suggestion=(
+        "Run the seeded expiry test and inspect the session state after expiry."
+    ),
 )
 
 
-def seeded_behavioral_proof(
-    question: str, canonical_root: str
-) -> SeededBehavioralProof | None:
+def seeded_behavioral_proof(question: str, canonical_root: str) -> SeededBehavioralProof | None:
     if Path(canonical_root).resolve() != CANONICAL_SEEDED_FIXTURE.resolve():
         return None
     module_spec = importlib.util.spec_from_file_location(

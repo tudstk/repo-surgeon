@@ -40,13 +40,9 @@ class MemoryStore:
 
 @pytest.mark.anyio
 async def test_investigation_ranks_only_retrieved_evidence_and_never_writes(tmp_path: Path) -> None:
-    (tmp_path / "session.py").write_text(
-        "def expire(token):\n"
-        "    return token\n"
-    )
+    (tmp_path / "session.py").write_text("def expire(token):\n    return token\n")
     (tmp_path / "test_session.py").write_text(
-        "def test_expired_session_is_rejected():\n"
-        "    assert expire('token') is None\n"
+        "def test_expired_session_is_rejected():\n    assert expire('token') is None\n"
     )
     repository = Repository(uuid4(), RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
     result = await investigate_repository(
@@ -56,10 +52,7 @@ async def test_investigation_ranks_only_retrieved_evidence_and_never_writes(tmp_
     assert result.hypotheses[0].confidence == "low"
     assert result.hypotheses[0].evidence[0].label.startswith("session.py:")
     assert result.tool_calls == 1
-    assert (tmp_path / "session.py").read_text() == (
-        "def expire(token):\n"
-        "    return token\n"
-    )
+    assert (tmp_path / "session.py").read_text() == ("def expire(token):\n    return token\n")
 
 
 @pytest.mark.anyio

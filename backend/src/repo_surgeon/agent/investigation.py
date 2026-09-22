@@ -106,7 +106,9 @@ async def investigate_repository(
         return InvestigationResult(
             status="complete",
             question=question,
-            summary="Insufficient evidence for this question within the seeded investigation scope.",
+            summary=(
+                "Insufficient evidence for this question within the seeded investigation scope."
+            ),
             hypotheses=(),
             events=(),
             model_calls=0,
@@ -187,7 +189,10 @@ async def investigate_repository(
                     verification_suggestions=(
                         proof.verification_suggestion
                         if proof
-                        else "Run a focused expiry test that asserts the token is rejected after expiry.",
+                        else (
+                            "Run a focused expiry test that asserts the token is rejected "
+                            "after expiry."
+                        ),
                     ),
                 ),
             )
