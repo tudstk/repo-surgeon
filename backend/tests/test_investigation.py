@@ -10,7 +10,6 @@ from repo_surgeon.agent.investigation import investigate_repository
 from repo_surgeon.agent.loop import AgentLimits
 from repo_surgeon.application.repositories import ResolvedLocalRepositoryRoot
 from repo_surgeon.domain.repositories import Repository, RepositorySource
-import repo_surgeon.evaluation.bug_investigation as bug_investigation
 from repo_surgeon.evaluation.bug_investigation import (
     CANONICAL_SEEDED_QUESTION,
     seeded_behavioral_proof,
@@ -139,7 +138,7 @@ def test_seeded_behavioral_proof_rejects_changed_root_identity_before_import(
         open_calls.append((args, kwargs))
         raise AssertionError("canonical proof opened a stale repository root")
 
-    monkeypatch.setattr(bug_investigation.os, "open", fail_if_opened)
+    monkeypatch.setattr(os, "open", fail_if_opened)
 
     assert (
         seeded_behavioral_proof(
@@ -175,7 +174,7 @@ def test_seeded_behavioral_proof_rejects_replacement_snapshot_without_execution(
             return real_open(replacement, flags & ~getattr(os, "O_NOFOLLOW", 0), mode)
         return real_open(path, flags, mode)
 
-    monkeypatch.setattr(bug_investigation.os, "open", open_replacement)
+    monkeypatch.setattr(os, "open", open_replacement)
 
     assert (
         seeded_behavioral_proof(

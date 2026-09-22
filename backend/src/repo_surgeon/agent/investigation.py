@@ -105,9 +105,7 @@ def _unsupported_question_result(question: str) -> InvestigationResult:
     return InvestigationResult(
         status="complete",
         question=question,
-        summary=(
-            "Insufficient evidence for this question within the seeded investigation scope."
-        ),
+        summary=("Insufficient evidence for this question within the seeded investigation scope."),
         hypotheses=(),
         events=(),
         model_calls=0,
@@ -124,6 +122,7 @@ def _check_investigation_limits(
     if effective.max_returned_bytes - returned_bytes < MIN_TOOL_RESULT_BYTES:
         return True, "returned_bytes_limit"
     return False, None
+
 
 async def investigate_repository(
     tools: McpFileTools,
@@ -142,9 +141,7 @@ async def investigate_repository(
     stop_reason: str | None = None
     hypotheses: tuple[Hypothesis, ...] = ()
     for index, plan in enumerate(_plans(), start=1):
-        should_break, reason = _check_investigation_limits(
-            events, returned_bytes, effective
-        )
+        should_break, reason = _check_investigation_limits(events, returned_bytes, effective)
         if should_break:
             stop_reason = reason
             break

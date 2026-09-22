@@ -35,9 +35,7 @@ class _Session(Protocol):
 
 _SessionFactory = Callable[[str], _Session]
 _Expire = Callable[[_Session, str], str | None]
-_CANONICAL_SESSION_SHA256 = (
-    "54b9a57b499e29177a2b7e721b66e28725336049bed2a961adfe7b50f9ca70ad"
-)
+_CANONICAL_SESSION_SHA256 = "54b9a57b499e29177a2b7e721b66e28725336049bed2a961adfe7b50f9ca70ad"
 
 
 def seeded_behavioral_proof(
@@ -70,7 +68,7 @@ def seeded_behavioral_proof(
         with os.fdopen(descriptor, "rb") as session_file:
             descriptor = -1
             source = session_file.read()
-    except (OSError, UnicodeError):
+    except OSError, UnicodeError:
         return None
     finally:
         if descriptor >= 0:
@@ -81,7 +79,7 @@ def seeded_behavioral_proof(
         module = types.ModuleType("repo_surgeon_m4_seeded_session")
         module.__file__ = str(session_path)
         exec(compile(source, str(session_path), "exec"), module.__dict__)
-    except (SyntaxError, UnicodeError):
+    except SyntaxError, UnicodeError:
         return None
     session_type = getattr(module, "SessionState", None)
     if not callable(session_type):

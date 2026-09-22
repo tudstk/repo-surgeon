@@ -1,5 +1,21 @@
 # Milestone retrospectives
 
+## Milestone 4: bounded bug investigation
+
+### Outcome and boundary
+
+M4 adds a read-only investigation request that searches a fixed bounded plan and displays ranked hypotheses with citations, confidence labels, and verification suggestions. Unsupported questions return insufficient evidence; only the canonical seeded fixture may use its deterministic behavioral proof. The workflow does not propose patches, execute arbitrary repository code, or modify the connected repository.
+
+### Reliability invariant
+
+**Behavioral proof is fixture- and question-bound.** The proof verifies the registered root identity before reading a stable fixture snapshot, and repository text remains evidence rather than instructions.
+
+### Read these files in order
+
+1. [`backend/src/repo_surgeon/agent/investigation.py`](../../backend/src/repo_surgeon/agent/investigation.py) - bounded search plan and result contract.
+2. [`backend/src/repo_surgeon/evaluation/bug_investigation.py`](../../backend/src/repo_surgeon/evaluation/bug_investigation.py) - canonical behavioral proof and deterministic scoring.
+3. [`frontend/src/app/repository-search-display.tsx`](../../frontend/src/app/repository-search-display.tsx) - ranked hypothesis and evidence presentation.
+
 ## Milestone 3: exact search and repository intelligence
 
 ### Outcome and boundary

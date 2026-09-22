@@ -246,7 +246,9 @@ describe('Home', () => {
     );
 
     render(<Home />);
-    await waitFor(() => expect(screen.getByRole('option', { name: 'payments-api' })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'payments-api' })).toBeInTheDocument(),
+    );
     fireEvent.submit(screen.getByRole('textbox', { name: 'Agent instruction' }).closest('form')!);
     await waitFor(() => expect(screen.getByText('Expiry path')).toBeInTheDocument());
     expect(screen.queryByText(/WRITE PENDING/i)).not.toBeInTheDocument();
@@ -299,12 +301,16 @@ describe('Home', () => {
     );
 
     render(<Home />);
-    await waitFor(() => expect(screen.getByRole('option', { name: 'payments-api' })).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: 'payments-api' })).toBeInTheDocument(),
+    );
     fireEvent.submit(screen.getByRole('textbox', { name: 'Agent instruction' }).closest('form')!);
     await waitFor(() => expect(screen.getByText(/Investigation unavailable/)).toBeInTheDocument());
     fireEvent.click(screen.getByRole('option', { name: 'web-dashboard' }));
 
-    await waitFor(() => expect(screen.queryByText(/Investigation unavailable/)).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText(/Investigation unavailable/)).not.toBeInTheDocument(),
+    );
   });
 
   it('hides commit nodes from assistive technology because they are decorative', () => {
