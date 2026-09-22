@@ -48,8 +48,8 @@ def seeded_behavioral_proof(question: str, canonical_root: str) -> SeededBehavio
     expire = getattr(module, "expire", None)
     if not callable(session_type) or not callable(expire):
         return None
-    session_factory: _SessionFactory = session_type
-    expire_function: _Expire = expire
+    session_factory = lambda token: session_type(token)
+    expire_function = lambda session, token: expire(session, token)
     expired_token = "m4-session-token"
     session = session_factory(expired_token)
     returned_token = expire_function(session, expired_token)

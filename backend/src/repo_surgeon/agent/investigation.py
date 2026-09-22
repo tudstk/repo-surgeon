@@ -88,6 +88,28 @@ def _validated_citations(event: ToolEvent, plan: _SearchPlan) -> tuple[Citation,
         )
     )
 
+def _normalize_question(question: str) -> str:
+    return " ".join(question.casefold().split())
+
+def _is_question_supported(normalized_question: str) -> bool:
+    return normalized_question in {
+        "why do users get logged out?",
+        CANONICAL_SEEDED_QUESTION,
+    }
+
+def _unsupported_question_result(question: str) -> InvestigationResult:
+    return InvestigationResult(
+        status="complete",
+        question=question,
+        summary=(
+            "Insufficient evidence for this question within the seeded investigation scope."
+        ),
+        hypotheses=(),
+        events=(),
+        model_calls=0,
+        tool_calls=0,
+        returned_bytes=0,
+    )
 
 async def investigate_repository(
     tools: McpFileTools,
@@ -98,23 +120,9 @@ async def investigate_repository(
 ) -> InvestigationResult:
     """Search a fixed, bounded plan and turn only retrieved lines into hypotheses."""
     effective = limits or AgentLimits(max_model_calls=1, max_tool_calls=4)
-    normalized_question = " ".join(question.casefold().split())
-    if normalized_question not in {
-        "why do users get logged out?",
-        CANONICAL_SEEDED_QUESTION,
-    }:
-        return InvestigationResult(
-            status="complete",
-            question=question,
-            summary=(
-                "Insufficient evidence for this question within the seeded investigation scope."
-            ),
-            hypotheses=(),
-            events=(),
-            model_calls=0,
-            tool_calls=0,
-            returned_bytes=0,
-        )
+    normalized_question = _normalize_question(question)
+    if not _is_question_supported(normalized_question):
+        return _unsupported_question_result(question)
     events: list[ToolEvent] = []
     returned_bytes = 0
     stop_reason: str | None = None
