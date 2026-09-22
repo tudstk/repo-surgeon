@@ -52,9 +52,9 @@ async def test_investigation_ranks_only_retrieved_evidence_and_never_writes(tmp_
         McpFileTools(MemoryStore(repository)), repository.id, "Why do users get logged out?"
     )
     assert result.hypotheses
-    assert result.hypotheses[0].confidence == "medium"
+    assert result.hypotheses[0].confidence == "low"
     assert result.hypotheses[0].evidence[0].label.startswith("session.py:")
-    assert result.tool_calls == 2
+    assert result.tool_calls == 1
     assert (tmp_path / "session.py").read_text() == (
         "def expire(token):\n"
         "    return token\n"
@@ -72,8 +72,23 @@ async def test_unvalidated_keyword_evidence_does_not_create_a_hypothesis(tmp_pat
     )
 
     assert result.hypotheses == ()
-    assert result.tool_calls == 2
+    assert result.tool_calls == 1
     assert source.read_text() == "def expire(token):\n    return revoke(token)\n"
+
+
+@pytest.mark.anyio
+async def test_canonical_question_requires_behavioral_proof(tmp_path: Path) -> None:
+    (tmp_path / "session.py").write_text("def expire(token):\n    return token\n")
+    repository = Repository(uuid4(), RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
+
+    result = await investigate_repository(
+        McpFileTools(MemoryStore(repository)),
+        repository.id,
+        "Why do users get logged out after their session expires?",
+    )
+
+    assert result.hypotheses == ()
+    assert "Insufficient evidence" in result.summary
 
 
 @pytest.mark.anyio

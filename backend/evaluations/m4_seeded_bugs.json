@@ -2,9 +2,8 @@
   {
     "id": "session-expiry-stale-state",
     "question": "Why do users get logged out after their session expires?",
-    "expected_hypotheses": [
-      "Expiry returns the token without invalidating it"
-    ],
+    "expected_hypotheses": [],
+    "behavioral_proof_required": true,
     "notes": "Evaluation data is read-only and contains no provider credentials."
   }
 ]

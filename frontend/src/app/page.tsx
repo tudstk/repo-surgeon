@@ -400,6 +400,9 @@ export default function Home() {
   const [investigationQuestion, setInvestigationQuestion] = useState(
     'Why do users get logged out?',
   );
+  const [submittedInvestigationQuestion, setSubmittedInvestigationQuestion] = useState<string | null>(
+    null,
+  );
   const [investigation, setInvestigation] = useState<InvestigationResult | null>(null);
   const [investigationLoading, setInvestigationLoading] = useState(false);
   const [investigationError, setInvestigationError] = useState<string | null>(null);
@@ -413,6 +416,7 @@ export default function Home() {
     const question = investigationQuestion.trim();
     const requestId = ++investigationRequestId.current;
     const questionVersion = investigationQuestionVersion.current;
+    setSubmittedInvestigationQuestion(question);
     setInvestigationLoading(true);
     setInvestigationError(null);
     setInvestigation(null);
@@ -518,6 +522,7 @@ export default function Home() {
       setSearchActivity(initialSearchActivity);
       setSelectedCitation(null);
       setInvestigation(null);
+      setSubmittedInvestigationQuestion(null);
       return undefined;
     }
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
@@ -525,6 +530,7 @@ export default function Home() {
     let requestActive = true;
     setSelectedCitation(null);
     setInvestigation(null);
+    setSubmittedInvestigationQuestion(null);
     setSearchActivity({
       ...initialSearchActivity,
       phase: 'loading',
@@ -832,7 +838,9 @@ export default function Home() {
             <div className="message-meta">
               YOU <time>14:28:01</time>
             </div>
-            <div className="user-message">{investigationQuestion}</div>
+            <div className="user-message">
+              {submittedInvestigationQuestion ?? investigationQuestion}
+            </div>
             <div className="message-meta agent-meta">
               REPO SURGEON <span>sub-agent: refactor-core</span>
               <time>14:28:04</time>
