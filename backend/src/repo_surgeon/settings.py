@@ -1,6 +1,7 @@
 """Typed application settings loaded from the environment."""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -11,11 +12,17 @@ class Settings(BaseSettings):
 
     app_name: str = "Repo Surgeon API"
     environment: Literal["development", "test", "production"] = "development"
-    database_url: str = "postgresql+asyncpg://repo_surgeon:repo_surgeon@127.0.0.1:5432/repo_surgeon"
+    database_url: str = (
+        "postgresql+asyncpg://repo_surgeon:repo_surgeon_local_only@127.0.0.1:5432/repo_surgeon"
+    )
 
     model_config = SettingsConfigDict(
         env_prefix="REPO_SURGEON_",
-        env_file=".env",
+        # README setup creates .env at the repository root before changing into
+        # backend. Keep that documented workflow working for both the API and
+        # Alembic, while still allowing a process-local .env when running from
+        # another checkout directory.
+        env_file=(Path(__file__).resolve().parents[3] / ".env", ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

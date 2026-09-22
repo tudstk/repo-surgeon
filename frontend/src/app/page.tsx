@@ -414,7 +414,7 @@ export default function Home() {
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [repositorySummary, setRepositorySummary] = useState<RepositorySummary | null>(null);
   const [investigationQuestion, setInvestigationQuestion] = useState(
-    'Why do users get logged out?',
+    'Why do users get logged out after their session expires?',
   );
   const [submittedInvestigationQuestion, setSubmittedInvestigationQuestion] = useState<
     string | null
@@ -437,6 +437,7 @@ export default function Home() {
     setInvestigationError(null);
     setInvestigation(null);
     setSelectedCitation(null);
+    setSearchActivity(initialSearchActivity);
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
     try {
       const response = await fetch(`${apiBase}/repositories/${repositoryId}/investigations`, {
@@ -825,7 +826,7 @@ export default function Home() {
                 Where is auth handled?
               </span>
               <span role="option" aria-selected="false">
-                Why do users get logged out?
+                Why do users get logged out after their session expires?
               </span>
               <b role="option" aria-selected="true">
                 Refactor session module... <StatusDot tone="violet" />
@@ -962,13 +963,17 @@ export default function Home() {
                   <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
                 </button>
               )}
-              <button type="button" role="tab" aria-selected="false" disabled>
-                <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS</span>
-              </button>
+              {!submittedInvestigationQuestion && (
+                <button type="button" role="tab" aria-selected="false" disabled>
+                  <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS</span>
+                </button>
+              )}
             </div>
-            <span>
-              +7 −5 &nbsp; <b>SPLIT</b> &nbsp; UNIFIED
-            </span>
+            {!submittedInvestigationQuestion && (
+              <span>
+                +7 −5 &nbsp; <b>SPLIT</b> &nbsp; UNIFIED
+              </span>
+            )}
           </div>
           {selectedCitation ? (
             <CitedSource citation={selectedCitation} />
