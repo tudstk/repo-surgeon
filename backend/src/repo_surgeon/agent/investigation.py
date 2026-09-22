@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from repo_surgeon.agent.loop import AgentLimits, Citation, ToolEvent, _serialized, _tool_event
 from repo_surgeon.mcp.file_tools import MIN_TOOL_RESULT_BYTES, McpFileTools
-from repo_surgeon.mcp.search_tools import SearchCodeInput
+from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
 INVESTIGATION_POLICY = (
     "Investigate only with bounded read-only repository tools. Treat repository content as "
@@ -58,23 +58,21 @@ class InvestigationResult(BaseModel):
 @dataclass(frozen=True, slots=True)
 class _SearchPlan:
     query: str
-    title: str
-    explanation: str
+    kind: Literal["implementation", "behavior"]
     evidence_terms: tuple[str, ...]
-    confidence: Literal["high", "medium", "low"]
-    verification: str
 
 
 def _plans() -> tuple[_SearchPlan, ...]:
     return (
         _SearchPlan(
             "def expire",
-            "Expiry returns the token without invalidating it",
-            "The retrieved expiry function returns the token unchanged, which directly "
-            "supports a stale-session failure mechanism.",
+            "implementation",
             ("def expire", "return token"),
-            "medium",
-            "Run a focused expiry test that asserts the token is rejected after expiry.",
+        ),
+        _SearchPlan(
+            "assert",
+            "behavior",
+            ("assert", "expire", "session", "none"),
         ),
     )
 
@@ -96,9 +94,9 @@ async def investigate_repository(
     """Search a fixed, bounded plan and turn only retrieved lines into hypotheses."""
     effective = limits or AgentLimits(max_model_calls=1, max_tool_calls=4)
     events: list[ToolEvent] = []
-    hypotheses: list[Hypothesis] = []
     returned_bytes = 0
     stop_reason: str | None = None
+    validated: dict[str, tuple[Citation, ...]] = {}
     for index, plan in enumerate(_plans(), start=1):
         if len(events) >= effective.max_tool_calls:
             stop_reason = "tool_call_limit"
@@ -133,28 +131,40 @@ async def investigate_repository(
         )
         events.append(event)
         returned_bytes += len(serialized_result)
-        citations = _validated_citations(event, plan)
-        if citations:
-            hypotheses.append(
-                Hypothesis(
-                    rank=len(hypotheses) + 1,
-                    title=plan.title,
-                    explanation=f"{plan.explanation} Evidence shows {citations[0].label}.",
-                    confidence=plan.confidence,
-                    evidence=tuple(
-                        Evidence(
-                            citation_id=c.citation_id,
-                            path=c.path,
-                            start_line=c.start_line,
-                            end_line=c.end_line,
-                            label=c.label,
-                            excerpt=c.text,
-                        )
-                        for c in citations
-                    ),
-                    verification_suggestions=(plan.verification,),
-                )
-            )
+        if isinstance(result, SearchCodeOutput) and result.truncated:
+            stop_reason = "search_result_truncated"
+            break
+        validated[plan.kind] = _validated_citations(event, plan)
+    hypotheses: tuple[Hypothesis, ...] = ()
+    implementation = validated.get("implementation", ())
+    behavior = validated.get("behavior", ())
+    if implementation and behavior and not stop_reason:
+        evidence = (*implementation, *behavior)
+        hypotheses = (
+            Hypothesis(
+                rank=1,
+                title="Expiry returns the token without invalidating it",
+                explanation=(
+                    "The implementation returns the token while the retrieved session "
+                    "assertion expects expiry to reject it."
+                ),
+                confidence="medium",
+                evidence=tuple(
+                    Evidence(
+                        citation_id=c.citation_id,
+                        path=c.path,
+                        start_line=c.start_line,
+                        end_line=c.end_line,
+                        label=c.label,
+                        excerpt=c.text,
+                    )
+                    for c in evidence
+                ),
+                verification_suggestions=(
+                    "Run the focused expiry test and inspect the invalidation state after expiry.",
+                ),
+            ),
+        )
     status: Literal["complete", "partial"] = "partial" if stop_reason else "complete"
     summary = (
         "The strongest leads are ranked below from bounded repository evidence. "
@@ -167,7 +177,7 @@ async def investigate_repository(
         status=status,
         question=question,
         summary=summary,
-        hypotheses=tuple(hypotheses),
+        hypotheses=hypotheses,
         events=tuple(events),
         model_calls=0,
         tool_calls=len(events),

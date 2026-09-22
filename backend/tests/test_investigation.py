@@ -43,6 +43,10 @@ async def test_investigation_ranks_only_retrieved_evidence_and_never_writes(tmp_
         "def expire(token):\n"
         "    return token\n"
     )
+    (tmp_path / "test_session.py").write_text(
+        "def test_expired_session_is_rejected():\n"
+        "    assert expire('token') is None\n"
+    )
     repository = Repository(uuid4(), RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
     result = await investigate_repository(
         McpFileTools(MemoryStore(repository)), repository.id, "Why do users get logged out?"
@@ -50,7 +54,7 @@ async def test_investigation_ranks_only_retrieved_evidence_and_never_writes(tmp_
     assert result.hypotheses
     assert result.hypotheses[0].confidence == "medium"
     assert result.hypotheses[0].evidence[0].label.startswith("session.py:")
-    assert result.tool_calls == 1
+    assert result.tool_calls == 2
     assert (tmp_path / "session.py").read_text() == (
         "def expire(token):\n"
         "    return token\n"
@@ -68,7 +72,7 @@ async def test_unvalidated_keyword_evidence_does_not_create_a_hypothesis(tmp_pat
     )
 
     assert result.hypotheses == ()
-    assert result.tool_calls == 1
+    assert result.tool_calls == 2
     assert source.read_text() == "def expire(token):\n    return revoke(token)\n"
 
 

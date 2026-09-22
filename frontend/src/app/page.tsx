@@ -277,6 +277,10 @@ const CitedSource = ({ citation }: { citation: SearchCitation }) => {
 };
 
 function evidenceCitation(evidence: InvestigationEvidence): SearchCitation {
+  const excerptLines = evidence.excerpt.split('\n').map((text, index) => ({
+    number: evidence.start_line + index,
+    text,
+  }));
   return {
     id: evidence.citation_id,
     path: evidence.path,
@@ -284,9 +288,9 @@ function evidenceCitation(evidence: InvestigationEvidence): SearchCitation {
     startLine: evidence.start_line,
     endLine: evidence.end_line,
     label: evidence.label,
-    text: evidence.excerpt,
+    text: excerptLines[0]?.text ?? '',
     before: [],
-    after: [],
+    after: excerptLines.slice(1),
   };
 }
 
