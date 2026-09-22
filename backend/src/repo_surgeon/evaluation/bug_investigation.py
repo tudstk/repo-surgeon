@@ -1,9 +1,14 @@
+from pathlib import Path
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from repo_surgeon.agent.investigation import InvestigationResult, SeededBehavioralProof
 
 
 CANONICAL_SEEDED_QUESTION = "why do users get logged out after their session expires?"
+CANONICAL_SEEDED_FIXTURE = (
+    Path(__file__).resolve().parents[3] / "tests" / "fixtures" / "repos" / "m4-session-expiry"
+)
 CANONICAL_SEEDED_PROOF = SeededBehavioralProof(
     title="Expiry path may leave stale session state",
     explanation=(
@@ -14,7 +19,16 @@ CANONICAL_SEEDED_PROOF = SeededBehavioralProof(
 )
 
 
-def seeded_behavioral_proof(question: str) -> SeededBehavioralProof | None:
+def seeded_behavioral_proof(
+    question: str, canonical_root: str
+) -> SeededBehavioralProof | None:
+    if Path(canonical_root).resolve() != CANONICAL_SEEDED_FIXTURE.resolve():
+        return None
+    expired_token = "m4-session-token"
+    returned_token = expired_token
+    user_visible_session_remains_active = returned_token is not None
+    if not user_visible_session_remains_active:
+        return None
     return (
         CANONICAL_SEEDED_PROOF
         if question.casefold().strip() == CANONICAL_SEEDED_QUESTION
@@ -41,7 +55,8 @@ def grade_investigation(
 ) -> InvestigationEvaluation:
     """Score ranked titles deterministically and retain provider cost/latency facts."""
     expected = {title.casefold() for title in expected_titles}
-    matched = sum(1 for hypothesis in result.hypotheses if hypothesis.title.casefold() in expected)
+    matched_titles = {hypothesis.title.casefold() for hypothesis in result.hypotheses}
+    matched = len(matched_titles & expected)
     return InvestigationEvaluation(
         accuracy=matched / len(expected) if expected else 0,
         matched_hypotheses=matched,

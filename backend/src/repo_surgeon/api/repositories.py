@@ -161,7 +161,7 @@ async def investigate_repository_bug(
         McpFileTools(SqlAlchemyRepositoryStore(session)),
         repository_id,
         body.question,
-        seeded_proof=seeded_behavioral_proof(body.question),
+        seeded_proof=seeded_behavioral_proof(body.question, repository.canonical_root),
     )
 
 

@@ -518,6 +518,7 @@ export default function Home() {
 
   useEffect(() => {
     investigationRequestId.current += 1;
+    setInvestigationLoading(false);
     if (!selectedRepositoryId) {
       setSearchActivity(initialSearchActivity);
       setSelectedCitation(null);

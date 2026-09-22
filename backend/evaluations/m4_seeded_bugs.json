@@ -6,6 +6,7 @@
       "Expiry path may leave stale session state"
     ],
     "behavioral_proof_required": true,
+    "fixture_path": "backend/tests/fixtures/repos/m4-session-expiry",
     "notes": "Evaluation data is read-only and contains no provider credentials."
   }
 ]

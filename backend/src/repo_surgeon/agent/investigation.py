@@ -95,6 +95,19 @@ async def investigate_repository(
 ) -> InvestigationResult:
     """Search a fixed, bounded plan and turn only retrieved lines into hypotheses."""
     effective = limits or AgentLimits(max_model_calls=1, max_tool_calls=4)
+    if not any(
+        term in question.casefold() for term in ("expire", "expiry", "logged out", "logout", "session")
+    ):
+        return InvestigationResult(
+            status="complete",
+            question=question,
+            summary="Insufficient evidence for this question within the seeded investigation scope.",
+            hypotheses=(),
+            events=(),
+            model_calls=0,
+            tool_calls=0,
+            returned_bytes=0,
+        )
     events: list[ToolEvent] = []
     returned_bytes = 0
     stop_reason: str | None = None

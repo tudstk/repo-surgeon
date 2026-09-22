@@ -79,18 +79,32 @@ async def test_unvalidated_keyword_evidence_does_not_create_a_hypothesis(tmp_pat
 
 @pytest.mark.anyio
 async def test_canonical_question_requires_behavioral_proof(tmp_path: Path) -> None:
-    (tmp_path / "session.py").write_text("def expire(token):\n    return token\n")
-    repository = Repository(uuid4(), RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
+    fixture_root = Path(__file__).parent / "fixtures" / "repos" / "m4-session-expiry"
+    repository = Repository(uuid4(), RepositorySource.LOCAL, str(fixture_root), datetime.now(UTC))
+    question = "Why do users get logged out after their session expires?"
 
     result = await investigate_repository(
         McpFileTools(MemoryStore(repository)),
         repository.id,
-        "Why do users get logged out after their session expires?",
-        seeded_proof=seeded_behavioral_proof("Why do users get logged out after their session expires?"),
+        question,
+        seeded_proof=seeded_behavioral_proof(question, repository.canonical_root),
     )
 
     assert result.hypotheses[0].title == "Expiry path may leave stale session state"
     assert result.hypotheses[0].confidence == "medium"
+
+
+@pytest.mark.anyio
+async def test_unsupported_question_returns_insufficient_evidence(tmp_path: Path) -> None:
+    (tmp_path / "session.py").write_text("def expire(token):\n    return token\n")
+    repository = Repository(uuid4(), RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
+
+    result = await investigate_repository(
+        McpFileTools(MemoryStore(repository)), repository.id, "Why is the database connection slow?"
+    )
+
+    assert result.hypotheses == ()
+    assert result.tool_calls == 0
 
 
 @pytest.mark.anyio
