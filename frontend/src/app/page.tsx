@@ -281,6 +281,8 @@ function evidenceCitation(evidence: InvestigationEvidence): SearchCitation {
     number: evidence.start_line + index,
     text,
   }));
+  const matchIndex = evidence.match_line - evidence.start_line;
+  const matchedLine = excerptLines[matchIndex];
   return {
     id: evidence.citation_id,
     path: evidence.path,
@@ -288,9 +290,9 @@ function evidenceCitation(evidence: InvestigationEvidence): SearchCitation {
     startLine: evidence.start_line,
     endLine: evidence.end_line,
     label: evidence.label,
-    text: excerptLines[0]?.text ?? '',
-    before: [],
-    after: excerptLines.slice(1),
+    text: matchedLine?.text ?? '',
+    before: excerptLines.slice(0, matchIndex),
+    after: excerptLines.slice(matchIndex + 1),
   };
 }
 
@@ -528,6 +530,7 @@ export default function Home() {
     let requestActive = true;
     setSelectedCitation(null);
     setInvestigation(null);
+    setInvestigationError(null);
     setSubmittedInvestigationQuestion(null);
     setSearchActivity({
       ...initialSearchActivity,

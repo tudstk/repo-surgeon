@@ -175,6 +175,135 @@ describe('Home', () => {
     expect(screen.getByRole('tab', { name: /Code/ })).toHaveAttribute('aria-selected', 'true');
   });
 
+  it('highlights the matched line within investigation evidence context', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input, init) => {
+        if (init?.method === 'POST' && input.toString().includes('/investigations')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                status: 'complete',
+                question: 'Why?',
+                summary: 'Evidence found.',
+                hypotheses: [
+                  {
+                    rank: 1,
+                    title: 'Expiry path',
+                    explanation: 'The retrieved code is a lead.',
+                    confidence: 'medium',
+                    evidence: [
+                      {
+                        citation_id: 'search-investigation-1-1',
+                        path: 'session.py',
+                        match_line: 52,
+                        start_line: 51,
+                        end_line: 53,
+                        label: 'session.py:51-53',
+                        excerpt: 'class SessionState:\ndef expire(session, token):\n  return token',
+                      },
+                    ],
+                    verification_suggestions: ['Add a regression test.'],
+                  },
+                ],
+                events: [],
+                model_calls: 0,
+                tool_calls: 1,
+                returned_bytes: 100,
+                stop_reason: null,
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+          );
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(
+              input.toString().endsWith('/summary')
+                ? {
+                    language: 'Python',
+                    language_confidence: 'high',
+                    file_count: 1,
+                    approximate_lines: 3,
+                    test_framework: 'pytest',
+                    test_command: 'pytest -q',
+                    truncated: false,
+                  }
+                : input.toString().endsWith('/search')
+                  ? {
+                      match_count: 0,
+                      matches: [],
+                      truncated: false,
+                      duration_ms: 1,
+                      skipped_files: 0,
+                    }
+                  : [{ id: 'repository-1', name: 'payments-api' }],
+            ),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }),
+    );
+
+    render(<Home />);
+    await waitFor(() => expect(screen.getByRole('option', { name: 'payments-api' })).toBeInTheDocument());
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Agent instruction' }).closest('form')!);
+    await waitFor(() => expect(screen.getByText('Expiry path')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('link', { name: /session.py:51-53/ }));
+
+    const citedLine = screen.getByText('def expire(session, token):').closest('.cited-line');
+    expect(citedLine).toHaveTextContent('52');
+    expect(citedLine).toHaveClass('cited-line');
+  });
+
+  it('clears an investigation error when switching repositories', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input, init) => {
+        if (init?.method === 'POST' && input.toString().includes('/investigations')) {
+          return Promise.resolve(new Response(null, { status: 500 }));
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify(
+              input.toString().endsWith('/summary')
+                ? {
+                    language: null,
+                    language_confidence: 'unknown',
+                    file_count: 0,
+                    approximate_lines: null,
+                    test_framework: null,
+                    test_command: null,
+                    truncated: false,
+                  }
+                : input.toString().endsWith('/search')
+                  ? {
+                      match_count: 0,
+                      matches: [],
+                      truncated: false,
+                      duration_ms: 1,
+                      skipped_files: 0,
+                    }
+                  : [
+                      { id: 'repository-1', name: 'payments-api' },
+                      { id: 'repository-2', name: 'web-dashboard' },
+                    ],
+            ),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }),
+    );
+
+    render(<Home />);
+    await waitFor(() => expect(screen.getByRole('option', { name: 'payments-api' })).toBeInTheDocument());
+    fireEvent.submit(screen.getByRole('textbox', { name: 'Agent instruction' }).closest('form')!);
+    await waitFor(() => expect(screen.getByText(/Investigation unavailable/)).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('option', { name: 'web-dashboard' }));
+
+    await waitFor(() => expect(screen.queryByText(/Investigation unavailable/)).not.toBeInTheDocument());
+  });
+
   it('hides commit nodes from assistive technology because they are decorative', () => {
     render(<Home />);
 
