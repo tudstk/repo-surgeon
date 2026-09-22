@@ -403,10 +403,16 @@ export default function Home() {
   const [investigation, setInvestigation] = useState<InvestigationResult | null>(null);
   const [investigationLoading, setInvestigationLoading] = useState(false);
   const [investigationError, setInvestigationError] = useState<string | null>(null);
+  const investigationRequestId = useRef(0);
+  const investigationQuestionVersion = useRef(0);
 
   const investigate = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedRepositoryId || investigationQuestion.trim().length < 3) return;
+    const repositoryId = selectedRepositoryId;
+    const question = investigationQuestion.trim();
+    const requestId = ++investigationRequestId.current;
+    const questionVersion = investigationQuestionVersion.current;
     setInvestigationLoading(true);
     setInvestigationError(null);
     setInvestigation(null);
@@ -414,19 +420,30 @@ export default function Home() {
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000';
     try {
       const response = await fetch(
-        `${apiBase}/repositories/${selectedRepositoryId}/investigations`,
+        `${apiBase}/repositories/${repositoryId}/investigations`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: investigationQuestion.trim() }),
+          body: JSON.stringify({ question }),
         },
       );
       if (!response.ok) throw new Error('investigation_failed');
-      setInvestigation((await response.json()) as InvestigationResult);
+      const result = (await response.json()) as InvestigationResult;
+      if (
+        requestId === investigationRequestId.current &&
+        questionVersion === investigationQuestionVersion.current
+      ) {
+        setInvestigation(result);
+      }
     } catch {
-      setInvestigationError('Investigation unavailable. Check the local API and try again.');
+      if (
+        requestId === investigationRequestId.current &&
+        questionVersion === investigationQuestionVersion.current
+      ) {
+        setInvestigationError('Investigation unavailable. Check the local API and try again.');
+      }
     } finally {
-      setInvestigationLoading(false);
+      if (requestId === investigationRequestId.current) setInvestigationLoading(false);
     }
   };
 
@@ -496,6 +513,7 @@ export default function Home() {
   }, [selectedRepositoryId]);
 
   useEffect(() => {
+    investigationRequestId.current += 1;
     if (!selectedRepositoryId) {
       setSearchActivity(initialSearchActivity);
       setSelectedCitation(null);
@@ -847,7 +865,10 @@ export default function Home() {
               aria-label="Agent instruction"
               aria-describedby="composer-note"
               value={investigationQuestion}
-              onChange={(event) => setInvestigationQuestion(event.target.value)}
+              onChange={(event) => {
+                investigationQuestionVersion.current += 1;
+                setInvestigationQuestion(event.target.value);
+              }}
               placeholder="Ask why the seeded bug occurs..."
             />
             <p className="sr-only" id="composer-note">
