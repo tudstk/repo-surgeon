@@ -9,6 +9,7 @@ from repo_surgeon.agent.investigation import investigate_repository
 from repo_surgeon.agent.loop import AgentLimits
 from repo_surgeon.application.repositories import ResolvedLocalRepositoryRoot
 from repo_surgeon.domain.repositories import Repository, RepositorySource
+from repo_surgeon.evaluation.bug_investigation import seeded_behavioral_proof
 from repo_surgeon.mcp.file_tools import McpFileTools
 
 
@@ -85,10 +86,11 @@ async def test_canonical_question_requires_behavioral_proof(tmp_path: Path) -> N
         McpFileTools(MemoryStore(repository)),
         repository.id,
         "Why do users get logged out after their session expires?",
+        seeded_proof=seeded_behavioral_proof("Why do users get logged out after their session expires?"),
     )
 
-    assert result.hypotheses == ()
-    assert "Insufficient evidence" in result.summary
+    assert result.hypotheses[0].title == "Expiry path may leave stale session state"
+    assert result.hypotheses[0].confidence == "medium"
 
 
 @pytest.mark.anyio

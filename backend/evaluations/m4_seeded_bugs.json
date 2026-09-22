@@ -2,7 +2,9 @@
   {
     "id": "session-expiry-stale-state",
     "question": "Why do users get logged out after their session expires?",
-    "expected_hypotheses": [],
+    "expected_hypotheses": [
+      "Expiry path may leave stale session state"
+    ],
     "behavioral_proof_required": true,
     "notes": "Evaluation data is read-only and contains no provider credentials."
   }

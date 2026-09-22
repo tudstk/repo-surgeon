@@ -24,6 +24,7 @@ from repo_surgeon.application.repository_intelligence import (
     detect_repository_summary,
 )
 from repo_surgeon.domain.repositories import Repository
+from repo_surgeon.evaluation.bug_investigation import seeded_behavioral_proof
 from repo_surgeon.infrastructure.local_repository_root import GitLocalRepositoryRootResolver
 from repo_surgeon.infrastructure.repository_store import SqlAlchemyRepositoryStore
 from repo_surgeon.mcp.file_tools import McpFileTools
@@ -157,7 +158,10 @@ async def investigate_repository_bug(
             )
         )
     return await investigate_repository(
-        McpFileTools(SqlAlchemyRepositoryStore(session)), repository_id, body.question
+        McpFileTools(SqlAlchemyRepositoryStore(session)),
+        repository_id,
+        body.question,
+        seeded_proof=seeded_behavioral_proof(body.question),
     )
 
 

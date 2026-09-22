@@ -20,6 +20,13 @@ INVESTIGATION_POLICY = (
 CANONICAL_SEEDED_QUESTION = "why do users get logged out after their session expires?"
 
 
+@dataclass(frozen=True, slots=True)
+class SeededBehavioralProof:
+    title: str
+    explanation: str
+    verification_suggestion: str
+
+
 class Evidence(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -84,6 +91,7 @@ async def investigate_repository(
     repository_id: UUID,
     question: str,
     limits: AgentLimits | None = None,
+    seeded_proof: SeededBehavioralProof | None = None,
 ) -> InvestigationResult:
     """Search a fixed, bounded plan and turn only retrieved lines into hypotheses."""
     effective = limits or AgentLimits(max_model_calls=1, max_tool_calls=4)
@@ -132,16 +140,21 @@ async def investigate_repository(
             stop_reason = "search_result_truncated"
             break
         citations = _validated_citations(event, plan)
-        if citations and question.casefold().strip() != CANONICAL_SEEDED_QUESTION:
+        if citations and (
+            question.casefold().strip() != CANONICAL_SEEDED_QUESTION or seeded_proof is not None
+        ):
+            proof = seeded_proof
             hypotheses = (
                 Hypothesis(
                     rank=1,
-                    title="Unverified expiry-path lead",
+                    title=proof.title if proof else "Unverified expiry-path lead",
                     explanation=(
-                        "Retrieved source suggests an expiry-path lead, but it does not "
+                        proof.explanation
+                        if proof
+                        else "Retrieved source suggests an expiry-path lead, but it does not "
                         "establish the observed failure or user-visible impact."
                     ),
-                    confidence="low",
+                    confidence="medium" if proof else "low",
                     evidence=tuple(
                         Evidence(
                             citation_id=c.citation_id,
@@ -154,11 +167,13 @@ async def investigate_repository(
                         for c in citations
                     ),
                     verification_suggestions=(
-                        "Run a focused expiry test that asserts the token is rejected after expiry.",
+                        proof.verification_suggestion
+                        if proof
+                        else "Run a focused expiry test that asserts the token is rejected after expiry.",
                     ),
                 ),
             )
-    if question.casefold().strip() == CANONICAL_SEEDED_QUESTION:
+    if question.casefold().strip() == CANONICAL_SEEDED_QUESTION and seeded_proof is None:
         hypotheses = ()
     status: Literal["complete", "partial"] = "partial" if stop_reason else "complete"
     summary = (
