@@ -92,6 +92,8 @@ async def test_canonical_question_requires_behavioral_proof(tmp_path: Path) -> N
 
     assert result.hypotheses[0].title == "Expiry path may leave stale session state"
     assert result.hypotheses[0].confidence == "medium"
+    assert "def expire" in result.hypotheses[0].evidence[0].excerpt
+    assert "return token" in result.hypotheses[0].evidence[0].excerpt
 
 
 @pytest.mark.anyio

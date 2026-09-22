@@ -82,7 +82,10 @@ def _validated_citations(event: ToolEvent, plan: _SearchPlan) -> tuple[Citation,
     return tuple(
         citation
         for citation in event.citations
-        if all(term in citation.text.lower() for term in plan.evidence_terms)
+        if all(
+            term in "\n".join((*citation.before, citation.text, *citation.after)).lower()
+            for term in plan.evidence_terms
+        )
     )
 
 
@@ -177,7 +180,7 @@ async def investigate_repository(
                             start_line=c.start_line,
                             end_line=c.end_line,
                             label=c.label,
-                            excerpt=c.text,
+                            excerpt="\n".join((*c.before, c.text, *c.after)),
                         )
                         for c in citations
                     ),

@@ -62,6 +62,8 @@ class Citation:
     label: str
     source: Literal["search_code", "read_file"]
     text: str
+    before: tuple[str, ...] = ()
+    after: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,13 +183,9 @@ def _tool_event(
                     f"-{match.after[-1].number if match.after else match.line}"
                 ),
                 source="search_code",
-                text="\n".join(
-                    [
-                        *(line.text for line in match.before),
-                        match.text,
-                        *(line.text for line in match.after),
-                    ]
-                ),
+                text=match.text,
+                before=tuple(line.text for line in match.before),
+                after=tuple(line.text for line in match.after),
             )
             for index, match in enumerate(result.matches, start=1)
         )
