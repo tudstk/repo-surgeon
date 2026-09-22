@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from repo_surgeon.agent.investigation import investigate_repository
+from repo_surgeon.agent.loop import AgentLimits
 from repo_surgeon.application.repositories import ResolvedLocalRepositoryRoot
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.mcp.file_tools import McpFileTools
@@ -40,7 +41,6 @@ class MemoryStore:
 async def test_investigation_ranks_only_retrieved_evidence_and_never_writes(tmp_path: Path) -> None:
     (tmp_path / "session.py").write_text(
         "def expire(token):\n"
-        "    # seeded bug: expiry does not remove the session\n"
         "    return token\n"
     )
     repository = Repository(uuid4(), RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
@@ -48,12 +48,11 @@ async def test_investigation_ranks_only_retrieved_evidence_and_never_writes(tmp_
         McpFileTools(MemoryStore(repository)), repository.id, "Why do users get logged out?"
     )
     assert result.hypotheses
-    assert result.hypotheses[0].confidence == "high"
+    assert result.hypotheses[0].confidence == "medium"
     assert result.hypotheses[0].evidence[0].label.startswith("session.py:")
-    assert result.tool_calls <= 4
+    assert result.tool_calls == 1
     assert (tmp_path / "session.py").read_text() == (
         "def expire(token):\n"
-        "    # seeded bug: expiry does not remove the session\n"
         "    return token\n"
     )
 
@@ -61,7 +60,7 @@ async def test_investigation_ranks_only_retrieved_evidence_and_never_writes(tmp_
 @pytest.mark.anyio
 async def test_unvalidated_keyword_evidence_does_not_create_a_hypothesis(tmp_path: Path) -> None:
     source = tmp_path / "unrelated.py"
-    source.write_text("def expire(token):\n    return token\n")
+    source.write_text("def expire(token):\n    return revoke(token)\n")
     repository = Repository(uuid4(), RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
 
     result = await investigate_repository(
@@ -69,5 +68,22 @@ async def test_unvalidated_keyword_evidence_does_not_create_a_hypothesis(tmp_pat
     )
 
     assert result.hypotheses == ()
-    assert result.tool_calls == 2
-    assert source.read_text() == "def expire(token):\n    return token\n"
+    assert result.tool_calls == 1
+    assert source.read_text() == "def expire(token):\n    return revoke(token)\n"
+
+
+@pytest.mark.anyio
+async def test_investigation_stops_at_returned_byte_budget(tmp_path: Path) -> None:
+    (tmp_path / "session.py").write_text("def expire(token):\n    return token\n")
+    repository = Repository(uuid4(), RepositorySource.LOCAL, str(tmp_path), datetime.now(UTC))
+
+    result = await investigate_repository(
+        McpFileTools(MemoryStore(repository)),
+        repository.id,
+        "Why do users get logged out?",
+        AgentLimits(max_model_calls=1, max_tool_calls=4, max_returned_bytes=1),
+    )
+
+    assert result.status == "partial"
+    assert result.stop_reason == "returned_bytes_limit"
+    assert result.returned_bytes <= 1

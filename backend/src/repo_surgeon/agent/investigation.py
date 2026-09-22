@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from repo_surgeon.agent.loop import AgentLimits, Citation, ToolEvent, _serialized, _tool_event
-from repo_surgeon.mcp.file_tools import McpFileTools
+from repo_surgeon.mcp.file_tools import MIN_TOOL_RESULT_BYTES, McpFileTools
 from repo_surgeon.mcp.search_tools import SearchCodeInput
 
 INVESTIGATION_POLICY = (
@@ -65,50 +65,16 @@ class _SearchPlan:
     verification: str
 
 
-def _plans(question: str) -> tuple[_SearchPlan, ...]:
-    lowered = question.lower()
-    if any(word in lowered for word in ("expire", "logout", "logged out", "session")):
-        return (
-            _SearchPlan(
-                "expire",
-                "Expiry path may leave stale session state",
-                "The expiry path is the strongest lead because it controls when a session "
-                "stops being valid.",
-                ("expire", "seeded bug"),
-                "high",
-                "Add a focused test that advances time past expiry and asserts the token is "
-                "rejected.",
-            ),
-            _SearchPlan(
-                "session",
-                "In-memory session state may be the source of the mismatch",
-                "The session store is a second lead because reads and expiry must agree on "
-                "the same state.",
-                ("session", "seeded bug"),
-                "medium",
-                "Exercise two requests with the same token before and after expiry and inspect "
-                "store state.",
-            ),
-        )
+def _plans() -> tuple[_SearchPlan, ...]:
     return (
         _SearchPlan(
-            "bug",
-            "The seeded bug marker identifies the failing path",
-            "The repository's explicit bug marker is the most direct starting point for "
-            "investigation.",
-            ("seeded bug",),
-            "high",
-            "Turn the marker into a regression test that reproduces the reported behavior.",
-        ),
-        _SearchPlan(
-            "TODO",
-            "An unfinished branch may explain the observed behavior",
-            "An unfinished branch is a plausible contributing cause, but needs a reproducer "
-            "before changes are considered.",
-            ("todo", "seeded bug"),
-            "low",
-            "Trace callers into this branch and compare expected versus observed values in a "
-            "focused test.",
+            "def expire",
+            "Expiry returns the token without invalidating it",
+            "The retrieved expiry function returns the token unchanged, which directly "
+            "supports a stale-session failure mechanism.",
+            ("def expire", "return token"),
+            "medium",
+            "Run a focused expiry test that asserts the token is rejected after expiry.",
         ),
     )
 
@@ -132,8 +98,14 @@ async def investigate_repository(
     events: list[ToolEvent] = []
     hypotheses: list[Hypothesis] = []
     returned_bytes = 0
-    for index, plan in enumerate(_plans(question), start=1):
+    stop_reason: str | None = None
+    for index, plan in enumerate(_plans(), start=1):
         if len(events) >= effective.max_tool_calls:
+            stop_reason = "tool_call_limit"
+            break
+        remaining_bytes = effective.max_returned_bytes - returned_bytes
+        if remaining_bytes < MIN_TOOL_RESULT_BYTES:
+            stop_reason = "returned_bytes_limit"
             break
         result = await tools.search_code(
             SearchCodeInput(
@@ -143,8 +115,15 @@ async def investigate_repository(
                 context_after=2,
                 max_matches=6,
             ),
-            max_bytes=effective.max_returned_bytes - returned_bytes,
+            max_bytes=remaining_bytes,
         )
+        if result is None:
+            stop_reason = "returned_bytes_limit"
+            break
+        serialized_result = _serialized(result)
+        if len(serialized_result) > remaining_bytes:
+            stop_reason = "returned_bytes_limit"
+            break
         event = _tool_event(
             "search_code",
             "error" if hasattr(result, "code") else "success",
@@ -153,7 +132,7 @@ async def investigate_repository(
             repository_id,
         )
         events.append(event)
-        returned_bytes += len(_serialized(result))
+        returned_bytes += len(serialized_result)
         citations = _validated_citations(event, plan)
         if citations:
             hypotheses.append(
@@ -176,14 +155,13 @@ async def investigate_repository(
                     verification_suggestions=(plan.verification,),
                 )
             )
-    status: Literal["complete", "partial"] = (
-        "complete" if len(events) < effective.max_tool_calls else "partial"
-    )
+    status: Literal["complete", "partial"] = "partial" if stop_reason else "complete"
     summary = (
         "The strongest leads are ranked below from bounded repository evidence. "
         "Verify them with a focused test; no files were changed."
         if hypotheses
-        else "No supporting evidence was retrieved within the read-only investigation budget."
+        else "Insufficient evidence to rank a cause. Verify by reproducing the seeded failure "
+        "with a focused test; no files were changed."
     )
     return InvestigationResult(
         status=status,
@@ -194,5 +172,5 @@ async def investigate_repository(
         model_calls=0,
         tool_calls=len(events),
         returned_bytes=returned_bytes,
-        stop_reason=None if status == "complete" else "tool_call_limit",
+        stop_reason=stop_reason,
     )
