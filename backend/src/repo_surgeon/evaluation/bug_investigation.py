@@ -42,11 +42,8 @@ def seeded_behavioral_proof(
     user_visible_session_remains_active = returned_token == expired_token
     if not (failure_observed and user_visible_session_remains_active):
         return None
-    return (
-        CANONICAL_SEEDED_PROOF
-        if question.casefold().strip() == CANONICAL_SEEDED_QUESTION
-        else None
-    )
+    normalized_question = " ".join(question.casefold().split())
+    return CANONICAL_SEEDED_PROOF if normalized_question == CANONICAL_SEEDED_QUESTION else None
 
 
 class InvestigationEvaluation(BaseModel):

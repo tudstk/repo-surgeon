@@ -81,7 +81,7 @@ async def test_unvalidated_keyword_evidence_does_not_create_a_hypothesis(tmp_pat
 async def test_canonical_question_requires_behavioral_proof(tmp_path: Path) -> None:
     fixture_root = Path(__file__).parent / "fixtures" / "repos" / "m4-session-expiry"
     repository = Repository(uuid4(), RepositorySource.LOCAL, str(fixture_root), datetime.now(UTC))
-    question = "Why do users get logged out after their session expires?"
+    question = "Why  do users get logged out after their session expires? "
 
     result = await investigate_repository(
         McpFileTools(MemoryStore(repository)),
