@@ -88,14 +88,17 @@ def _validated_citations(event: ToolEvent, plan: _SearchPlan) -> tuple[Citation,
         )
     )
 
+
 def _normalize_question(question: str) -> str:
     return " ".join(question.casefold().split())
+
 
 def _is_question_supported(normalized_question: str) -> bool:
     return normalized_question in {
         "why do users get logged out?",
         CANONICAL_SEEDED_QUESTION,
     }
+
 
 def _unsupported_question_result(question: str) -> InvestigationResult:
     return InvestigationResult(
@@ -110,6 +113,16 @@ def _unsupported_question_result(question: str) -> InvestigationResult:
         tool_calls=0,
         returned_bytes=0,
     )
+
+
+def _check_investigation_limits(
+    events: list[ToolEvent], returned_bytes: int, effective: AgentLimits
+) -> tuple[bool, str | None]:
+    if len(events) >= effective.max_tool_calls:
+        return True, "tool_call_limit"
+    if effective.max_returned_bytes - returned_bytes < MIN_TOOL_RESULT_BYTES:
+        return True, "returned_bytes_limit"
+    return False, None
 
 async def investigate_repository(
     tools: McpFileTools,
@@ -128,12 +141,11 @@ async def investigate_repository(
     stop_reason: str | None = None
     hypotheses: tuple[Hypothesis, ...] = ()
     for index, plan in enumerate(_plans(), start=1):
-        if len(events) >= effective.max_tool_calls:
-            stop_reason = "tool_call_limit"
-            break
-        remaining_bytes = effective.max_returned_bytes - returned_bytes
-        if remaining_bytes < MIN_TOOL_RESULT_BYTES:
-            stop_reason = "returned_bytes_limit"
+        should_break, reason = _check_investigation_limits(
+            events, returned_bytes, effective
+        )
+        if should_break:
+            stop_reason = reason
             break
         result = await tools.search_code(
             SearchCodeInput(

@@ -29,11 +29,13 @@ class MemoryStore:
     async def list_all(self) -> tuple[Repository, ...]:
         return (self.repository,)
 
-    async def add_local(self, root: ResolvedLocalRepositoryRoot) -> Repository:
+    @staticmethod
+    async def add_local(root: ResolvedLocalRepositoryRoot) -> Repository:
         raise AssertionError
 
+    @staticmethod
     async def bind_legacy_identity(
-        self, repository_id: UUID, root: ResolvedLocalRepositoryRoot
+        repository_id: UUID, root: ResolvedLocalRepositoryRoot
     ) -> Repository:
         raise AssertionError
 

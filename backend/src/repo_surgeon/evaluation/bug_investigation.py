@@ -45,14 +45,14 @@ def seeded_behavioral_proof(question: str, canonical_root: str) -> SeededBehavio
     module = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(module)
     session_type = getattr(module, "SessionState", None)
-    expire = getattr(module, "expire", None)
-    if not callable(session_type) or not callable(expire):
+    if not callable(session_type):
         return None
-    session_factory = lambda token: session_type(token)
-    expire_function = lambda session, token: expire(session, token)
     expired_token = "m4-session-token"
-    session = session_factory(expired_token)
-    returned_token = expire_function(session, expired_token)
+    session = session_type(expired_token)
+    expire_method = getattr(session, "expire", None)
+    if not callable(expire_method):
+        return None
+    returned_token = expire_method(expired_token)
     failure_observed = returned_token == expired_token
     user_visible_session_remains_active = session.active is True
     if not (failure_observed and user_visible_session_remains_active):
