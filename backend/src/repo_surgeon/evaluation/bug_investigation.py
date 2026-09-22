@@ -1,7 +1,7 @@
 import importlib.util
 from collections.abc import Callable
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -48,8 +48,8 @@ def seeded_behavioral_proof(question: str, canonical_root: str) -> SeededBehavio
     expire = getattr(module, "expire", None)
     if not callable(session_type) or not callable(expire):
         return None
-    session_factory = cast(_SessionFactory, session_type)
-    expire_function = cast(_Expire, expire)
+    session_factory: _SessionFactory = session_type
+    expire_function: _Expire = expire
     expired_token = "m4-session-token"
     session = session_factory(expired_token)
     returned_token = expire_function(session, expired_token)
