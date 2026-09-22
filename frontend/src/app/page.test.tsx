@@ -253,6 +253,10 @@ describe('Home', () => {
     await waitFor(() => expect(screen.getByText('Expiry path')).toBeInTheDocument());
     expect(screen.queryByText(/WRITE PENDING/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/proposing patch revision/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/\+7 −5/)).not.toBeInTheDocument();
+    expect(screen.queryByText('SPLIT')).not.toBeInTheDocument();
+    expect(screen.queryByText('UNIFIED')).not.toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: /Tests/ })).not.toBeInTheDocument();
     expect(screen.getByText(/READ-ONLY INVESTIGATION/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('link', { name: /session.py:51-53/ }));
 

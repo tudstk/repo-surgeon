@@ -962,13 +962,17 @@ export default function Home() {
                   <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
                 </button>
               )}
-              <button type="button" role="tab" aria-selected="false" disabled>
-                <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS</span>
-              </button>
+              {!submittedInvestigationQuestion && (
+                <button type="button" role="tab" aria-selected="false" disabled>
+                  <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS</span>
+                </button>
+              )}
             </div>
-            <span>
-              +7 −5 &nbsp; <b>SPLIT</b> &nbsp; UNIFIED
-            </span>
+            {!submittedInvestigationQuestion && (
+              <span>
+                +7 −5 &nbsp; <b>SPLIT</b> &nbsp; UNIFIED
+              </span>
+            )}
           </div>
           {selectedCitation ? (
             <CitedSource citation={selectedCitation} />
