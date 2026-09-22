@@ -37,3 +37,10 @@ def test_settings_read_the_configured_environment(monkeypatch: MonkeyPatch) -> N
     settings = Settings()
 
     assert settings.environment == "test"
+
+
+def test_settings_default_matches_compose_database_credentials() -> None:
+    """Fresh local API startup uses the password created by Compose."""
+    assert Settings.model_fields["database_url"].default == (
+        "postgresql+asyncpg://repo_surgeon:repo_surgeon_local_only@127.0.0.1:5432/repo_surgeon"
+    )
