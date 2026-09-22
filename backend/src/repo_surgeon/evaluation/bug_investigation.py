@@ -1,5 +1,7 @@
 import importlib.util
+from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,6 +26,14 @@ CANONICAL_SEEDED_PROOF = SeededBehavioralProof(
 )
 
 
+class _Session(Protocol):
+    active: bool
+
+
+_SessionFactory = Callable[[str], _Session]
+_Expire = Callable[[_Session, str], str | None]
+
+
 def seeded_behavioral_proof(question: str, canonical_root: str) -> SeededBehavioralProof | None:
     if Path(canonical_root).resolve() != CANONICAL_SEEDED_FIXTURE.resolve():
         return None
@@ -38,9 +48,11 @@ def seeded_behavioral_proof(question: str, canonical_root: str) -> SeededBehavio
     expire = getattr(module, "expire", None)
     if not callable(session_type) or not callable(expire):
         return None
+    session_factory = cast(_SessionFactory, session_type)
+    expire_function = cast(_Expire, expire)
     expired_token = "m4-session-token"
-    session = session_type(expired_token)
-    returned_token = expire(session, expired_token)
+    session = session_factory(expired_token)
+    returned_token = expire_function(session, expired_token)
     failure_observed = returned_token == expired_token
     user_visible_session_remains_active = session.active is True
     if not (failure_observed and user_visible_session_remains_active):
