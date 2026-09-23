@@ -70,6 +70,30 @@ def test_production_cannot_use_local_trusted_defaults() -> None:
         Settings(environment="production")
 
 
+@pytest.mark.parametrize(
+    "database_url",
+    [
+        "postgresql+asyncpg://repo_surgeon:repo_surgeon_local_only@127.0.0.1:5432/repo_surgeon?x=1",
+        "postgresql+asyncpg://repo_surgeon:repo_surgeon_local_only@127.0.0.1:5432/repo_surgeon/",
+    ],
+)
+def test_production_rejects_local_database_variants(database_url: str) -> None:
+    values = public_settings(database_url).model_dump()
+    values.update(environment="production", public_origin="https://surgeon.example")
+
+    with pytest.raises(ValidationError, match="local development database"):
+        Settings(**values)
+
+
+def test_production_accepts_non_local_database() -> None:
+    values = public_settings("postgresql+asyncpg://app:secret@db.example:5432/repo_surgeon").model_dump()
+    values.update(environment="production", public_origin="https://surgeon.example")
+
+    settings = Settings(**values)
+
+    assert settings.environment == "production"
+
+
 @pytest.mark.anyio
 async def test_public_mode_rejects_local_registration_at_http_boundary(tmp_path: Path) -> None:
     database_url = f"sqlite+aiosqlite:///{tmp_path / 'public.sqlite3'}"

@@ -7,6 +7,7 @@ from urllib.parse import urlsplit
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
 
 AccessMode = Literal["local_trusted", "public_authenticated"]
 
@@ -111,7 +112,16 @@ class Settings(BaseSettings):
                 raise ValueError("production requires public_authenticated access mode")
             if origin.scheme != "https":
                 raise ValueError("production PUBLIC_ORIGIN must use HTTPS")
-            if self.database_url.endswith("repo_surgeon_local_only@127.0.0.1:5432/repo_surgeon"):
+            database = make_url(self.database_url)
+            if (
+                database.drivername == "postgresql+asyncpg"
+                and database.username == "repo_surgeon"
+                and database.password == "repo_surgeon_local_only"
+                and database.host == "127.0.0.1"
+                and database.port == 5432
+                and database.database is not None
+                and database.database.rstrip("/") == "repo_surgeon"
+            ):
                 raise ValueError("production must not use the local development database")
         return self
 
