@@ -117,6 +117,21 @@ class RepositoryProblem(Exception):
         self.problem = problem
 
 
+def _ensure_local_repository_access(request: Request) -> None:
+    """Enforce the public-mode boundary before any path or repository lookup."""
+    settings = request.app.state.settings
+    if settings.access_mode == "public_authenticated" or not settings.local_repository_access:
+        raise RepositoryProblem(
+            ProblemDetail(
+                type="https://repo-surgeon.local/problems/local_repository_access_disabled",
+                title="Local repository access is disabled",
+                status=403,
+                detail="Local filesystem repositories are unavailable in public mode.",
+                code="local_repository_access_disabled",
+            )
+        )
+
+
 def _response(repository: Repository) -> RepositoryResponse:
     """Convert a domain entity into an API response."""
     return RepositoryResponse(
@@ -144,8 +159,12 @@ SessionDependency = Annotated[AsyncSession, Depends(get_session)]
     summary="Investigate a repository bug with bounded read-only evidence",
 )
 async def investigate_repository_bug(
-    repository_id: UUID, body: InvestigationRequest, session: SessionDependency
+    request: Request,
+    repository_id: UUID,
+    body: InvestigationRequest,
+    session: SessionDependency,
 ) -> InvestigationResult:
+    _ensure_local_repository_access(request)
     repository = await GetRepository(SqlAlchemyRepositoryStore(session)).execute(repository_id)
     if repository is None:
         raise RepositoryProblem(
@@ -196,9 +215,10 @@ def _registration_problem(error: RepositoryRegistrationError) -> RepositoryProbl
     summary="Register an existing local Git repository",
 )
 async def register_repository(
-    body: RegisterRepositoryRequest, session: SessionDependency
+    request: Request, body: RegisterRepositoryRequest, session: SessionDependency
 ) -> RepositoryResponse:
     """Register a canonical local Git worktree without reading its source files."""
+    _ensure_local_repository_access(request)
     service = RegisterLocalRepository(
         GitLocalRepositoryRootResolver(), SqlAlchemyRepositoryStore(session)
     )
@@ -214,8 +234,11 @@ async def register_repository(
     response_model=list[RepositoryListResponse],
     summary="List registered local repositories",
 )
-async def list_repositories(session: SessionDependency) -> list[RepositoryListResponse]:
+async def list_repositories(
+    request: Request, session: SessionDependency
+) -> list[RepositoryListResponse]:
     """Return registered repositories for the workspace selector."""
+    _ensure_local_repository_access(request)
     repositories = await ListRepositories(SqlAlchemyRepositoryStore(session)).execute()
     return [
         RepositoryListResponse(id=repository.id, name=Path(repository.canonical_root).name)
@@ -230,11 +253,13 @@ async def list_repositories(session: SessionDependency) -> list[RepositoryListRe
     summary="Search one registered repository",
 )
 async def search_repository(
+    request: Request,
     repository_id: UUID,
     body: RepositorySearchRequest,
     session: SessionDependency,
 ) -> SearchCodeOutput:
     """Run the existing bounded search adapter for a selected repository."""
+    _ensure_local_repository_access(request)
     if await GetRepository(SqlAlchemyRepositoryStore(session)).execute(repository_id) is None:
         raise RepositoryProblem(
             ProblemDetail(
@@ -286,9 +311,10 @@ def _summary_problem(error: RepositoryFileError) -> RepositoryProblem:
     summary="Detect bounded repository summary metadata",
 )
 async def get_repository_summary(
-    repository_id: UUID, session: SessionDependency
+    request: Request, repository_id: UUID, session: SessionDependency
 ) -> RepositorySummaryResponse:
     """Return bounded metadata detected from a registered repository root."""
+    _ensure_local_repository_access(request)
     repository = await GetRepository(SqlAlchemyRepositoryStore(session)).execute(repository_id)
     if repository is None:
         raise RepositoryProblem(
@@ -321,8 +347,11 @@ async def get_repository_summary(
     responses={404: {"model": ProblemDetail}},
     summary="Retrieve a registered repository",
 )
-async def get_repository(repository_id: UUID, session: SessionDependency) -> RepositoryResponse:
+async def get_repository(
+    request: Request, repository_id: UUID, session: SessionDependency
+) -> RepositoryResponse:
     """Retrieve one durable repository record."""
+    _ensure_local_repository_access(request)
     repository = await GetRepository(SqlAlchemyRepositoryStore(session)).execute(repository_id)
     if repository is None:
         raise RepositoryProblem(

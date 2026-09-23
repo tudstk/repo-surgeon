@@ -10,6 +10,28 @@ Registration validates only the selected path and Git worktree boundary. The MCP
 
 No model API key is required.
 
+## Access modes and authentication foundation
+
+The checked-in default is `local_trusted`: the API accepts loopback clients and
+the existing bounded local-repository workflow remains available. It is not a
+public deployment configuration. Set `REPO_SURGEON_ACCESS_MODE=public_authenticated`
+only with runtime-injected OAuth and encryption settings,
+`REPO_SURGEON_COOKIE_SECURE=true`, an exact `REPO_SURGEON_PUBLIC_ORIGIN`, and
+`REPO_SURGEON_LOCAL_REPOSITORY_ACCESS=false`. The typed settings contract rejects
+wildcard origins in every mode, and rejects unsafe callback URLs, incomplete
+public configuration, and production use of local defaults.
+
+Milestone 4.5A does not perform an OAuth exchange or create login sessions. Public
+mode therefore rejects every local-repository endpoint at the FastAPI boundary.
+The frontend deliberately shows only the bounded read-only evidence workflow: no
+fabricated proposal, diff, sandbox test result, approval, or pull-request state is
+rendered. OAuth identity, sessions, profile, and public repository support are
+later slices.
+
+The security rationale and required negative-test matrix are in the
+[authentication ADR](docs/architecture/decisions/0010-github-authentication-and-tenancy-foundation.md)
+and [threat model](docs/security/authentication-threat-model.md).
+
 ## Prerequisites
 
 - Python 3.14.x and [uv](https://docs.astral.sh/uv/) 0.12.9.
@@ -45,7 +67,11 @@ uv sync --locked
 uv run uvicorn repo_surgeon.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The API listens on `127.0.0.1:8000` and rejects non-loopback clients. Repository metadata and source search are unauthenticated within this local development trust boundary, so do not expose the process through a proxy, container port, or non-loopback bind. In another terminal, run the health checks:
+With the checked-in `local_trusted` default, the API listens on `127.0.0.1:8000`
+and rejects non-loopback clients. Repository metadata and source search are
+unauthenticated within this local development trust boundary, so do not expose
+the process through a proxy, container port, or non-loopback bind. In another
+terminal, run the health checks:
 
 ```sh
 curl --fail --silent --show-error http://127.0.0.1:8000/health/live
