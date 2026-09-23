@@ -88,6 +88,7 @@ describe('Home', () => {
     expect(
       screen.getByText(/Proposal, diff, test, and approval workflows are not available/i),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/No repository is selected/i)).not.toBeInTheDocument();
     expect(
       screen.queryByText(/WRITE PENDING|Sandbox Tests|Approve & Open PR/i),
     ).not.toBeInTheDocument();

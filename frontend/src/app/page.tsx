@@ -304,7 +304,7 @@ function ReadOnlyInvestigationState({ loading }: { loading: boolean }) {
       <p>
         {loading
           ? 'No files will be changed while the bounded repository evidence is retrieved.'
-          : 'No repository is selected. Proposal, diff, test, and approval workflows are not available in this milestone.'}
+          : 'No investigation has been submitted. Proposal, diff, test, and approval workflows are not available in this milestone.'}
       </p>
     </div>
   );
