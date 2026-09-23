@@ -82,6 +82,8 @@ class Settings(BaseSettings):
                 raise ValueError(
                     "LOCAL_REPOSITORY_ACCESS must be false in public_authenticated mode"
                 )
+            if not self.cookie_secure:
+                raise ValueError("public_authenticated requires secure cookies")
             if not self.github_oauth_client_id:
                 raise ValueError("GITHUB_OAUTH_CLIENT_ID is required in public_authenticated mode")
             if not self.github_oauth_client_secret:
@@ -109,8 +111,6 @@ class Settings(BaseSettings):
                 raise ValueError("production requires public_authenticated access mode")
             if origin.scheme != "https":
                 raise ValueError("production PUBLIC_ORIGIN must use HTTPS")
-            if not self.cookie_secure:
-                raise ValueError("production requires secure cookies")
             if self.database_url.endswith("repo_surgeon_local_only@127.0.0.1:5432/repo_surgeon"):
                 raise ValueError("production must not use the local development database")
         return self

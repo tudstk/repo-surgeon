@@ -33,6 +33,17 @@ def test_public_settings_expose_a_fixed_callback_and_session_policy() -> None:
     assert settings.oauth_transaction_ttl_seconds == 600
 
 
+@pytest.mark.parametrize("environment", ["development", "test"])
+def test_public_settings_require_secure_cookies_in_non_production_environments(
+    environment: str,
+) -> None:
+    values = public_settings("sqlite+aiosqlite:///settings.sqlite3").model_dump()
+    values.update(environment=environment, cookie_secure=False)
+
+    with pytest.raises(ValidationError, match="public_authenticated requires secure cookies"):
+        Settings(**values)
+
+
 @pytest.mark.parametrize(
     ("overrides", "message"),
     [
