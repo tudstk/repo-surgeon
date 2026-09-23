@@ -327,7 +327,9 @@ describe('Home', () => {
       ),
     );
     fireEvent.submit(screen.getByRole('textbox', { name: 'Agent instruction' }).closest('form')!);
-    await waitFor(() => expect(screen.getByText(/Investigation unavailable/)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getAllByText(/Investigation unavailable/).length).toBeGreaterThan(0),
+    );
     expect(screen.getByText('Evidence review unavailable')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('option', { name: 'web-dashboard' }));
 

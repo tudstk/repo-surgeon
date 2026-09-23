@@ -86,7 +86,9 @@ def test_production_rejects_local_database_variants(database_url: str) -> None:
 
 
 def test_production_accepts_non_local_database() -> None:
-    values = public_settings("postgresql+asyncpg://app:secret@db.example:5432/repo_surgeon").model_dump()
+    values = public_settings(
+        "postgresql+asyncpg://app:secret@db.example:5432/repo_surgeon"
+    ).model_dump()
     values.update(environment="production", public_origin="https://surgeon.example")
 
     settings = Settings(**values)
