@@ -55,7 +55,7 @@ class SessionStore(Protocol):
 
     async def touch_session(
         self, session_id: UUID, last_seen_at: datetime, expires_at: datetime
-    ) -> None:
+    ) -> bool:
         """Persist the bounded sliding-expiry update for a valid session."""
 
     async def revoke_by_token_digest(self, token_digest: bytes, revoked_at: datetime) -> bool:
@@ -149,7 +149,8 @@ class SessionService:
         if session is None or not session.is_valid_at(now):
             return None
         expires_at = min(now + self._idle_ttl, session.absolute_expires_at)
-        await self._store.touch_session(session.id, now, expires_at)
+        if not await self._store.touch_session(session.id, now, expires_at):
+            return None
         return AuthContext(user_id=session.user_id, session_id=session.id)
 
     async def revoke(self, token: SessionToken, now: datetime) -> bool:

@@ -159,6 +159,34 @@ async def test_session_refresh_does_not_regress_after_a_delayed_request(
 
 
 @pytest.mark.anyio
+async def test_authentication_rejects_refresh_when_session_expires_before_persist(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    user, _ = await _synchronize_user(session_factory)
+    now = datetime(2026, 9, 23, tzinfo=UTC)
+    async with session_factory() as session:
+        issued = await SessionService(
+            SqlAlchemySessionStore(session),
+            idle_ttl=timedelta(minutes=10),
+            absolute_ttl=timedelta(hours=1),
+        ).issue(user.id, now)
+
+        class ExpiringStore:
+            async def get_by_token_digest(self, token_digest: bytes):
+                return issued.session
+
+            async def touch_session(
+                self, session_id: UUID, last_seen_at: datetime, expires_at: datetime
+            ) -> bool:
+                return False
+
+        service = SessionService(
+            ExpiringStore(), idle_ttl=timedelta(minutes=10), absolute_ttl=timedelta(hours=1)
+        )
+        assert await service.authenticate(issued.session_token, now + timedelta(minutes=1)) is None
+
+
+@pytest.mark.anyio
 async def test_oauth_transaction_encrypts_verifier_and_consumes_exactly_once(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

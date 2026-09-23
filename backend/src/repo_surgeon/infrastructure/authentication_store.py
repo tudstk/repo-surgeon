@@ -182,11 +182,15 @@ class SqlAlchemySessionStore:
 
     async def touch_session(
         self, session_id: UUID, last_seen_at: datetime, expires_at: datetime
-    ) -> None:
+    ) -> bool:
         """Update sliding expiry without changing the opaque bearer digest."""
-        await self._session.execute(
+        result = await self._session.execute(
             update(AuthSessionRecord)
-            .where(AuthSessionRecord.id == session_id, AuthSessionRecord.revoked_at.is_(None))
+            .where(
+                AuthSessionRecord.id == session_id,
+                AuthSessionRecord.revoked_at.is_(None),
+                AuthSessionRecord.expires_at > last_seen_at,
+            )
             .values(
                 last_seen_at=case(
                     (AuthSessionRecord.last_seen_at < last_seen_at, last_seen_at),
@@ -200,6 +204,7 @@ class SqlAlchemySessionStore:
             .execution_options(synchronize_session=False)
         )
         await self._session.commit()
+        return cast(CursorResult[Any], result).rowcount == 1
 
     async def revoke_by_token_digest(self, token_digest: bytes, revoked_at: datetime) -> bool:
         """Mark a live session revoked and report whether this call changed it."""
