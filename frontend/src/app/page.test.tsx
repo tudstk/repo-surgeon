@@ -85,6 +85,7 @@ describe('Home', () => {
       'Why do users get logged out after their session expires?',
     );
     expect(screen.getByText(/READ-ONLY EVIDENCE/i)).toBeInTheDocument();
+    expect(screen.getByText('Ready for bounded evidence review')).toBeInTheDocument();
     expect(
       screen.getByText(/Proposal, diff, test, and approval workflows are not available/i),
     ).toBeInTheDocument();
@@ -327,6 +328,7 @@ describe('Home', () => {
     );
     fireEvent.submit(screen.getByRole('textbox', { name: 'Agent instruction' }).closest('form')!);
     await waitFor(() => expect(screen.getByText(/Investigation unavailable/)).toBeInTheDocument());
+    expect(screen.getByText('Evidence review unavailable')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('option', { name: 'web-dashboard' }));
 
     await waitFor(() =>

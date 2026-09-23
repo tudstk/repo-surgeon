@@ -296,15 +296,29 @@ function evidenceCitation(evidence: InvestigationEvidence): SearchCitation {
   };
 }
 
-function ReadOnlyInvestigationState({ loading }: { loading: boolean }) {
+function ReadOnlyInvestigationState({
+  loading,
+  error,
+}: {
+  loading: boolean;
+  error?: string | null;
+}) {
   return (
     <div className="investigation-empty" aria-label="Read-only investigation status">
       <span className="read-only-chip">READ-ONLY INVESTIGATION</span>
-      <strong>{loading ? 'Retrieving bounded evidence...' : 'Evidence review unavailable'}</strong>
+      <strong>
+        {loading
+          ? 'Retrieving bounded evidence...'
+          : error
+            ? 'Evidence review unavailable'
+            : 'Ready for bounded evidence review'}
+      </strong>
       <p>
         {loading
           ? 'No files will be changed while the bounded repository evidence is retrieved.'
-          : 'No investigation has been submitted. Proposal, diff, test, and approval workflows are not available in this milestone.'}
+          : error
+            ? error
+            : 'No investigation has been submitted. Proposal, diff, test, and approval workflows are not available in this milestone.'}
       </p>
     </div>
   );
@@ -819,7 +833,7 @@ export default function Home() {
               onSelectEvidence={(evidence) => setSelectedCitation(evidenceCitation(evidence))}
             />
           ) : submittedInvestigationQuestion ? (
-            <ReadOnlyInvestigationState loading={investigationLoading} />
+            <ReadOnlyInvestigationState loading={investigationLoading} error={investigationError} />
           ) : (
             <ReadOnlyInvestigationState loading={false} />
           )}
