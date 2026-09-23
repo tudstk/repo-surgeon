@@ -131,6 +131,34 @@ async def test_disabled_user_session_cannot_authenticate(
 
 
 @pytest.mark.anyio
+async def test_session_refresh_does_not_regress_after_a_delayed_request(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    user, _ = await _synchronize_user(session_factory)
+    now = datetime(2026, 9, 23, tzinfo=UTC)
+    async with session_factory() as session:
+        service = SessionService(
+            SqlAlchemySessionStore(session),
+            idle_ttl=timedelta(minutes=10),
+            absolute_ttl=timedelta(hours=1),
+        )
+        issued = await service.issue(user.id, now)
+        store = SqlAlchemySessionStore(session)
+        newer_seen = now + timedelta(minutes=2)
+        newer_expiry = now + timedelta(minutes=12)
+        older_seen = now + timedelta(minutes=1)
+        older_expiry = now + timedelta(minutes=11)
+
+        await store.touch_session(issued.session.id, newer_seen, newer_expiry)
+        await store.touch_session(issued.session.id, older_seen, older_expiry)
+
+        record = await session.get(AuthSessionRecord, issued.session.id)
+        assert record is not None
+        assert record.last_seen_at.replace(tzinfo=UTC) == newer_seen
+        assert record.expires_at.replace(tzinfo=UTC) == newer_expiry
+
+
+@pytest.mark.anyio
 async def test_oauth_transaction_encrypts_verifier_and_consumes_exactly_once(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

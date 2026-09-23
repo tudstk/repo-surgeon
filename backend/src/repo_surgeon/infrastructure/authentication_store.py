@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import case, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -187,7 +187,16 @@ class SqlAlchemySessionStore:
         await self._session.execute(
             update(AuthSessionRecord)
             .where(AuthSessionRecord.id == session_id, AuthSessionRecord.revoked_at.is_(None))
-            .values(last_seen_at=last_seen_at, expires_at=expires_at)
+            .values(
+                last_seen_at=case(
+                    (AuthSessionRecord.last_seen_at < last_seen_at, last_seen_at),
+                    else_=AuthSessionRecord.last_seen_at,
+                ),
+                expires_at=case(
+                    (AuthSessionRecord.expires_at < expires_at, expires_at),
+                    else_=AuthSessionRecord.expires_at,
+                ),
+            )
             .execution_options(synchronize_session=False)
         )
         await self._session.commit()
