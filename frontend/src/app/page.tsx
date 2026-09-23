@@ -45,7 +45,7 @@ const DEFAULT_PANE_WIDTHS = [200, 260, 400, 556];
 const DEFAULT_PANE_MINIMUMS = [180, 220, 320, 400];
 const PANE_LABELS = [
   'Workspace map',
-  'Repositories and Git lineage',
+  'Repositories and evidence context',
   'Conversation and agent trace',
   'Work panel',
 ];
@@ -296,97 +296,6 @@ function evidenceCitation(evidence: InvestigationEvidence): SearchCitation {
   };
 }
 
-function ProposedDiff() {
-  return (
-    <div className="proposed-diff">
-      <div className="file-heading" id="diff">
-        <strong>
-          <Glyph>▤</Glyph> &nbsp; auth/session.py
-        </strong>
-        <span>(+7 −5) &nbsp;&nbsp; INDEX 47b91e...c892fa 100644</span>
-      </div>
-      <div className="hunk-label">@@ -48,11 +48,13 @@ class SessionManager:</div>
-      <div className="diff-code" aria-label="Proposed code diff">
-        <div className="code-line">
-          <span>48&nbsp;&nbsp; 48</span>
-          <code>def __init__(self, ttl_seconds: int = 3600) -&gt; None:</code>
-        </div>
-        <div className="code-line">
-          <span>49&nbsp;&nbsp; 49</span>
-          <code> self._ttl = ttl_seconds</code>
-        </div>
-        <div className="code-line removed">
-          <span>50&nbsp;&nbsp; −</span>
-          <code> self._sessions = {'{}'}</code>
-        </div>
-        <div className="code-line added">
-          <span>50&nbsp;&nbsp; +</span>
-          <code> self._store = TokenStore(default_ttl=ttl_seconds)</code>
-        </div>
-        <div className="code-line">
-          <span>51&nbsp;&nbsp; 51</span>
-          <code> self._lock = threading.RLock()</code>
-        </div>
-        <div className="code-line removed">
-          <span>52&nbsp;&nbsp; −</span>
-          <code>def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
-        </div>
-        <div className="code-line added">
-          <span>52&nbsp;&nbsp; +</span>
-          <code>async def resolve(self, token: str) -&gt; Optional[SessionData]:</code>
-        </div>
-        <div className="code-line removed">
-          <span>53&nbsp;&nbsp; −</span>
-          <code> return self._sessions.get(token)</code>
-        </div>
-        <div className="code-line added">
-          <span>53&nbsp;&nbsp; +</span>
-          <code> return await self._store.lookup(token)</code>
-        </div>
-        <div className="code-line">
-          <span>54&nbsp;&nbsp; 54</span>
-          <code>def invalidate(self, token: str) -&gt; bool:</code>
-        </div>
-        <div className="code-line removed">
-          <span>55&nbsp;&nbsp; −</span>
-          <code> return self._sessions.pop(token, None) is not None</code>
-        </div>
-        <div className="code-line added">
-          <span>55&nbsp;&nbsp; +</span>
-          <code> return self._store.revoke(token)</code>
-        </div>
-      </div>
-      <div className="test-result">
-        <span className="test-dot" aria-hidden="true" />{' '}
-        <strong>
-          Sandbox Tests: 14 passing <Glyph>→</Glyph> 14 passing
-        </strong>
-        <span>0 regressions detected &nbsp; runtime: 2.4s &nbsp; mem: 64MB &nbsp; EXIT: 0</span>
-      </div>
-      <div className="approval-panel">
-        <p className="approval-status">
-          <Glyph>⚠</Glyph> WRITE PENDING - proposal has NOT touched local repository disk. &nbsp;{' '}
-          <small>REV 1 · SHA256: 4f8e...9a21</small>
-        </p>
-        <div className="approval-actions">
-          <button type="button" disabled>
-            <Glyph>ⓧ</Glyph> Reject
-          </button>
-          <button type="button" disabled>
-            <Glyph>☷</Glyph> Request Changes
-          </button>
-          <button type="button" disabled>
-            <Glyph>↥</Glyph> Apply to Branch <strong>fix/session-token-store</strong>
-          </button>
-          <button type="button" className="approve-button" disabled>
-            <Glyph>⚙</Glyph> Approve &amp; Open PR
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ReadOnlyInvestigationState({ loading }: { loading: boolean }) {
   return (
     <div className="investigation-empty" aria-label="Read-only investigation status">
@@ -395,7 +304,7 @@ function ReadOnlyInvestigationState({ loading }: { loading: boolean }) {
       <p>
         {loading
           ? 'No files will be changed while the bounded repository evidence is retrieved.'
-          : 'No proposal was created. Check the local API and try the investigation again.'}
+          : 'No repository is selected. Proposal, diff, test, and approval workflows are not available in this milestone.'}
       </p>
     </div>
   );
@@ -688,18 +597,12 @@ export default function Home() {
           <span className="brand-name">Repo Surgeon</span>
           <span className="bar-divider" />
           <span className="branch-context">
-            <Glyph>⑂</Glyph> &nbsp; main <b>3 behind</b> &nbsp;<Glyph>→</Glyph>&nbsp;{' '}
-            <strong>fix/session-token-store</strong>
+            <Glyph>⌁</Glyph> &nbsp; bounded evidence workspace
           </span>
         </div>
         <div className="global-status">
-          <span>
-            <StatusDot /> DAEMON: ACTIVE <small>pid: 40912</small>
-          </span>
-          <span>AIR-GAPPED VFS: ENFORCED</span>
-          <span className="churn">STAGING CHURN: +7 / -5</span>
           <span className="read-only-badge">
-            <StatusDot /> READ-ONLY (SAFE SANDBOX)
+            <StatusDot /> READ-ONLY EVIDENCE
           </span>
           <button className="compact-button" type="button" disabled>
             <Glyph>▣</Glyph> Audit Log&nbsp; <Glyph>⌘K</Glyph>
@@ -738,13 +641,9 @@ export default function Home() {
             </Link>
           </div>
           <div className="rail-footer">
-            <span>ENGINE DAEMON</span>
-            <strong aria-label="Engine daemon status: online">ONLINE</strong>
-            <span>Sandbox HEAD</span>
-            <code aria-label="Sandbox HEAD">9b4ec8f</code>
-            <span>
-              <Glyph>▣</Glyph> &nbsp; STRICT LOCAL CONFINEMENT
-            </span>
+            <span>ACCESS POLICY</span>
+            <strong>BOUNDED READ-ONLY</strong>
+            <span>Evidence is retrieved without changing repository files.</span>
           </div>
         </nav>
         {!isStackedLayout && (
@@ -755,8 +654,8 @@ export default function Home() {
             setWidths={resizePanes}
           />
         )}
-        <aside className="repo-panel" aria-label="Repositories and Git lineage">
-          <PanelHeading number={1}>Repos &amp; lineage</PanelHeading>
+        <aside className="repo-panel" aria-label="Repositories and evidence context">
+          <PanelHeading number={1}>Repositories</PanelHeading>
           <div className="repo-content">
             <div className="section-kicker">
               CONNECTED REPOS <Glyph>☷</Glyph>
@@ -786,51 +685,11 @@ export default function Home() {
                 <Glyph>＋</Glyph> Connect a repo...
               </button>
             </div>
-            <div className="lineage-title">
-              GIT DAG LINEAGE <code>HEAD: 89b21e</code>
-            </div>
-            <div className="lineage">
-              <div className="commit">
-                <i aria-hidden="true" />
-                <code>a4f81c</code>
-                <span>origin/main</span>
-                <small>feat: token schema</small>
-              </div>
-              <div className="commit current">
-                <i aria-hidden="true" />
-                <code>89b21e</code>
-                <em>HEAD</em>
-                <small>draft: storage contract</small>
-              </div>
-            </div>
-            <div className="revision-card">
-              <b>
-                <Glyph>●</Glyph> &nbsp; REV 1
-              </b>
-              <span>SANDBOX</span>
-              <strong>TokenStore uncommitted</strong>
-            </div>
-            <div className="sandbox-card">
-              <b>
-                <Glyph>♙</Glyph> Sandbox Jail #89b2
-              </b>
-              <StatusDot />
-              <small>/tmp/surgeon-sandbox-89b2 (illustrative path)</small>
-              <span>
-                NETWORK: OFF <i aria-hidden="true" /> COW-VFS: RDWR
-              </span>
-            </div>
             <div className="section-kicker context-kicker">THIS SESSION CONTEXT</div>
             <div className="context-list" role="listbox" aria-label="Session context">
-              <span role="option" aria-selected="false">
-                Where is auth handled?
+              <span className="empty-state" role="option" aria-selected="false">
+                Ask a question to begin bounded evidence review.
               </span>
-              <span role="option" aria-selected="false">
-                Why do users get logged out after their session expires?
-              </span>
-              <b role="option" aria-selected="true">
-                Refactor session module... <StatusDot tone="violet" />
-              </b>
             </div>
           </div>
           <RepositorySummaryCard summary={repositorySummary} />
@@ -851,20 +710,22 @@ export default function Home() {
             </span>
           </PanelHeading>
           <div className="conversation-body">
-            <div className="message-meta">
-              YOU <time>14:28:01</time>
-            </div>
-            <div className="user-message">
-              {submittedInvestigationQuestion ?? investigationQuestion}
-            </div>
-            <div className="message-meta agent-meta">
-              REPO SURGEON <span>sub-agent: refactor-core</span>
-              <time>14:28:04</time>
-            </div>
-            <p className="agent-message">
-              I&apos;ll inspect bounded repository evidence, rank likely causes, and suggest a
-              focused verification step. This investigation cannot modify files.
-            </p>
+            {submittedInvestigationQuestion ? (
+              <>
+                <div className="message-meta">YOU</div>
+                <div className="user-message">{submittedInvestigationQuestion}</div>
+                <div className="message-meta agent-meta">REPO SURGEON</div>
+                <p className="agent-message">
+                  I&apos;ll inspect bounded repository evidence and return ranked hypotheses with
+                  citations. This investigation cannot modify files.
+                </p>
+              </>
+            ) : (
+              <div className="investigation-empty conversation-empty">
+                <strong>Bounded evidence review</strong>
+                <p>Ask a question to inspect the selected repository without changing it.</p>
+              </div>
+            )}
             <div className="activity-list" aria-label="Agent activity">
               <SearchActivityRow activity={searchActivity} onSelectCitation={setSelectedCitation} />
             </div>
@@ -876,16 +737,13 @@ export default function Home() {
             )}
             {!submittedInvestigationQuestion && (
               <div className="pending-trace">
-                proposing patch revision 1, awaiting your approval...
+                Ready to inspect repository evidence. No proposals or write actions are available.
               </div>
             )}
           </div>
           <form className="composer" onSubmit={investigate}>
             <div className="slash-hints">
-              <kbd>/explain diff</kbd>
-              <kbd>/run-fuzz-tests</kbd>
-              <kbd>/revert-sandbox</kbd>
-              <kbd>/inspect-memory</kbd>
+              <span>Read-only questions return bounded evidence and citations.</span>
             </div>
             <textarea
               aria-label="Agent instruction"
@@ -942,38 +800,16 @@ export default function Home() {
               >
                 <Glyph>‹›</Glyph> Code
               </button>
-              {submittedInvestigationQuestion ? (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={selectedCitation === null}
-                  className={selectedCitation ? undefined : 'tab-selected'}
-                  disabled
-                >
-                  <Glyph>◌</Glyph> Evidence
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={selectedCitation === null}
-                  className={selectedCitation ? undefined : 'tab-selected'}
-                  disabled
-                >
-                  <Glyph>▣</Glyph> Diff <span className="pending-pill">PENDING</span>
-                </button>
-              )}
-              {!submittedInvestigationQuestion && (
-                <button type="button" role="tab" aria-selected="false" disabled>
-                  <Glyph>▤</Glyph> Tests <span className="pass-pill">14 PASS</span>
-                </button>
-              )}
+              <button
+                type="button"
+                role="tab"
+                aria-selected={selectedCitation === null}
+                className={selectedCitation ? undefined : 'tab-selected'}
+                disabled
+              >
+                <Glyph>◌</Glyph> Evidence
+              </button>
             </div>
-            {!submittedInvestigationQuestion && (
-              <span>
-                +7 −5 &nbsp; <b>SPLIT</b> &nbsp; UNIFIED
-              </span>
-            )}
           </div>
           {selectedCitation ? (
             <CitedSource citation={selectedCitation} />
@@ -985,7 +821,7 @@ export default function Home() {
           ) : submittedInvestigationQuestion ? (
             <ReadOnlyInvestigationState loading={investigationLoading} />
           ) : (
-            <ProposedDiff />
+            <ReadOnlyInvestigationState loading={false} />
           )}
           {investigationLoading && (
             <div className="investigation-loading">Retrieving bounded evidence...</div>

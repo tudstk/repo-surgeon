@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from repo_surgeon.api.health import router as health_router
 from repo_surgeon.api.repositories import ProblemDetail, RepositoryProblem
@@ -33,7 +34,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         client = request.client
-        if client is not None and client.host:
+        if (
+            configured_settings.access_mode == "local_trusted"
+            and client is not None
+            and client.host
+        ):
             try:
                 is_loopback = ip_address(client.host).is_loopback
             except ValueError:
@@ -54,11 +59,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-        allow_credentials=False,
+        allow_origins=configured_settings.cors_allowed_origins,
+        allow_credentials=True,
         allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["Content-Type"],
+        allow_headers=["Content-Type", "X-CSRF-Token"],
     )
+    if configured_settings.environment == "production":
+        app.add_middleware(TrustedHostMiddleware, allowed_hosts=configured_settings.allowed_hosts)
 
     @app.exception_handler(RepositoryProblem)
     async def repository_problem_handler(_: Request, error: RepositoryProblem) -> JSONResponse:
@@ -86,6 +93,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
     app.state.engine = engine
+    app.state.settings = configured_settings
     app.state.session_factory = create_session_factory(engine)
     app.include_router(health_router)
     app.include_router(repositories_router)

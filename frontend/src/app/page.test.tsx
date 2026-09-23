@@ -64,7 +64,7 @@ describe('Home', () => {
     );
     expect(screen.getByRole('navigation', { name: 'Workspace map' })).toBeInTheDocument();
     expect(
-      screen.getByRole('complementary', { name: 'Repositories and Git lineage' }),
+      screen.getByRole('complementary', { name: 'Repositories and evidence context' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Conversation & agent trace' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Work panel' })).toBeInTheDocument();
@@ -81,16 +81,16 @@ describe('Home', () => {
     expect(screen.getByRole('option', { name: 'payments-api' })).not.toHaveAttribute(
       'aria-current',
     );
-    expect(screen.getByRole('option', { name: /Refactor session module/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
     expect(screen.getByRole('textbox', { name: 'Agent instruction' })).toHaveValue(
       'Why do users get logged out after their session expires?',
     );
-    expect(screen.getByText(/WRITE PENDING/i)).toBeInTheDocument();
-    expect(screen.getByText(/NOT touched local repository disk/i)).toBeInTheDocument();
-    expect(screen.getByText(/Sandbox Tests: 14 passing/i)).toBeInTheDocument();
+    expect(screen.getByText(/READ-ONLY EVIDENCE/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Proposal, diff, test, and approval workflows are not available/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/WRITE PENDING|Sandbox Tests|Approve & Open PR/i),
+    ).not.toBeInTheDocument();
   });
 
   it('keeps read-only controls unavailable and the composer inert', async () => {
@@ -119,10 +119,11 @@ describe('Home', () => {
     render(<Home />);
 
     expect(screen.getByLabelText('Health: healthy')).toHaveTextContent('HEALTHY');
-    expect(screen.getByLabelText('Sandbox HEAD')).toHaveTextContent('9b4ec8f');
-    expect(screen.getByText('GIT DAG LINEAGE')).toBeInTheDocument();
-    expect(screen.getByText(/INDEX 47b91e\.\.\.c892fa 100644/)).toBeInTheDocument();
     expect(screen.getByText('Repository summary unavailable.')).toBeInTheDocument();
+    expect(screen.getByText(/BOUNDED READ-ONLY/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Sandbox HEAD|GIT DAG LINEAGE|INDEX 47b91e/i),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/STATIC PREVIEW|\(PREVIEW\)/i)).not.toBeInTheDocument();
   });
 
@@ -329,15 +330,11 @@ describe('Home', () => {
     );
   });
 
-  it('hides commit nodes from assistive technology because they are decorative', () => {
+  it('does not render fabricated commit nodes in the read-only baseline', () => {
     render(<Home />);
 
-    expect(
-      screen
-        .getAllByRole('generic', { hidden: true })
-        .filter((element) => element.matches('.commit > i')),
-    ).toHaveLength(2);
-    expect(document.querySelectorAll('.commit > i[aria-hidden="true"]')).toHaveLength(2);
+    expect(document.querySelectorAll('.commit')).toHaveLength(0);
+    expect(screen.queryByText('GIT DAG LINEAGE')).not.toBeInTheDocument();
   });
 
   it('uses the stacked layout at the 960px tablet width', () => {
@@ -397,7 +394,7 @@ describe('Home', () => {
     render(<Home />);
 
     const firstSeparator = screen.getByRole('separator', {
-      name: 'Resize Workspace map and Repositories and Git lineage',
+      name: 'Resize Workspace map and Repositories and evidence context',
     });
     expect(firstSeparator).toHaveAttribute('aria-valuenow', '200');
 
@@ -473,17 +470,16 @@ describe('Home', () => {
   it('exposes the workspace safety boundary without preview labeling', async () => {
     render(<Home />);
 
-    expect(screen.getByText(/READ-ONLY \(SAFE SANDBOX\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/READ-ONLY EVIDENCE/i)).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
         'aria-selected',
         'true',
       ),
     );
-    expect(screen.getByRole('option', { name: /Refactor session module/ })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    expect(
+      screen.getByText(/Proposal, diff, test, and approval workflows are not available/i),
+    ).toBeInTheDocument();
   });
 
   it.each([1025, 1100, 1101, 1284, 1440])(
