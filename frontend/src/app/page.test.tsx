@@ -320,7 +320,10 @@ describe('Home', () => {
 
     render(<Home />);
     await waitFor(() =>
-      expect(screen.getByRole('option', { name: 'payments-api' })).toBeInTheDocument(),
+      expect(screen.getByRole('option', { name: 'payments-api' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
     );
     fireEvent.submit(screen.getByRole('textbox', { name: 'Agent instruction' }).closest('form')!);
     await waitFor(() => expect(screen.getByText(/Investigation unavailable/)).toBeInTheDocument());
