@@ -25,8 +25,9 @@ Milestone 4.5A does not perform an OAuth exchange or create login sessions. Publ
 mode therefore rejects every local-repository endpoint at the FastAPI boundary.
 The frontend deliberately shows only the bounded read-only evidence workflow: no
 fabricated proposal, diff, sandbox test result, approval, or pull-request state is
-rendered. OAuth identity, sessions, profile, and public repository support are
-later slices.
+rendered. OAuth routes, login-session issuance, profile screens, and public
+repository support are later slices; this milestone provides their persistence
+and safety contracts.
 
 The security rationale and required negative-test matrix are in the
 [authentication ADR](docs/architecture/decisions/0010-github-authentication-and-tenancy-foundation.md)

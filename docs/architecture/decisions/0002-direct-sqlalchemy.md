@@ -4,7 +4,7 @@
 
 ## Context
 
-The application will persist repositories and later sessions, proposals, approvals, and audit records in PostgreSQL. These concepts have different API, domain, and database concerns. Combining them into one model risks coupling HTTP validation and persistence layout to domain behavior.
+The application will persist repositories, sessions, proposals, approvals, and audit records in PostgreSQL. These concepts have different API, domain, and database concerns. Combining them into one model risks coupling HTTP validation and persistence layout to domain behavior.
 
 ## Decision
 

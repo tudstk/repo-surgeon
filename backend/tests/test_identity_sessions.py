@@ -4,7 +4,8 @@ import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from uuid import uuid4
+from typing import cast
+from uuid import UUID, uuid4
 
 import pytest
 from alembic import command
@@ -16,12 +17,14 @@ from repo_surgeon.application.authentication import (
     GitHubProfile,
     OAuthTransactionService,
     SessionService,
+    SessionStore,
     SynchronizeGitHubIdentity,
 )
 from repo_surgeon.domain.authentication import (
     LOCAL_DEVELOPMENT_USER_ID,
     BrowserBinding,
     GitHubIdentity,
+    StoredSession,
     User,
     UserStatus,
 )
@@ -147,7 +150,7 @@ async def test_stale_authentication_cannot_refresh_after_user_is_disabled(
         await session.commit()
 
         class StaleReadStore:
-            async def get_by_token_digest(self, token_digest: bytes):
+            async def get_by_token_digest(self, token_digest: bytes) -> StoredSession:
                 return issued.session
 
             async def touch_session(
@@ -156,7 +159,9 @@ async def test_stale_authentication_cannot_refresh_after_user_is_disabled(
                 return await store.touch_session(session_id, last_seen_at, expires_at)
 
         service = SessionService(
-            StaleReadStore(), idle_ttl=timedelta(minutes=10), absolute_ttl=timedelta(hours=1)
+            cast(SessionStore, StaleReadStore()),
+            idle_ttl=timedelta(minutes=10),
+            absolute_ttl=timedelta(hours=1),
         )
         assert await service.authenticate(issued.session_token, now + timedelta(minutes=1)) is None
 
@@ -203,7 +208,7 @@ async def test_authentication_rejects_refresh_when_session_expires_before_persis
         ).issue(user.id, now)
 
         class ExpiringStore:
-            async def get_by_token_digest(self, token_digest: bytes):
+            async def get_by_token_digest(self, token_digest: bytes) -> StoredSession:
                 return issued.session
 
             async def touch_session(
@@ -212,7 +217,9 @@ async def test_authentication_rejects_refresh_when_session_expires_before_persis
                 return False
 
         service = SessionService(
-            ExpiringStore(), idle_ttl=timedelta(minutes=10), absolute_ttl=timedelta(hours=1)
+            cast(SessionStore, ExpiringStore()),
+            idle_ttl=timedelta(minutes=10),
+            absolute_ttl=timedelta(hours=1),
         )
         assert await service.authenticate(issued.session_token, now + timedelta(minutes=1)) is None
 
