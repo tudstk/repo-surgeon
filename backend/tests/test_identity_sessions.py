@@ -340,3 +340,8 @@ async def test_migration_backfills_legacy_repositories_and_scopes_root_identity(
             await session.commit()
     finally:
         await engine.dispose()
+
+    configuration = Config(str(Path(__file__).parents[1] / "alembic.ini"))
+    configuration.set_main_option("sqlalchemy.url", async_database_url)
+    with pytest.raises(RuntimeError, match="multiple repositories share a canonical root"):
+        await asyncio.to_thread(command.downgrade, configuration, "20260916_0002")

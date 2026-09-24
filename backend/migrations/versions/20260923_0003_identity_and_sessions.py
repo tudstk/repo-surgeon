@@ -158,6 +158,21 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Restore the pre-identity schema when owner-scoped rows remain globally unique."""
+    collision = op.get_bind().execute(
+        sa.text(
+            """
+            SELECT canonical_root
+            FROM repositories
+            GROUP BY canonical_root
+            HAVING COUNT(*) > 1
+            LIMIT 1
+            """
+        )
+    ).first()
+    if collision is not None:
+        raise RuntimeError(
+            "Cannot downgrade identity migration: multiple repositories share a canonical root"
+        )
     op.drop_index("ix_oauth_transactions_expires_at", table_name="oauth_transactions")
     op.drop_table("oauth_transactions")
     op.drop_index("ix_auth_sessions_user_id", table_name="auth_sessions")
