@@ -131,6 +131,37 @@ async def test_disabled_user_session_cannot_authenticate(
 
 
 @pytest.mark.anyio
+async def test_stale_authentication_cannot_refresh_after_user_is_disabled(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    user, _ = await _synchronize_user(session_factory)
+    now = datetime(2026, 9, 23, tzinfo=UTC)
+    async with session_factory() as session:
+        store = SqlAlchemySessionStore(session)
+        issued = await SessionService(
+            store, idle_ttl=timedelta(minutes=10), absolute_ttl=timedelta(hours=1)
+        ).issue(user.id, now)
+        user_record = await session.get(UserRecord, user.id)
+        assert user_record is not None
+        user_record.status = UserStatus.DISABLED.value
+        await session.commit()
+
+        class StaleReadStore:
+            async def get_by_token_digest(self, token_digest: bytes):
+                return issued.session
+
+            async def touch_session(
+                self, session_id: UUID, last_seen_at: datetime, expires_at: datetime
+            ) -> bool:
+                return await store.touch_session(session_id, last_seen_at, expires_at)
+
+        service = SessionService(
+            StaleReadStore(), idle_ttl=timedelta(minutes=10), absolute_ttl=timedelta(hours=1)
+        )
+        assert await service.authenticate(issued.session_token, now + timedelta(minutes=1)) is None
+
+
+@pytest.mark.anyio
 async def test_session_refresh_does_not_regress_after_a_delayed_request(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:

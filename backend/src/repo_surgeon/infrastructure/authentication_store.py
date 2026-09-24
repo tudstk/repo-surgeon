@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID, uuid4
 
-from sqlalchemy import case, select, update
+from sqlalchemy import case, exists, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -190,6 +190,12 @@ class SqlAlchemySessionStore:
                 AuthSessionRecord.id == session_id,
                 AuthSessionRecord.revoked_at.is_(None),
                 AuthSessionRecord.expires_at > last_seen_at,
+                exists(
+                    select(UserRecord.id).where(
+                        UserRecord.id == AuthSessionRecord.user_id,
+                        UserRecord.status == UserStatus.ACTIVE.value,
+                    )
+                ),
             )
             .values(
                 last_seen_at=case(
