@@ -21,13 +21,20 @@ only with runtime-injected OAuth and encryption settings,
 wildcard origins in every mode, and rejects unsafe callback URLs, incomplete
 public configuration, and production use of local defaults.
 
-Milestone 4.5A does not perform an OAuth exchange or create login sessions. Public
-mode therefore rejects every local-repository endpoint at the FastAPI boundary.
+Milestone 4.5C adds FastAPI-owned identity-only GitHub OAuth endpoints:
+`GET /api/v1/auth/github/start`, `GET /api/v1/auth/github/callback`,
+`GET /api/v1/auth/session`, and `POST /api/v1/auth/logout`. They use one-time,
+browser-bound PKCE state and an opaque HttpOnly session cookie. GitHub tokens are
+used only in process to retrieve a single safe profile snapshot and are never
+persisted or sent to the browser. In secure public settings the cookie is
+host-prefixed (`__Host-repo_surgeon_session`), Secure, HttpOnly, `SameSite=Lax`,
+and has no persistent `Max-Age`. HTTP-only local development uses distinct,
+non-prefixed cookie names; public mode and production reject insecure cookies.
+
+Public mode still rejects every local-repository endpoint at the FastAPI boundary.
 The frontend deliberately shows only the bounded read-only evidence workflow: no
 fabricated proposal, diff, sandbox test result, approval, or pull-request state is
-rendered. OAuth routes, login-session issuance, profile screens, and public
-repository support are later slices; this milestone provides their persistence
-and safety contracts.
+rendered. Login/profile screens and public repository support remain later slices.
 
 The security rationale and required negative-test matrix are in the
 [authentication ADR](docs/architecture/decisions/0010-github-authentication-and-tenancy-foundation.md)

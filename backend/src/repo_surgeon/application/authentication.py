@@ -116,17 +116,19 @@ class SessionService:
         *,
         idle_ttl: timedelta,
         absolute_ttl: timedelta,
+        csrf_secret: bytes = b"local-development-csrf-secret",
     ) -> None:
         self._store = store
         self._idle_ttl = idle_ttl
         self._absolute_ttl = absolute_ttl
+        self._csrf_secret = csrf_secret
 
     async def issue(self, user_id: UUID, now: datetime) -> IssuedSession:
         """Create a fresh token pair and bounded session lifecycle record."""
         from uuid import uuid4
 
         token = SessionToken.generate()
-        csrf_token = CsrfToken.generate()
+        csrf_token = CsrfToken.derive(token, self._csrf_secret)
         absolute_expires_at = now + self._absolute_ttl
         session = StoredSession(
             id=uuid4(),
@@ -167,6 +169,15 @@ class SessionService:
             and session.is_valid_at(now)
             and compare_digest(session.csrf_token_digest, csrf_token.digest)
         )
+
+    async def validates_logout_csrf(self, token: SessionToken, csrf_token: CsrfToken) -> bool:
+        """Accept a matching token for an already-revoked logout retry without reauthenticating."""
+        session = await self._store.get_by_token_digest(token.digest)
+        return session is not None and compare_digest(session.csrf_token_digest, csrf_token.digest)
+
+    def csrf_token_for(self, token: SessionToken) -> CsrfToken:
+        """Recreate the memory-only CSRF value from an authenticated opaque token."""
+        return CsrfToken.derive(token, self._csrf_secret)
 
 
 @dataclass(frozen=True, slots=True, repr=False)
