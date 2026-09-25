@@ -11,6 +11,7 @@ from repo_surgeon.application.repositories import (
     RepositoryRegistrationError,
     ResolvedLocalRepositoryRoot,
 )
+from repo_surgeon.domain.authentication import LOCAL_DEVELOPMENT_USER_ID
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.infrastructure.repository_models import RepositoryRecord
 
@@ -27,19 +28,25 @@ def _to_domain(record: RepositoryRecord) -> Repository:
         created_at=created_at,
         root_device=record.root_device,
         root_inode=record.root_inode,
+        owner_user_id=record.owner_user_id,
     )
 
 
 class SqlAlchemyRepositoryStore:
     """Transaction-scoped repository persistence adapter."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(
+        self, session: AsyncSession, owner_user_id: UUID = LOCAL_DEVELOPMENT_USER_ID
+    ) -> None:
         self._session = session
+        self._owner_user_id = owner_user_id
 
     async def get_by_canonical_root(self, canonical_root: str) -> Repository | None:
         """Find a repository by canonical root."""
         statement = select(RepositoryRecord).where(
-            RepositoryRecord.canonical_root == canonical_root
+            RepositoryRecord.owner_user_id == self._owner_user_id,
+            RepositoryRecord.source == RepositorySource.LOCAL.value,
+            RepositoryRecord.canonical_root == canonical_root,
         )
         record = (await self._session.execute(statement)).scalar_one_or_none()
         return _to_domain(record) if record is not None else None
@@ -47,6 +54,7 @@ class SqlAlchemyRepositoryStore:
     async def add_local(self, root: ResolvedLocalRepositoryRoot) -> Repository:
         """Store a local repository and make duplicate registration idempotent."""
         record = RepositoryRecord(
+            owner_user_id=self._owner_user_id,
             source=RepositorySource.LOCAL.value,
             canonical_root=root.canonical_root,
             root_device=root.root_device,
@@ -79,6 +87,8 @@ class SqlAlchemyRepositoryStore:
     ) -> Repository:
         """Bind a legacy row only after the user explicitly re-registers its path."""
         record = await self._session.get(RepositoryRecord, repository_id)
+        if record is not None and record.owner_user_id != self._owner_user_id:
+            record = None
         if record is None:
             raise LookupError("repository disappeared while binding its root identity")
         record.root_device = root.root_device
@@ -90,12 +100,16 @@ class SqlAlchemyRepositoryStore:
     async def get(self, repository_id: UUID) -> Repository | None:
         """Find a repository by durable identifier."""
         record = await self._session.get(RepositoryRecord, repository_id)
+        if record is not None and record.owner_user_id != self._owner_user_id:
+            record = None
         return _to_domain(record) if record is not None else None
 
     async def list_all(self) -> tuple[Repository, ...]:
         """Return registered repositories in creation order."""
-        statement = select(RepositoryRecord).order_by(
-            RepositoryRecord.created_at, RepositoryRecord.id
+        statement = (
+            select(RepositoryRecord)
+            .order_by(RepositoryRecord.created_at, RepositoryRecord.id)
+            .where(RepositoryRecord.owner_user_id == self._owner_user_id)
         )
         records = (await self._session.execute(statement)).scalars().all()
         return tuple(_to_domain(record) for record in records)

@@ -5,6 +5,8 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
+from repo_surgeon.domain.authentication import LOCAL_DEVELOPMENT_USER_ID
+
 
 class RepositorySource(StrEnum):
     """The provenance of a registered repository."""
@@ -22,3 +24,4 @@ class Repository:
     created_at: datetime
     root_device: int | None = None
     root_inode: int | None = None
+    owner_user_id: UUID = LOCAL_DEVELOPMENT_USER_ID

@@ -27,8 +27,9 @@ repository access for development, while `public_authenticated` fails closed unl
 OAuth/session settings are complete and local filesystem access is disabled. The
 public callback is derived from one exact public origin and cannot be caller chosen.
 
-Milestone 4.5A establishes these contracts only. It does not exchange OAuth codes,
-create an OAuth App, persist sessions, clone repositories, or add write capabilities.
+Milestone 4.5A establishes these contracts and their persistence foundation. It does
+not exchange OAuth codes, create an OAuth App, issue login sessions, clone
+repositories, or add write capabilities.
 
 ## Alternatives considered
 
@@ -43,13 +44,14 @@ create an OAuth App, persist sessions, clone repositories, or add write capabili
 ## Consequences
 
 Local development remains usable with the existing loopback trust boundary. Public
-mode can truthfully expose only identity and read-only evidence until the later
-identity/session and tenant-retrofit slices land. The settings validator and HTTP
-repository boundary are intentionally testable without credentials or network.
+mode can truthfully expose only read-only evidence until OAuth routes, authenticated
+repository access, and the frontend identity journey land. The settings validator,
+persistence contracts, and HTTP repository boundary are intentionally testable
+without credentials or network.
 
 ## Review trigger
 
-Revisit when Milestones 4.5B-4.5F add persistence, OAuth routes, owner-scoped
-repositories, the frontend identity journey, and public ingress. Any proposal to
-retain GitHub tokens, add private scopes, or enable public cloning requires a new
-security review and ADR.
+Revisit when Milestones 4.5B-4.5F add OAuth routes, the frontend identity journey,
+authenticated repository access, and public ingress. Any proposal to retain GitHub
+tokens, add private scopes, or enable public cloning requires a new security review
+and ADR.
