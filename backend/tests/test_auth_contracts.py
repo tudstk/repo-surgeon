@@ -1,4 +1,4 @@
-"""Milestone 4.5A configuration and public-mode safety contracts."""
+"""Authentication configuration and public-mode safety contracts."""
 
 from pathlib import Path
 

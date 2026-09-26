@@ -4,9 +4,9 @@ Repo Surgeon is a local-first, human-controlled coding assistant for understandi
 
 ## Implemented status
 
-This checkout provides an executable foundation: a typed FastAPI process, a strict TypeScript and Next.js frontend, local PostgreSQL through Docker Compose, and CI quality gates. It also registers an existing local Git working tree and persists its resolved canonical root. The backend includes bounded read-only file and exact-search tools, deterministic repository intelligence, a deterministic model-provider agent loop, and a bounded bug-investigation workflow that ranks evidence-backed hypotheses.
+This checkout provides an executable foundation: a typed FastAPI process, a strict TypeScript and Next.js frontend, local PostgreSQL through Docker Compose, and CI quality gates. It also registers an existing local Git working tree and persists its resolved canonical root. The backend includes bounded read-only file and exact-search tools, deterministic repository intelligence, a deterministic model-provider agent loop, and a bounded bug-investigation workflow that ranks evidence-backed hypotheses. The current frontend slice is the identity-only GitHub login and profile journey; repository authorization is not available yet.
 
-Registration validates only the selected path and Git worktree boundary. The MCP tools read and search bounded safe content, and the agent loop can use only those read-only capabilities through a provider boundary. Repository intelligence maps bounded manifest evidence to versioned language and test-command catalogs without executing repository code. Bug investigations use a fixed bounded search plan and, for the canonical seeded fixture, an evaluation-owned deterministic behavioral proof; unsupported questions return insufficient evidence. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. The frontend now loads registered repository names and bounded summary metadata from the backend, and can submit read-only investigations with ranked hypotheses, citations, confidence labels, and verification suggestions. See [safe search](docs/mcp/safe-search-tools.md) and [product scope](docs/product/scope.md).
+Registration validates only the selected path and Git worktree boundary. The MCP tools read and search bounded safe content, and the agent loop can use only those read-only capabilities through a provider boundary. Repository intelligence maps bounded manifest evidence to versioned language and test-command catalogs without executing repository code. Bug investigations use a fixed bounded search plan and, for the canonical seeded fixture, an evaluation-owned deterministic behavioral proof; unsupported questions return insufficient evidence. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. The identity UI deliberately does not load repository data until tenant authorization exists. See [safe search](docs/mcp/safe-search-tools.md) and [product scope](docs/product/scope.md).
 
 No model API key is required.
 
@@ -146,13 +146,14 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:e2e
 pnpm build
 ```
 
-The workflow runs on pushes and pull requests. It uses `backend/uv.lock` and `frontend/pnpm-lock.yaml`, then checks backend formatting, linting, strict typing, and tests plus frontend formatting, linting, type checking, tests, and production build.
+The workflow runs on pushes and pull requests. It uses `backend/uv.lock` and `frontend/pnpm-lock.yaml`, then checks backend formatting, linting, strict typing, and tests plus frontend formatting, linting, type checking, unit tests, browser E2E tests, and production build.
 
 ## Learn the foundation
 
-The registration, summary, search, and investigation request paths are `curl or frontend -> Uvicorn ASGI server -> FastAPI router -> application use case -> confined repository inspection`, with registration and repository identity persistence continuing through the SQLAlchemy adapter to PostgreSQL. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
+The identity request path is `browser -> same-origin Next.js /api proxy -> Uvicorn ASGI server -> FastAPI authentication router -> application use case -> PostgreSQL`, with GitHub profile retrieval isolated behind the OAuth adapter. The bounded repository and investigation paths remain backend capabilities awaiting tenant authorization. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
 
 Future work continues with persisted API events, Git context, test sandboxing, proposals, approvals, patch application, audits, and pull requests. The provider boundary and in-process MCP tools now support the read-only investigation workflow; they are not yet connected to write or sandbox workflows.

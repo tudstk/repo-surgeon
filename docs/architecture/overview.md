@@ -12,7 +12,7 @@ agent -> ModelProvider -> bounded agent loop -> in-process MCP tools -> confined
 
 `frontend/src/app/auth-shell.tsx` drives the login, callback, and profile screens through same-origin `/api/*` requests; the Next.js rewrite proxies them to FastAPI so the HttpOnly session cookie remains usable. `frontend/src/app/page.tsx` redirects the workspace entry point to login while authenticated repository access is not yet available. The identity UI does not execute tests or create patches.
 
-`docker-compose.yml` provides PostgreSQL 18.6 on loopback with `pg_isready`. Repository registration and the local read-only repository workflow use SQLAlchemy and PostgreSQL; readiness remains dependency-free and does not check the database or repositories.
+`docker-compose.yml` provides PostgreSQL 18.6 on loopback with `pg_isready`. Authentication persistence, repository registration, and the local read-only repository workflow use SQLAlchemy and PostgreSQL; readiness remains dependency-free and does not check the database or repositories.
 
 ## Current contracts
 
