@@ -23,6 +23,14 @@ function Brand() {
   );
 }
 
+function GitHubMark() {
+  return (
+    <svg aria-hidden="true" className="github-mark" focusable="false" viewBox="0 0 16 16">
+      <path d="M8 0a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.49c-2.23.49-2.7-1.08-2.7-1.08-.36-.93-.89-1.18-.89-1.18-.73-.5.06-.49.06-.49.81.06 1.23.83 1.23.83.72 1.23 1.88.88 2.34.67.07-.52.28-.88.51-1.08-1.78-.2-3.65-.89-3.65-3.96 0-.87.31-1.59.82-2.15-.08-.2-.36-1.01.08-2.11 0 0 .67-.21 2.2.82A7.65 7.65 0 0 1 8 4.8a7.7 7.7 0 0 1 2 .27c1.52-1.03 2.19-.82 2.19-.82.44 1.1.16 1.91.08 2.11.51.56.82 1.28.82 2.15 0 3.08-1.88 3.76-3.67 3.95.29.25.54.73.54 1.48v2.19c0 .21.14.46.55.38A8 8 0 0 0 8 0Z" />
+    </svg>
+  );
+}
+
 function LoadingShell({ children }: { children: React.ReactNode }) {
   return (
     <main className="identity-shell">
@@ -84,7 +92,8 @@ export function LoginScreen() {
           </div>
         ) : null}
         <a className="github-button" href={authApiUrl('/api/v1/auth/github/start')}>
-          <span aria-hidden="true">◖◗</span> Continue with GitHub
+          <GitHubMark />
+          Continue with GitHub
         </a>
         <p className="identity-footnote">
           Repository connections are not available yet. Your GitHub access token is never stored by
@@ -261,14 +270,95 @@ export function ProfileScreen() {
             We could not sign you out. Your session may still be active, so please retry.
           </div>
         ) : null}
+        <div className="profile-actions">
+          <Link className="continue-button" href="/">
+            Continue to workspace
+          </Link>
+          <button
+            className="logout-button"
+            disabled={isLoggingOut}
+            type="button"
+            onClick={handleLogout}
+          >
+            {isLoggingOut ? 'Signing out…' : 'Sign out'}
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export function WorkspaceScreen() {
+  const router = useRouter();
+  const [session, setSession] = useState<BrowserSession | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getBrowserSession(controller.signal)
+      .then(setSession)
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        if (error instanceof SessionRequestError && error.status === 401) {
+          router.replace('/login');
+          return;
+        }
+        setLoadError(true);
+      });
+    return () => controller.abort();
+  }, [attempt, router]);
+
+  if (loadError) {
+    return (
+      <LoadingShell>
+        <div className="identity-alert" role="alert">
+          The workspace is temporarily unavailable. No repository data has been loaded.
+        </div>
         <button
-          className="logout-button"
-          disabled={isLoggingOut}
+          className="secondary-button"
           type="button"
-          onClick={handleLogout}
+          onClick={() => {
+            setLoadError(false);
+            setAttempt((value) => value + 1);
+          }}
         >
-          {isLoggingOut ? 'Signing out…' : 'Sign out'}
+          Retry workspace
         </button>
+      </LoadingShell>
+    );
+  }
+
+  if (!session) {
+    return (
+      <LoadingShell>
+        <p aria-live="polite" className="identity-status">
+          Opening your workspace…
+        </p>
+      </LoadingShell>
+    );
+  }
+
+  return (
+    <main className="identity-shell">
+      <section className="profile-card workspace-entry" aria-labelledby="workspace-title">
+        <header className="profile-header">
+          <Brand />
+          <Link className="account-control" href="/profile">
+            <span aria-hidden="true" className="account-dot" /> @{session.user.github_login}
+          </Link>
+        </header>
+        <div className="workspace-entry-copy">
+          <p className="eyebrow">WORKSPACE</p>
+          <h1 id="workspace-title">Repo Surgeon workspace</h1>
+          <p>
+            You&apos;re signed in. Repository connections are not available yet, so no repository
+            data has been loaded.
+          </p>
+          <Link className="secondary-button" href="/profile">
+            View profile
+          </Link>
+        </div>
       </section>
     </main>
   );

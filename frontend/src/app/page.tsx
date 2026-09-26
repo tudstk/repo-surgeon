@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { WorkspaceScreen } from './auth-shell';
 
 export default function Home() {
-  redirect('/login');
+  return <WorkspaceScreen />;
 }

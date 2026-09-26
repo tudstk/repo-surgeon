@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { vi } from 'vitest';
 
-import { CallbackScreen, LoginScreen, ProfileScreen } from './auth-shell';
+import { CallbackScreen, LoginScreen, ProfileScreen, WorkspaceScreen } from './auth-shell';
 
 const replace = vi.fn();
 const router = { replace };
@@ -135,6 +135,10 @@ describe('identity journey', () => {
       .find((link) => link.getAttribute('href') === 'https://github.com/ada');
     expect(githubProfileLink).toHaveAttribute('href', 'https://github.com/ada');
     expect(screen.getByText('Connections are not available yet')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Continue to workspace' })).toHaveAttribute(
+      'href',
+      '/',
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
     expect(screen.getByRole('button', { name: 'Signing out…' })).toBeDisabled();
 
@@ -180,6 +184,7 @@ describe('identity journey', () => {
     expect(await screen.findAllByText('@ada')).toHaveLength(2);
     expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       '/profile',
+      '/',
     ]);
   });
 
@@ -201,5 +206,21 @@ describe('identity journey', () => {
       'We could not sign you out. Your session may still be active, so please retry.',
     );
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeEnabled();
+  });
+
+  it('opens the authenticated workspace without requesting repository data', async () => {
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse(browserSession)));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<WorkspaceScreen />);
+
+    expect(await screen.findByRole('heading', { name: 'Repo Surgeon workspace' })).toBeVisible();
+    expect(screen.getByText(/Repository connections are not available yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View profile' })).toHaveAttribute('href', '/profile');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/auth/session',
+      expect.objectContaining({ cache: 'no-store', credentials: 'include' }),
+    );
   });
 });

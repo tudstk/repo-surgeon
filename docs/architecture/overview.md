@@ -10,7 +10,7 @@ agent -> ModelProvider -> bounded agent loop -> in-process MCP tools -> confined
 
 `backend/src/repo_surgeon/main.py` creates the FastAPI application and includes the health and repository routers. `backend/src/repo_surgeon/api/health.py` returns deterministic `live` and `ready` responses. `backend/src/repo_surgeon/settings.py` supplies typed settings. The agent package owns the provider protocol and bounded turn orchestration; the MCP package owns typed, read-only file and search adapters.
 
-`frontend/src/app/auth-shell.tsx` drives the login, callback, and profile screens through same-origin `/api/*` requests; the Next.js rewrite proxies them to FastAPI so the HttpOnly session cookie remains usable. `frontend/src/app/page.tsx` redirects the workspace entry point to login while authenticated repository access is not yet available. The identity UI does not execute tests or create patches.
+`frontend/src/app/auth-shell.tsx` drives the login, callback, profile, and session-checked workspace entry screens through same-origin `/api/*` requests; the Next.js rewrite proxies them to FastAPI so the HttpOnly session cookie remains usable. The workspace entry makes no repository requests and truthfully states that repository connections are unavailable until tenant authorization lands. The identity UI does not execute tests or create patches.
 
 `docker-compose.yml` provides PostgreSQL 18.6 on loopback with `pg_isready`. Authentication persistence, repository registration, and the local read-only repository workflow use SQLAlchemy and PostgreSQL; readiness remains dependency-free and does not check the database or repositories.
 
@@ -20,7 +20,7 @@ agent -> ModelProvider -> bounded agent loop -> in-process MCP tools -> confined
 | --- | --- | --- |
 | Liveness | `GET /health/live` returns `{"status":"live"}` | Proves the API serves HTTP. |
 | Readiness | `GET /health/ready` returns `{"status":"ready"}` | No dependencies are checked. |
-| Frontend | Next.js App Router with strict TypeScript | Login, callback, and safe profile screens; the workspace entry redirects to login until repository authorization is available. |
+| Frontend | Next.js App Router with strict TypeScript | Login, callback, safe profile, and session-checked workspace entry screens; the workspace exposes no repository data until repository authorization is available. |
 | Identity | FastAPI-owned GitHub OAuth and opaque browser session | Same-origin `/api/*` proxy, PKCE/state validation, HttpOnly `SameSite=Lax` cookie, and safe profile projection; repository authorization is not yet available. |
 | PostgreSQL | Compose starts local database | Stores registered repository identities used by the local backend workflow. |
 | Safe file tools | In-process `list_files` and `read_file` adapters | Read-only, confined, bounded results; no external MCP transport. |

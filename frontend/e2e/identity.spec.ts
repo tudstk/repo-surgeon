@@ -66,6 +66,13 @@ test('callback resolves a mocked session into the safe profile and logs out with
   await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
   await expect(page.getByText('Connections are not available yet')).toBeVisible();
 
+  await page.getByRole('link', { name: 'Continue to workspace' }).click();
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { name: 'Repo Surgeon workspace' })).toBeVisible();
+  await expect(page.getByText(/no repository data has been loaded/i)).toBeVisible();
+
+  await page.getByRole('link', { name: 'View profile' }).click();
+  await expect(page).toHaveURL('/profile');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL('/login?signed_out=1');
   expect(logoutRequest?.headers()['x-csrf-token']).toBe('mocked-csrf-token');

@@ -1081,6 +1081,7 @@ textarea:focus-visible {
   font-size: 14px;
 }
 .github-button,
+.continue-button,
 .logout-button,
 .secondary-button {
   display: flex;
@@ -1097,9 +1098,16 @@ textarea:focus-visible {
   text-decoration: none;
 }
 .github-button:hover,
+.continue-button:hover,
 .logout-button:hover,
 .secondary-button:hover {
   background: #9999ff;
+}
+.github-mark {
+  width: 19px;
+  height: 19px;
+  flex: none;
+  fill: currentColor;
 }
 .identity-footnote {
   margin: 18px 0 0;
@@ -1233,9 +1241,24 @@ textarea:focus-visible {
 .profile-card > .identity-alert {
   margin: 18px 28px 0;
 }
+.profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 20px 28px 28px;
+}
+.continue-button,
 .logout-button {
   width: auto;
-  margin: 20px 28px 28px;
+  min-height: 40px;
+  padding: 0 18px;
+}
+.continue-button {
+  background: var(--violet);
+  color: #090d15;
+}
+.logout-button {
+  margin: 0;
   padding: 0 18px;
   border-color: #4a5364;
   background: #1a212c;
@@ -1243,6 +1266,26 @@ textarea:focus-visible {
 }
 .logout-button:disabled {
   color: var(--muted);
+}
+.workspace-entry-copy {
+  padding: 29px 28px;
+}
+.workspace-entry-copy h1 {
+  margin: 0;
+  color: #f0f4fa;
+  font-size: clamp(25px, 4vw, 31px);
+  letter-spacing: -0.04em;
+}
+.workspace-entry-copy > p:not(.eyebrow) {
+  max-width: 44ch;
+  margin: 13px 0 24px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.workspace-entry-copy .secondary-button {
+  width: fit-content;
+  padding: 0 18px;
 }
 /* Keep the priority header controls visible while compacting telemetry before
    the full status row can collide with the repository context. */
