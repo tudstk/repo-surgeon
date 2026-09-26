@@ -77,3 +77,23 @@ test('callback resolves a mocked session into the safe profile and logs out with
   await expect(page).toHaveURL('/login?signed_out=1');
   expect(logoutRequest?.headers()['x-csrf-token']).toBe('mocked-csrf-token');
 });
+
+test('OAuth callback, profile, and logout use the same-origin Next.js proxy', async ({ page }) => {
+  await page.goto('/api/v1/auth/github/callback?code=deterministic-test-code&state=valid-state');
+
+  await expect(page).toHaveURL('/profile');
+  await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Continue to workspace' }).click();
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { name: 'Repo Surgeon workspace' })).toBeVisible();
+
+  await page.getByRole('link', { name: 'View profile' }).click();
+  await expect(page).toHaveURL('/profile');
+  await page.getByRole('button', { name: 'Sign out' }).click();
+  await expect(page).toHaveURL('/login?signed_out=1');
+  await expect(page.getByText('You have been signed out.')).toBeVisible();
+
+  await page.goto('/profile');
+  await expect(page).toHaveURL('/login');
+});
