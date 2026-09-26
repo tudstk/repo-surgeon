@@ -45,12 +45,12 @@ OAuth App, request scopes, clone repositories, or add write capabilities.
 
 Local development remains usable with the existing loopback trust boundary. Public
 mode can truthfully expose only read-only evidence until authenticated repository
-access and the frontend identity journey land. The settings validator, persistence
+access lands. The settings validator, persistence
 contracts, OAuth adapter, and HTTP repository boundary are intentionally testable
 without real credentials or network.
 
 ## Review trigger
 
-Revisit when later milestones add the frontend identity journey, authenticated
-repository access, private scopes, or public ingress. Any proposal to retain GitHub
-tokens or enable public cloning requires a new security review and ADR.
+Revisit when later milestones add authenticated repository access, private scopes, or
+public ingress. Any proposal to retain GitHub tokens or enable public cloning requires
+a new security review and ADR.
