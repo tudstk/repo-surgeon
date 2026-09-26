@@ -60,7 +60,10 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_security_contract(self) -> Settings:
         """Reject ambiguous origins, unsafe combinations, and incomplete public config."""
-        origin = urlsplit(self.public_origin)
+        try:
+            origin = urlsplit(self.public_origin)
+        except ValueError as error:
+            raise ValueError("PUBLIC_ORIGIN must be an exact HTTP(S) origin") from error
         if (
             origin.scheme not in {"http", "https"}
             or not origin.netloc

@@ -4,9 +4,9 @@ Repo Surgeon is a local-first, human-controlled coding assistant for understandi
 
 ## Implemented status
 
-This checkout provides an executable foundation: a typed FastAPI process, a strict TypeScript and Next.js frontend, local PostgreSQL through Docker Compose, and CI quality gates. It also registers an existing local Git working tree and persists its resolved canonical root. The backend includes bounded read-only file and exact-search tools, deterministic repository intelligence, a deterministic model-provider agent loop, and a bounded bug-investigation workflow that ranks evidence-backed hypotheses.
+This checkout provides an executable foundation: a typed FastAPI process, a strict TypeScript and Next.js frontend, local PostgreSQL through Docker Compose, and CI quality gates. It also registers an existing local Git working tree and persists its resolved canonical root. The backend includes bounded read-only file and exact-search tools, deterministic repository intelligence, a deterministic model-provider agent loop, and a bounded bug-investigation workflow that ranks evidence-backed hypotheses. The current frontend slice is the identity-only GitHub login and profile journey; repository authorization is not available yet.
 
-Registration validates only the selected path and Git worktree boundary. The MCP tools read and search bounded safe content, and the agent loop can use only those read-only capabilities through a provider boundary. Repository intelligence maps bounded manifest evidence to versioned language and test-command catalogs without executing repository code. Bug investigations use a fixed bounded search plan and, for the canonical seeded fixture, an evaluation-owned deterministic behavioral proof; unsupported questions return insufficient evidence. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. The frontend now loads registered repository names and bounded summary metadata from the backend, and can submit read-only investigations with ranked hypotheses, citations, confidence labels, and verification suggestions. See [safe search](docs/mcp/safe-search-tools.md) and [product scope](docs/product/scope.md).
+Registration validates only the selected path and Git worktree boundary. The MCP tools read and search bounded safe content, and the agent loop can use only those read-only capabilities through a provider boundary. Repository intelligence maps bounded manifest evidence to versioned language and test-command catalogs without executing repository code. Bug investigations use a fixed bounded search plan and, for the canonical seeded fixture, an evaluation-owned deterministic behavioral proof; unsupported questions return insufficient evidence. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. The identity UI deliberately does not load repository data until tenant authorization exists. See [safe search](docs/mcp/safe-search-tools.md) and [product scope](docs/product/scope.md).
 
 No model API key is required.
 
@@ -21,13 +21,21 @@ only with runtime-injected OAuth and encryption settings,
 wildcard origins in every mode, and rejects unsafe callback URLs, incomplete
 public configuration, and production use of local defaults.
 
-Milestone 4.5A does not perform an OAuth exchange or create login sessions. Public
-mode therefore rejects every local-repository endpoint at the FastAPI boundary.
-The frontend deliberately shows only the bounded read-only evidence workflow: no
-fabricated proposal, diff, sandbox test result, approval, or pull-request state is
-rendered. OAuth routes, login-session issuance, profile screens, and public
-repository support are later slices; this milestone provides their persistence
-and safety contracts.
+Milestone 4.5C adds FastAPI-owned identity-only GitHub OAuth endpoints:
+`GET /api/v1/auth/github/start`, `GET /api/v1/auth/github/callback`,
+`GET /api/v1/auth/session`, and `POST /api/v1/auth/logout`. They use one-time,
+browser-bound PKCE state and an opaque HttpOnly session cookie. GitHub tokens are
+used only in process to retrieve a single safe profile snapshot and are never
+persisted or sent to the browser. In secure public settings the cookie is
+host-prefixed (`__Host-repo_surgeon_session`), Secure, HttpOnly, `SameSite=Lax`,
+and has no persistent `Max-Age`. HTTP-only local development uses distinct,
+non-prefixed cookie names; public mode and production reject insecure cookies.
+
+Public mode still rejects every local-repository endpoint at the FastAPI boundary.
+The frontend provides a GitHub identity journey at `/login`, `/auth/callback`, and
+`/profile`. It uses the FastAPI-owned opaque browser session and keeps its CSRF
+token only in component memory. Repository connections, public repository import,
+and authenticated repository access are not available yet.
 
 The security rationale and required negative-test matrix are in the
 [authentication ADR](docs/architecture/decisions/0010-github-authentication-and-tenancy-foundation.md)
@@ -108,7 +116,15 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open <http://localhost:3000>. The workspace selector requests `GET /repositories`, and the selected summary card requests `GET /repositories/<id>/summary`. The investigation composer submits questions to `POST /repositories/<id>/investigations`. The backend and PostgreSQL must be running for live repository data. Development CORS permits only `http://localhost:3000` and `http://127.0.0.1:3000`; the frontend uses `NEXT_PUBLIC_API_BASE_URL` when the API is not at `http://127.0.0.1:8000`. Investigation requests remain read-only and cannot modify the connected repository.
+Open <http://127.0.0.1:3000/login>. The browser uses same-origin `/api/*` URLs;
+Next.js proxies them to FastAPI at `REPO_SURGEON_API_ORIGIN` (default:
+`http://127.0.0.1:8000`). This includes the GitHub callback, so the HttpOnly,
+`SameSite=Lax` session cookie remains usable after OAuth redirects. The callback
+page resolves only the opaque browser session before showing the safe profile
+projection at `/profile`. FastAPI always redirects callback completion to the
+validated fixed frontend destination, rather than resolving it from an API-origin
+relative path. Repository data is intentionally unavailable from this identity UI
+until tenant authorization is complete.
 
 ## Verify quality gates
 
@@ -130,13 +146,14 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:e2e
 pnpm build
 ```
 
-The workflow runs on pushes and pull requests. It uses `backend/uv.lock` and `frontend/pnpm-lock.yaml`, then checks backend formatting, linting, strict typing, and tests plus frontend formatting, linting, type checking, tests, and production build.
+The workflow runs on pushes and pull requests. It uses `backend/uv.lock` and `frontend/pnpm-lock.yaml`, then checks backend formatting, linting, strict typing, and tests plus frontend formatting, linting, type checking, unit tests, browser E2E tests, and production build.
 
 ## Learn the foundation
 
-The registration, summary, search, and investigation request paths are `curl or frontend -> Uvicorn ASGI server -> FastAPI router -> application use case -> confined repository inspection`, with registration and repository identity persistence continuing through the SQLAlchemy adapter to PostgreSQL. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
+The identity request path is `browser -> same-origin Next.js /api proxy -> Uvicorn ASGI server -> FastAPI authentication router -> application use case -> PostgreSQL`, with GitHub profile retrieval isolated behind the OAuth adapter. The bounded repository and investigation paths remain backend capabilities awaiting tenant authorization. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
 
 Future work continues with persisted API events, Git context, test sandboxing, proposals, approvals, patch application, audits, and pull requests. The provider boundary and in-process MCP tools now support the read-only investigation workflow; they are not yet connected to write or sandbox workflows.

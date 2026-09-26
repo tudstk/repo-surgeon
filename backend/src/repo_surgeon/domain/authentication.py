@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from base64 import urlsafe_b64encode
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from hashlib import sha256
+from hmac import digest as hmac_digest
 from secrets import token_urlsafe
 from typing import TypeVar
 from uuid import UUID
@@ -54,6 +56,14 @@ class SessionToken(_OpaqueSecret):
 class CsrfToken(_OpaqueSecret):
     """A per-session token required for unsafe browser requests."""
 
+    @classmethod
+    def derive(cls, session_token: SessionToken, secret: bytes) -> CsrfToken:
+        """Derive a transport value from the opaque session without persisting it."""
+        material = hmac_digest(
+            secret, session_token.reveal_for_transport().encode("ascii"), "sha256"
+        )
+        return cls(urlsafe_b64encode(material).rstrip(b"=").decode("ascii"))
+
 
 class OAuthState(_OpaqueSecret):
     """One-time OAuth callback correlation value."""
@@ -71,6 +81,10 @@ class PkceVerifier(_OpaqueSecret):
     def generate(cls) -> PkceVerifier:
         """Create a verifier within OAuth's permitted character-length range."""
         return cls(token_urlsafe(64))
+
+    def pkce_s256_challenge(self) -> str:
+        """Derive OAuth's required S256 challenge without exposing the verifier."""
+        return urlsafe_b64encode(sha256(self._value.encode("ascii")).digest()).rstrip(b"=").decode()
 
 
 @dataclass(frozen=True, slots=True)

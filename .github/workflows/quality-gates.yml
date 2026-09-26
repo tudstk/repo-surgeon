@@ -93,5 +93,11 @@ jobs:
       - name: Test
         run: pnpm test
 
+      - name: Install browser test runtime
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Browser test
+        run: pnpm test:e2e
+
       - name: Build
         run: pnpm build

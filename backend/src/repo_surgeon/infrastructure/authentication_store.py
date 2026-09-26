@@ -123,7 +123,13 @@ class SqlAlchemyUserIdentityStore:
             avatar_url=profile.avatar_url,
             profile_url=profile.profile_url,
         )
-        self._session.add_all([user, identity])
+        # There is no ORM relationship between these records because the domain
+        # boundary carries only the immutable UUID. Flush the parent explicitly
+        # so every supported database sees the referenced user before the
+        # identity insert, while keeping both writes in this one transaction.
+        self._session.add(user)
+        await self._session.flush()
+        self._session.add(identity)
         await self._session.commit()
         await self._session.refresh(user)
         await self._session.refresh(identity)
