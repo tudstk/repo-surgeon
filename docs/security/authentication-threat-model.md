@@ -14,6 +14,6 @@ tenant authorization remains a later slice.
 | Cross-tenant access | Every repository and future aggregate lookup carries an immutable authenticated user ID; foreign and unknown IDs return the same 404. |
 | Host/proxy confusion | Exact public origin and allowed hosts are validated at startup. Forwarded headers are trusted only from deployment-owned ingress. |
 
-This milestone has no GitHub OAuth App configuration, live provider call, requested
-scope, public clone path, private repository access, or repository authorization
-retrofit. Tests use a deterministic in-process HTTP provider.
+This slice has no GitHub OAuth App configuration, requested scope, public clone
+path, private repository access, or repository authorization retrofit. Tests use a
+deterministic in-process HTTP provider instead of real network credentials.

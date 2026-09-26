@@ -11,11 +11,11 @@ proposal, run, and audit aggregate.
 ## Decision
 
 FastAPI owns the GitHub OAuth authorization-code flow and the application session.
-The browser will receive only a server-set opaque session cookie; GitHub access
+The browser receives only a server-set opaque session cookie; GitHub access
 tokens, authorization codes, PKCE verifiers, and session values are never sent to
-Next.js or stored in browser storage. The eventual flow uses a fixed internal
+Next.js or stored in browser storage. The identity flow uses a fixed internal
 callback, PKCE S256, one-time state, and a short-lived HttpOnly browser-binding
-cookie. Unsafe methods will require an exact trusted origin and CSRF token.
+cookie. Unsafe methods require an exact trusted origin and CSRF token.
 
 The first public identity flow requests no GitHub scopes and stores only the stable
 GitHub user identity and safe profile snapshot. One user is one tenant for the first
@@ -27,9 +27,9 @@ repository access for development, while `public_authenticated` fails closed unl
 OAuth/session settings are complete and local filesystem access is disabled. The
 public callback is derived from one exact public origin and cannot be caller chosen.
 
-Milestone 4.5A establishes these contracts and their persistence foundation. It does
-not exchange OAuth codes, create an OAuth App, issue login sessions, clone
-repositories, or add write capabilities.
+Milestones 4.5A-4.5C establish these contracts, their persistence foundation, and
+the identity-only OAuth exchange. The current slice does not configure a GitHub
+OAuth App, request scopes, clone repositories, or add write capabilities.
 
 ## Alternatives considered
 
@@ -44,14 +44,13 @@ repositories, or add write capabilities.
 ## Consequences
 
 Local development remains usable with the existing loopback trust boundary. Public
-mode can truthfully expose only read-only evidence until OAuth routes, authenticated
-repository access, and the frontend identity journey land. The settings validator,
-persistence contracts, and HTTP repository boundary are intentionally testable
-without credentials or network.
+mode can truthfully expose only read-only evidence until authenticated repository
+access and the frontend identity journey land. The settings validator, persistence
+contracts, OAuth adapter, and HTTP repository boundary are intentionally testable
+without real credentials or network.
 
 ## Review trigger
 
-Revisit when Milestones 4.5B-4.5F add OAuth routes, the frontend identity journey,
-authenticated repository access, and public ingress. Any proposal to retain GitHub
-tokens, add private scopes, or enable public cloning requires a new security review
-and ADR.
+Revisit when later milestones add the frontend identity journey, authenticated
+repository access, private scopes, or public ingress. Any proposal to retain GitHub
+tokens or enable public cloning requires a new security review and ADR.
