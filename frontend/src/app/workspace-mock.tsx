@@ -82,6 +82,8 @@ export default function WorkspaceMock({ githubLogin }: { githubLogin: string }) 
           </div>
         </nav>
 
+        <div className="pane-separator" aria-hidden="true" />
+
         <aside className="repo-panel" aria-label="Repositories and evidence context">
           <PanelHeading number={1}>Repositories</PanelHeading>
           <div className="repo-content">
@@ -108,6 +110,8 @@ export default function WorkspaceMock({ githubLogin }: { githubLogin: string }) 
             <p className="empty-state">Available after repository authorization is implemented.</p>
           </div>
         </aside>
+
+        <div className="pane-separator" aria-hidden="true" />
 
         <section className="conversation" aria-labelledby="conversation-title">
           <PanelHeading number={2}>
@@ -168,6 +172,8 @@ export default function WorkspaceMock({ githubLogin }: { githubLogin: string }) 
             </div>
           </form>
         </section>
+
+        <div className="pane-separator" aria-hidden="true" />
 
         <section className="work-panel" aria-labelledby="work-panel-title">
           <h2 className="sr-only" id="work-panel-title">
