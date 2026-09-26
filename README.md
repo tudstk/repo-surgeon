@@ -116,15 +116,13 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open <http://localhost:3000/login>. The page starts the FastAPI-owned GitHub OAuth
-flow and `/auth/callback` resolves only the opaque browser session before showing
-the safe profile projection at `/profile`. The frontend uses
-`NEXT_PUBLIC_API_BASE_URL` for split-origin local development (default:
-`http://127.0.0.1:8000`) and sends credentialed requests. For the documented
-`localhost:3000` frontend, keep `REPO_SURGEON_CSRF_TRUSTED_ORIGINS` set to the
-exact `http://localhost:3000` origin so the CSRF-protected logout request succeeds.
-Repository data is intentionally unavailable from this identity UI until tenant
-authorization is complete.
+Open <http://127.0.0.1:3000/login>. The browser uses same-origin `/api/*` URLs;
+Next.js proxies them to FastAPI at `REPO_SURGEON_API_ORIGIN` (default:
+`http://127.0.0.1:8000`). This includes the GitHub callback, so the HttpOnly,
+`SameSite=Lax` session cookie remains usable after OAuth redirects. The callback
+page resolves only the opaque browser session before showing the safe profile
+projection at `/profile`. Repository data is intentionally unavailable from this
+identity UI until tenant authorization is complete.
 
 ## Verify quality gates
 

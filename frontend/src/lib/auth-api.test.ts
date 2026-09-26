@@ -8,10 +8,8 @@ describe('auth API client', () => {
     vi.unstubAllEnvs();
   });
 
-  it('uses the configurable split-origin API base without a duplicate slash', () => {
-    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', 'http://127.0.0.1:8000/');
-
-    expect(authApiUrl('/api/v1/auth/session')).toBe('http://127.0.0.1:8000/api/v1/auth/session');
+  it('uses same-origin relative API URLs', () => {
+    expect(authApiUrl('/api/v1/auth/session')).toBe('/api/v1/auth/session');
   });
 
   it('requests the session with browser credentials and no HTTP cache', async () => {
@@ -28,7 +26,7 @@ describe('auth API client', () => {
     await getBrowserSession();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:8000/api/v1/auth/session',
+      '/api/v1/auth/session',
       expect.objectContaining({ cache: 'no-store', credentials: 'include' }),
     );
   });
