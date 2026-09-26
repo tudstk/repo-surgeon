@@ -1023,6 +1023,227 @@ textarea:focus-visible {
   white-space: nowrap;
   border: 0;
 }
+
+.identity-shell {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 24px;
+  background: linear-gradient(180deg, rgba(133, 133, 255, 0.06), transparent 38%), var(--bg);
+}
+.identity-card,
+.profile-card {
+  width: min(100%, 490px);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.22);
+}
+.identity-card {
+  padding: 28px;
+}
+.identity-loading-card {
+  display: grid;
+  min-height: 180px;
+  align-content: center;
+  gap: 22px;
+}
+.identity-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+.identity-copy {
+  margin: 34px 0 26px;
+}
+.eyebrow {
+  margin: 0 0 8px;
+  color: var(--violet);
+  font:
+    700 10px ui-monospace,
+    monospace;
+  letter-spacing: 0.12em;
+}
+.identity-copy h1,
+.profile-identity h1 {
+  margin: 0;
+  color: #f0f4fa;
+  font-size: clamp(25px, 4vw, 31px);
+  letter-spacing: -0.04em;
+}
+.identity-copy > p:last-child {
+  max-width: 45ch;
+  margin: 13px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.github-button,
+.logout-button,
+.secondary-button {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid #a2a2ff;
+  border-radius: 7px;
+  background: var(--violet);
+  color: #090d15;
+  font-weight: 700;
+  text-decoration: none;
+}
+.github-button:hover,
+.logout-button:hover,
+.secondary-button:hover {
+  background: #9999ff;
+}
+.identity-footnote {
+  margin: 18px 0 0;
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.identity-notice,
+.identity-alert {
+  margin: 0 0 16px;
+  border: 1px solid #276d55;
+  border-radius: 7px;
+  padding: 10px 11px;
+  background: #09231e;
+  color: #b4e8d1;
+}
+.identity-alert {
+  border-color: #704052;
+  background: #28141d;
+  color: #f1b8c4;
+}
+.identity-status {
+  margin: 0;
+  color: var(--muted);
+}
+.identity-loading-card .secondary-button,
+.identity-loading-card .text-link {
+  width: 100%;
+}
+.secondary-button {
+  border-color: #3c4758;
+  background: #1b222d;
+  color: var(--text);
+}
+.text-link {
+  display: block;
+  color: #c7cbff;
+  text-align: center;
+}
+.profile-card {
+  overflow: hidden;
+}
+.profile-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding: 16px 20px;
+}
+.account-control {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #c2cbda;
+  font:
+    11px ui-monospace,
+    monospace;
+  text-decoration: none;
+}
+.account-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--green);
+}
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+  padding: 29px 28px;
+}
+.profile-identity > div:last-child {
+  min-width: 0;
+}
+.profile-identity a {
+  display: inline-block;
+  margin-top: 6px;
+  color: #bfc3ff;
+}
+.profile-login {
+  margin: 6px 0 0;
+  color: #bfc3ff;
+}
+.profile-avatar {
+  width: 64px;
+  height: 64px;
+  flex: none;
+  border: 1px solid #4a4a8b;
+  border-radius: 50%;
+  background: var(--panel2);
+  object-fit: cover;
+}
+.profile-avatar-fallback {
+  display: grid;
+  place-items: center;
+  color: #d8d9ff;
+  font-size: 22px;
+  font-weight: 700;
+}
+.profile-details {
+  display: grid;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.profile-details > div {
+  display: grid;
+  gap: 4px;
+  padding: 15px 28px;
+}
+.profile-details > div + div {
+  border-top: 1px solid var(--line);
+}
+.profile-details span {
+  color: var(--faint);
+  font:
+    10px ui-monospace,
+    monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.profile-details strong {
+  color: #cbd4df;
+  font-size: 13px;
+}
+.profile-card > .identity-alert {
+  margin: 18px 28px 0;
+}
+.logout-button {
+  width: auto;
+  margin: 20px 28px 28px;
+  padding: 0 18px;
+  border-color: #4a5364;
+  background: #1a212c;
+  color: #d6deea;
+}
+.logout-button:disabled {
+  color: var(--muted);
+}
 /* Keep the priority header controls visible while compacting telemetry before
    the full status row can collide with the repository context. */
 @media (max-width: 1500px) {
@@ -1135,5 +1356,33 @@ textarea:focus-visible {
   }
   .approval-actions {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .identity-shell {
+    align-items: start;
+    padding: 14px;
+  }
+  .identity-card {
+    margin-top: 8vh;
+    padding: 22px;
+  }
+  .profile-header {
+    padding-inline: 16px;
+  }
+  .profile-identity {
+    align-items: flex-start;
+    padding: 24px 20px;
+  }
+  .profile-details > div {
+    padding-inline: 20px;
+  }
+  .profile-card > .identity-alert {
+    margin-inline: 20px;
+  }
+  .logout-button {
+    width: calc(100% - 40px);
+    margin: 20px;
   }
 }

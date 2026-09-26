@@ -34,6 +34,7 @@ def _settings(database_url: str) -> Settings:
         github_oauth_client_id="test-client-id",
         github_oauth_client_secret="test-client-secret",
         auth_encryption_key="test-encryption-key",
+        csrf_trusted_origins=["http://localhost:3000"],
         cookie_secure=True,
         local_repository_access=False,
     )
@@ -246,6 +247,12 @@ async def test_successful_login_rotates_existing_session_and_logout_enforces_ori
         assert logout.headers["cache-control"] == "no-store"
         assert "__Host-repo_surgeon_session=" in logout.headers["set-cookie"]
         assert (await client.get("/api/v1/auth/session")).status_code == 401
+        assert (
+            await client.post(
+                "/api/v1/auth/logout",
+                headers={"Origin": "http://localhost:3000", "X-CSRF-Token": csrf},
+            )
+        ).status_code == 204
         # An already-cleared browser logout stays safe and idempotent with a trusted Origin.
         assert (
             await client.post(

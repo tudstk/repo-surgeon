@@ -32,9 +32,10 @@ and has no persistent `Max-Age`. HTTP-only local development uses distinct,
 non-prefixed cookie names; public mode and production reject insecure cookies.
 
 Public mode still rejects every local-repository endpoint at the FastAPI boundary.
-The frontend deliberately shows only the bounded read-only evidence workflow: no
-fabricated proposal, diff, sandbox test result, approval, or pull-request state is
-rendered. Login/profile screens and public repository support remain later slices.
+The frontend provides a GitHub identity journey at `/login`, `/auth/callback`, and
+`/profile`. It uses the FastAPI-owned opaque browser session and keeps its CSRF
+token only in component memory. Repository connections, public repository import,
+and authenticated repository access are not available yet.
 
 The security rationale and required negative-test matrix are in the
 [authentication ADR](docs/architecture/decisions/0010-github-authentication-and-tenancy-foundation.md)
@@ -115,7 +116,15 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open <http://localhost:3000>. The workspace selector requests `GET /repositories`, and the selected summary card requests `GET /repositories/<id>/summary`. The investigation composer submits questions to `POST /repositories/<id>/investigations`. The backend and PostgreSQL must be running for live repository data. Development CORS permits only `http://localhost:3000` and `http://127.0.0.1:3000`; the frontend uses `NEXT_PUBLIC_API_BASE_URL` when the API is not at `http://127.0.0.1:8000`. Investigation requests remain read-only and cannot modify the connected repository.
+Open <http://localhost:3000/login>. The page starts the FastAPI-owned GitHub OAuth
+flow and `/auth/callback` resolves only the opaque browser session before showing
+the safe profile projection at `/profile`. The frontend uses
+`NEXT_PUBLIC_API_BASE_URL` for split-origin local development (default:
+`http://127.0.0.1:8000`) and sends credentialed requests. For the documented
+`localhost:3000` frontend, keep `REPO_SURGEON_CSRF_TRUSTED_ORIGINS` set to the
+exact `http://localhost:3000` origin so the CSRF-protected logout request succeeds.
+Repository data is intentionally unavailable from this identity UI until tenant
+authorization is complete.
 
 ## Verify quality gates
 
