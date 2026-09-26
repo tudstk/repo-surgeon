@@ -48,6 +48,10 @@ def test_public_settings_require_secure_cookies_in_non_production_environments(
     ("overrides", "message"),
     [
         ({"public_origin": "https://surgeon.example/app"}, "PUBLIC_ORIGIN"),
+        (
+            {"public_origin": "[http://127.0.0.1:3000](http://127.0.0.1:3000)"},
+            "PUBLIC_ORIGIN",
+        ),
         ({"cors_allowed_origins": ["*"]}, "CORS_ALLOWED_ORIGINS"),
         ({"local_repository_access": True}, "LOCAL_REPOSITORY_ACCESS"),
         (

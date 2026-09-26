@@ -82,6 +82,18 @@ def _redirect(path: str) -> RedirectResponse:
     return response
 
 
+def _frontend_redirect(request: Request, path: str) -> RedirectResponse:
+    """Redirect to a fixed route on the configured browser origin.
+
+    The OAuth callback may arrive directly at a split-origin API during local
+    development. A relative redirect would then resolve against the API origin
+    instead of the Next.js origin, so build this fixed destination from the
+    validated public origin.
+    """
+    origin = request.app.state.settings.public_origin.rstrip("/")
+    return _redirect(f"{origin}{path}")
+
+
 def _clear_oauth_cookie(response: Response, request: Request) -> None:
     response.delete_cookie(
         _cookie_name(request, oauth=True),
@@ -103,7 +115,7 @@ def _clear_session_cookie(response: Response, request: Request) -> None:
 
 
 def _invalid_callback(request: Request) -> RedirectResponse:
-    response = _redirect(f"{_LOGIN_ERROR}oauth_state_invalid")
+    response = _frontend_redirect(request, f"{_LOGIN_ERROR}oauth_state_invalid")
     _clear_oauth_cookie(response, request)
     return response
 
@@ -181,11 +193,11 @@ async def github_callback(
     if verifier is None:
         return _invalid_callback(request)
     if error == "access_denied":
-        response = _redirect(f"{_LOGIN_ERROR}access_denied")
+        response = _frontend_redirect(request, f"{_LOGIN_ERROR}access_denied")
         _clear_oauth_cookie(response, request)
         return response
     if error:
-        response = _redirect(f"{_LOGIN_ERROR}oauth_provider_failed")
+        response = _frontend_redirect(request, f"{_LOGIN_ERROR}oauth_provider_failed")
         _clear_oauth_cookie(response, request)
         return response
     if not code:
@@ -201,10 +213,10 @@ async def github_callback(
             await _session_service(request, session).revoke(SessionToken(previous), _now())
         issued = await _session_service(request, session).issue(user.id, _now())
     except GitHubOAuthError, UnicodeEncodeError, ValueError:
-        response = _redirect(f"{_LOGIN_ERROR}oauth_provider_failed")
+        response = _frontend_redirect(request, f"{_LOGIN_ERROR}oauth_provider_failed")
         _clear_oauth_cookie(response, request)
         return response
-    response = _redirect(_CALLBACK_DESTINATION)
+    response = _frontend_redirect(request, _CALLBACK_DESTINATION)
     _set_cookie(
         response, request, _cookie_name(request), issued.session_token.reveal_for_transport()
     )

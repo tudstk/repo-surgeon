@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -13,7 +14,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 from fastapi import FastAPI
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from repo_surgeon.infrastructure.github_oauth import HttpxGitHubOAuthClient
 from repo_surgeon.infrastructure.repository_models import (
@@ -72,6 +73,14 @@ async def oauth_app(tmp_path: Path) -> AsyncIterator[tuple[FastAPI, list[httpx.R
         return httpx.Response(404)
 
     app = create_app(_settings(database_url))
+
+    @event.listens_for(app.state.engine.sync_engine, "connect")
+    def enforce_sqlite_foreign_keys(dbapi_connection: Any, _: Any) -> None:
+        """Make this callback boundary test exercise the production FK contract."""
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     provider_client = httpx.AsyncClient(transport=httpx.MockTransport(provider))
     app.state.github_oauth_client = HttpxGitHubOAuthClient(
         app.state.settings, client=provider_client
@@ -114,7 +123,7 @@ async def test_github_callback_exchanges_pkce_once_and_never_persists_provider_t
             "/api/v1/auth/github/callback", params={"state": state, "code": "one-time-code"}
         )
         assert callback.status_code == 303
-        assert callback.headers["location"] == "/auth/callback"
+        assert callback.headers["location"] == "https://surgeon.example/auth/callback"
         assert "one-time-code" not in callback.headers["location"]
         assert state not in callback.headers["location"]
         assert "__Host-repo_surgeon_session=" in callback.headers["set-cookie"]
@@ -149,23 +158,89 @@ async def test_github_callback_exchanges_pkce_once_and_never_persists_provider_t
 
 
 @pytest.mark.anyio
+async def test_direct_api_callback_redirects_to_the_configured_frontend_origin(
+    tmp_path: Path,
+) -> None:
+    """A split-origin callback must not resolve its final redirect on the API port."""
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'split-origin.sqlite3'}"
+    await _upgrade(database_url)
+    settings = Settings(
+        database_url=database_url,
+        environment="test",
+        public_origin="http://127.0.0.1:3000",
+        github_oauth_callback_url="http://127.0.0.1:8000/api/v1/auth/github/callback",
+        github_oauth_client_id="test-client-id",
+        github_oauth_client_secret="test-client-secret",
+        auth_encryption_key="test-encryption-key",
+    )
+    app = create_app(settings)
+
+    def provider(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("access_token"):
+            return httpx.Response(200, json={"access_token": "test-token"})
+        if request.url.path == "/user":
+            return httpx.Response(
+                200,
+                json={
+                    "id": 42,
+                    "node_id": "U_42",
+                    "login": "repo-surgeon",
+                    "name": "Repo Surgeon",
+                    "avatar_url": None,
+                    "html_url": "https://github.com/repo-surgeon",
+                    "type": "User",
+                },
+            )
+        return httpx.Response(404)
+
+    provider_client = httpx.AsyncClient(transport=httpx.MockTransport(provider))
+    app.state.github_oauth_client = HttpxGitHubOAuthClient(settings, client=provider_client)
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://127.0.0.1:8000",
+            follow_redirects=False,
+        ) as client:
+            start = await client.get("/api/v1/auth/github/start")
+            assert start.status_code == 303
+            query = parse_qs(urlsplit(start.headers["location"]).query)
+            assert query["redirect_uri"] == ["http://127.0.0.1:8000/api/v1/auth/github/callback"]
+            state = query["state"][0]
+            callback = await client.get(
+                "/api/v1/auth/github/callback", params={"state": state, "code": "one-time-code"}
+            )
+
+        assert callback.status_code == 303
+        assert callback.headers["location"] == "http://127.0.0.1:3000/auth/callback"
+    finally:
+        await provider_client.aclose()
+        await app.state.engine.dispose()
+
+
+@pytest.mark.anyio
 async def test_callback_rejects_missing_wrong_replayed_and_browser_swapped_state_before_exchange(
     oauth_app: tuple[FastAPI, list[httpx.Request]],
 ) -> None:
     app, requests = oauth_app
     async with await _client(app) as first, await _client(app) as second:
         missing = await first.get("/api/v1/auth/github/callback", params={"code": "secret-code"})
-        assert missing.headers["location"] == "/login?error=oauth_state_invalid"
+        assert (
+            missing.headers["location"] == "https://surgeon.example/login?error=oauth_state_invalid"
+        )
         await _start(first)
         wrong = await first.get(
             "/api/v1/auth/github/callback", params={"state": "wrong", "code": "x"}
         )
-        assert wrong.headers["location"] == "/login?error=oauth_state_invalid"
+        assert (
+            wrong.headers["location"] == "https://surgeon.example/login?error=oauth_state_invalid"
+        )
         state, _ = await _start(first)
         swapped = await second.get(
             "/api/v1/auth/github/callback", params={"state": state, "code": "x"}
         )
-        assert swapped.headers["location"] == "/login?error=oauth_state_invalid"
+        assert (
+            swapped.headers["location"] == "https://surgeon.example/login?error=oauth_state_invalid"
+        )
         success = await first.get(
             "/api/v1/auth/github/callback", params={"state": state, "code": "x"}
         )
@@ -173,7 +248,9 @@ async def test_callback_rejects_missing_wrong_replayed_and_browser_swapped_state
         replay = await first.get(
             "/api/v1/auth/github/callback", params={"state": state, "code": "x"}
         )
-        assert replay.headers["location"] == "/login?error=oauth_state_invalid"
+        assert (
+            replay.headers["location"] == "https://surgeon.example/login?error=oauth_state_invalid"
+        )
     assert len(requests) == 2
 
 
@@ -191,12 +268,14 @@ async def test_expired_callback_and_provider_denial_do_not_exchange_or_create_se
         expired = await client.get(
             "/api/v1/auth/github/callback", params={"state": state, "code": "x"}
         )
-        assert expired.headers["location"] == "/login?error=oauth_state_invalid"
+        assert (
+            expired.headers["location"] == "https://surgeon.example/login?error=oauth_state_invalid"
+        )
         denial_state, _ = await _start(client)
         denial = await client.get(
             "/api/v1/auth/github/callback", params={"state": denial_state, "error": "access_denied"}
         )
-        assert denial.headers["location"] == "/login?error=access_denied"
+        assert denial.headers["location"] == "https://surgeon.example/login?error=access_denied"
         assert (await client.get("/api/v1/auth/session")).status_code == 401
     assert not requests
 
