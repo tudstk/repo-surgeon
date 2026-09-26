@@ -42,18 +42,22 @@ const server = createServer((request, response) => {
   }
 
   if (request.url === '/api/v1/auth/logout' && request.method === 'POST') {
-    if (
-      request.headers.cookie?.includes(sessionCookie) &&
-      request.headers['x-csrf-token'] === session.csrf_token
-    ) {
-      response.writeHead(204, {
-        'cache-control': 'no-store',
-        'set-cookie': 'repo_surgeon_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax',
-      });
-    } else {
-      response.writeHead(403, { 'content-type': 'application/json' });
-      response.end('{"detail":"Forbidden"}');
-    }
+    request.on('data', () => {});
+    request.on('end', () => {
+      if (
+        request.headers.cookie?.includes(sessionCookie) &&
+        request.headers['x-csrf-token'] === session.csrf_token
+      ) {
+        response.writeHead(204, {
+          'cache-control': 'no-store',
+          'set-cookie': 'repo_surgeon_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax',
+        });
+        response.end();
+      } else {
+        response.writeHead(403, { 'content-type': 'application/json' });
+        response.end('{"detail":"Forbidden"}');
+      }
+    });
     return;
   }
 
