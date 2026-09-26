@@ -9,7 +9,6 @@ export default defineConfig({
   },
   webServer: {
     command: 'pnpm dev --hostname 127.0.0.1 --port 3001',
-    env: { NEXT_PUBLIC_API_BASE_URL: 'http://api.test' },
     reuseExistingServer: !process.env.CI,
     url: 'http://127.0.0.1:3001/login',
   },

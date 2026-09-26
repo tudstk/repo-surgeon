@@ -116,19 +116,15 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Open <http://127.0.0.1:3000/login>. The page starts the FastAPI-owned GitHub OAuth
-flow and `/auth/callback` resolves only the opaque browser session before showing
-the safe profile projection at `/profile`. The frontend uses
-`NEXT_PUBLIC_API_BASE_URL` for split-origin local development (default:
-`http://127.0.0.1:8000`) and sends credentialed requests. When GitHub calls the
-API directly in this local arrangement, configure the OAuth App callback and
-`REPO_SURGEON_GITHUB_OAUTH_CALLBACK_URL` to the exact
-`http://127.0.0.1:8000/api/v1/auth/github/callback`; keep
-`REPO_SURGEON_PUBLIC_ORIGIN=http://127.0.0.1:3000`. The API then returns the
-browser to the fixed frontend `/auth/callback` route. Use one hostname spelling
-throughout a local setup: do not mix `localhost` with `127.0.0.1`. Repository data
-is intentionally unavailable from this identity UI until tenant authorization is
-complete.
+Open <http://127.0.0.1:3000/login>. The browser uses same-origin `/api/*` URLs;
+Next.js proxies them to FastAPI at `REPO_SURGEON_API_ORIGIN` (default:
+`http://127.0.0.1:8000`). This includes the GitHub callback, so the HttpOnly,
+`SameSite=Lax` session cookie remains usable after OAuth redirects. The callback
+page resolves only the opaque browser session before showing the safe profile
+projection at `/profile`. FastAPI always redirects callback completion to the
+validated fixed frontend destination, rather than resolving it from an API-origin
+relative path. Repository data is intentionally unavailable from this identity UI
+until tenant authorization is complete.
 
 ## Verify quality gates
 

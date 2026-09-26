@@ -16,12 +16,8 @@ export class SessionRequestError extends Error {
   }
 }
 
-function apiBaseUrl() {
-  return (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://127.0.0.1:8000').replace(/\/$/, '');
-}
-
 export function authApiUrl(path: string) {
-  return `${apiBaseUrl()}${path}`;
+  return path;
 }
 
 export async function getBrowserSession(signal?: AbortSignal): Promise<BrowserSession> {

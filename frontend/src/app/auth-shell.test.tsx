@@ -41,8 +41,7 @@ describe('identity journey', () => {
     vi.unstubAllEnvs();
   });
 
-  it('shows the logged-out login state and navigates to the configured backend OAuth start', async () => {
-    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', 'http://api.test/');
+  it('shows the logged-out login state and navigates to the same-origin OAuth start', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() => Promise.resolve(jsonResponse({}, 401))),
@@ -53,12 +52,12 @@ describe('identity journey', () => {
     await screen.findByRole('heading', { name: 'Sign in to Repo Surgeon' });
     expect(screen.getByRole('link', { name: /Continue with GitHub/i })).toHaveAttribute(
       'href',
-      'http://api.test/api/v1/auth/github/start',
+      '/api/v1/auth/github/start',
     );
     expect(screen.getByText(/only your public profile identity/i)).toBeInTheDocument();
     expect(screen.getByText(/Repository connections are not available yet/i)).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
-      'http://api.test/api/v1/auth/session',
+      '/api/v1/auth/session',
       expect.objectContaining({ cache: 'no-store', credentials: 'include' }),
     );
   });
@@ -141,7 +140,7 @@ describe('identity journey', () => {
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/login?signed_out=1'));
     expect(fetchMock).toHaveBeenLastCalledWith(
-      'http://127.0.0.1:8000/api/v1/auth/logout',
+      '/api/v1/auth/logout',
       expect.objectContaining({
         cache: 'no-store',
         credentials: 'include',

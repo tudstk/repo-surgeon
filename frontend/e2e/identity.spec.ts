@@ -10,31 +10,26 @@ const session = {
   csrf_token: 'mocked-csrf-token',
 };
 
-const corsHeaders = {
-  'Access-Control-Allow-Credentials': 'true',
-  'Access-Control-Allow-Headers': 'X-CSRF-Token',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Origin': 'http://127.0.0.1:3001',
-};
+const apiHeaders = { 'content-type': 'application/json' };
 
 async function mockSession(
   page: import('@playwright/test').Page,
   response: object | (() => object),
   status: number | (() => number) = 200,
 ) {
-  await page.route('http://api.test/api/v1/auth/session', (route) => {
+  await page.route('**/api/v1/auth/session', (route) => {
     const payload = typeof response === 'function' ? response() : response;
     const responseStatus = typeof status === 'function' ? status() : status;
     return route.fulfill({
       body: JSON.stringify(payload),
       contentType: 'application/json',
-      headers: corsHeaders,
+      headers: apiHeaders,
       status: responseStatus,
     });
   });
 }
 
-test('logged-out login starts the configured OAuth endpoint without loading repository data', async ({
+test('logged-out login starts the same-origin OAuth endpoint without loading repository data', async ({
   page,
 }) => {
   await mockSession(page, {}, 401);
@@ -44,7 +39,7 @@ test('logged-out login starts the configured OAuth endpoint without loading repo
   await expect(page.getByRole('heading', { name: 'Sign in to Repo Surgeon' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Continue with GitHub' })).toHaveAttribute(
     'href',
-    'http://api.test/api/v1/auth/github/start',
+    '/api/v1/auth/github/start',
   );
   await expect(page.getByText('Repository connections are not available yet.')).toBeVisible();
   await expect(page.getByText('payments-api')).toHaveCount(0);
@@ -60,14 +55,10 @@ test('callback resolves a mocked session into the safe profile and logs out with
     () => (loggedOut ? 401 : 200),
   );
   let logoutRequest: import('@playwright/test').Request | undefined;
-  await page.route('http://api.test/api/v1/auth/logout', async (route) => {
-    if (route.request().method() === 'OPTIONS') {
-      await route.fulfill({ headers: corsHeaders, status: 204 });
-      return;
-    }
+  await page.route('**/api/v1/auth/logout', async (route) => {
     logoutRequest = route.request();
     loggedOut = true;
-    await route.fulfill({ headers: corsHeaders, status: 204 });
+    await route.fulfill({ status: 204 });
   });
 
   await page.goto('/auth/callback');
