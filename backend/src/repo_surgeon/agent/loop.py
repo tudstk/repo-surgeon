@@ -10,7 +10,7 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 from uuid import UUID
 
@@ -74,6 +74,7 @@ class ToolEvent:
     name: str
     status: Literal["success", "error", "denied"]
     call_id: str = ""
+    arguments: dict[str, object] = field(default_factory=dict)
     summary: str = ""
     duration_ms: int | None = None
     match_count: int | None = None
@@ -168,7 +169,17 @@ def _tool_event(
     call_id: str,
     result: object,
     repository_id: UUID,
+    arguments: ListFilesInput | ReadFileInput | SearchCodeInput | None = None,
 ) -> ToolEvent:
+    safe_arguments = (
+        {
+            key: value
+            for key, value in arguments.model_dump(mode="json", exclude_none=True).items()
+            if key != "repository_id"
+        }
+        if arguments is not None
+        else {}
+    )
     if isinstance(result, SearchCodeOutput):
         citations = tuple(
             Citation(
@@ -195,6 +206,7 @@ def _tool_event(
             name,
             status,
             call_id,
+            safe_arguments,
             summary=_safe_search_summary(result.query),
             duration_ms=result.duration_ms,
             match_count=result.match_count,
@@ -213,6 +225,7 @@ def _tool_event(
             name,
             status,
             call_id,
+            safe_arguments,
             citations=(
                 Citation(
                     citation_id=f"read-{call_id}-1",
@@ -229,8 +242,8 @@ def _tool_event(
             truncated=result.truncated,
         )
     if isinstance(result, ToolErrorOutput):
-        return ToolEvent(name, status, call_id, error_code=result.code)
-    return ToolEvent(name, status, call_id)
+        return ToolEvent(name, status, call_id, safe_arguments, error_code=result.code)
+    return ToolEvent(name, status, call_id, safe_arguments)
 
 
 # Citation validation intentionally keeps all evidence checks in one boundary.
@@ -496,7 +509,16 @@ async def run_turn(
                 status = "error"
                 payload = _serialized(result)
             returned_bytes += len(payload)
-            events.append(_tool_event(call.name, status, call_id, result, repository_id))
+            events.append(
+                _tool_event(
+                    call.name,
+                    status,
+                    call_id,
+                    result,
+                    repository_id,
+                    validated_arguments,
+                )
+            )
             messages.append(
                 {
                     "role": "assistant",

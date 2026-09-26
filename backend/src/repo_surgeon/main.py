@@ -10,10 +10,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from repo_surgeon.api.agent_sessions import router as agent_sessions_router
 from repo_surgeon.api.authentication import router as authentication_router
 from repo_surgeon.api.health import router as health_router
-from repo_surgeon.api.repositories import ProblemDetail, RepositoryProblem
+from repo_surgeon.api.problems import ApiProblem, ProblemDetail
 from repo_surgeon.api.repositories import router as repositories_router
+from repo_surgeon.api.workspace_repositories import router as workspace_repositories_router
 from repo_surgeon.infrastructure.database import create_engine, create_session_factory
 from repo_surgeon.infrastructure.github_oauth import HttpxGitHubOAuthClient
 from repo_surgeon.settings import Settings, get_settings
@@ -72,9 +74,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     if configured_settings.environment == "production":
         app.add_middleware(TrustedHostMiddleware, allowed_hosts=configured_settings.allowed_hosts)
 
-    @app.exception_handler(RepositoryProblem)
-    async def repository_problem_handler(_: Request, error: RepositoryProblem) -> JSONResponse:
-        """Render expected registration failures without framework-specific wrapping."""
+    @app.exception_handler(ApiProblem)
+    async def api_problem_handler(_: Request, error: ApiProblem) -> JSONResponse:
+        """Render expected application failures without framework-specific wrapping."""
         return JSONResponse(
             status_code=error.problem.status,
             content=error.problem.model_dump(mode="json"),
@@ -104,6 +106,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(authentication_router)
     app.include_router(repositories_router)
+    app.include_router(workspace_repositories_router)
+    app.include_router(agent_sessions_router)
     return app
 
 

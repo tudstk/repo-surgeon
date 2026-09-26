@@ -56,3 +56,24 @@ class FakeModelProvider:
         response = self._responses[self._index]
         self._index += 1
         return response
+
+
+def deterministic_read_only_provider() -> FakeModelProvider:
+    """Create the credential-free provider used by the Stage 0 product journey."""
+    return FakeModelProvider(
+        (
+            ModelResponse(
+                text="I am inspecting the selected repository with bounded read-only tools.",
+                tool_calls=(
+                    ModelToolCall(
+                        name="list_files",
+                        arguments={"directory": ".", "max_results": 50},
+                        call_id="list-root",
+                    ),
+                ),
+            ),
+            ModelResponse(
+                text="I completed a bounded read-only inspection of the selected repository."
+            ),
+        )
+    )
