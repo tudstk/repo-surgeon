@@ -214,9 +214,18 @@ describe('identity journey', () => {
 
     render(<WorkspaceScreen />);
 
-    expect(await screen.findByRole('heading', { name: 'Repo Surgeon workspace' })).toBeVisible();
-    expect(screen.getByText(/Repository connections are not available yet/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'View profile' })).toHaveAttribute('href', '/profile');
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
+      'Understand the code. Keep people in control.',
+    );
+    expect(screen.getByRole('navigation', { name: 'Workspace map' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Conversation & agent trace' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Work panel' })).toBeInTheDocument();
+    expect(screen.getByText(/Repository connections are unavailable/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open profile for @ada' })).toHaveAttribute(
+      'href',
+      '/profile',
+    );
+    expect(screen.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/auth/session',

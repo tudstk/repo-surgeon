@@ -68,10 +68,12 @@ test('callback resolves a mocked session into the safe profile and logs out with
 
   await page.getByRole('link', { name: 'Continue to workspace' }).click();
   await expect(page).toHaveURL('/');
-  await expect(page.getByRole('heading', { name: 'Repo Surgeon workspace' })).toBeVisible();
-  await expect(page.getByText(/no repository data has been loaded/i)).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Workspace map' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Conversation & agent trace' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Work panel' })).toBeVisible();
+  await expect(page.getByText(/Repository connections are unavailable/i)).toBeVisible();
 
-  await page.getByRole('link', { name: 'View profile' }).click();
+  await page.getByRole('link', { name: 'Open profile for @ada' }).click();
   await expect(page).toHaveURL('/profile');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL('/login?signed_out=1');
@@ -86,9 +88,9 @@ test('OAuth callback, profile, and logout use the same-origin Next.js proxy', as
 
   await page.getByRole('link', { name: 'Continue to workspace' }).click();
   await expect(page).toHaveURL('/');
-  await expect(page.getByRole('heading', { name: 'Repo Surgeon workspace' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Workspace map' })).toBeVisible();
 
-  await page.getByRole('link', { name: 'View profile' }).click();
+  await page.getByRole('link', { name: 'Open profile for @ada' }).click();
   await expect(page).toHaveURL('/profile');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL('/login?signed_out=1');

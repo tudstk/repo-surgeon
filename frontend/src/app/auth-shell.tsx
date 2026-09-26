@@ -11,6 +11,7 @@ import {
   type BrowserSession,
   SessionRequestError,
 } from '@/lib/auth-api';
+import WorkspaceMock from './workspace-mock';
 
 function Brand() {
   return (
@@ -339,27 +340,5 @@ export function WorkspaceScreen() {
     );
   }
 
-  return (
-    <main className="identity-shell">
-      <section className="profile-card workspace-entry" aria-labelledby="workspace-title">
-        <header className="profile-header">
-          <Brand />
-          <Link className="account-control" href="/profile">
-            <span aria-hidden="true" className="account-dot" /> @{session.user.github_login}
-          </Link>
-        </header>
-        <div className="workspace-entry-copy">
-          <p className="eyebrow">WORKSPACE</p>
-          <h1 id="workspace-title">Repo Surgeon workspace</h1>
-          <p>
-            You&apos;re signed in. Repository connections are not available yet, so no repository
-            data has been loaded.
-          </p>
-          <Link className="secondary-button" href="/profile">
-            View profile
-          </Link>
-        </div>
-      </section>
-    </main>
-  );
+  return <WorkspaceMock githubLogin={session.user.github_login} />;
 }
