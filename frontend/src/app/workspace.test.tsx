@@ -65,6 +65,40 @@ describe('authenticated workspace', () => {
     expect(screen.queryByText('payments session')).not.toBeInTheDocument();
   });
 
+  it('does not apply a newly created session after switching repositories', async () => {
+    let resolveCreateSession: ((response: Response) => void) | undefined;
+    const createSessionResponse = new Promise<Response>((resolve) => {
+      resolveCreateSession = resolve;
+    });
+    const fetchMock = vi.fn((input: string, init?: RequestInit) => {
+      if (input === '/api/v1/repositories') {
+        return Promise.resolve(
+          json([
+            { id: 'repository-1', name: 'payments-api' },
+            { id: 'repository-2', name: 'web-dashboard' },
+          ]),
+        );
+      }
+      if (input.includes('/summary')) {
+        return Promise.resolve(json({ language: 'Python', file_count: 1, approximate_lines: 1 }));
+      }
+      if (input.startsWith('/api/v1/sessions?')) return Promise.resolve(json([]));
+      if (input === '/api/v1/sessions' && init?.method === 'POST') return createSessionResponse;
+      throw new Error(`Unexpected request: ${input}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
+
+    await screen.findByRole('button', { name: 'Start read-only session' });
+    fireEvent.click(screen.getByRole('button', { name: 'Start read-only session' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'web-dashboard' }));
+    resolveCreateSession?.(json({ ...persistedSession, repository_id: 'repository-1' }));
+
+    await waitFor(() => expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument());
+    expect(screen.queryByText('payments-api read-only review')).not.toBeInTheDocument();
+  });
+
   it('restores persisted normalized events and submits a CSRF-protected turn', async () => {
     let turnCreated = false;
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {

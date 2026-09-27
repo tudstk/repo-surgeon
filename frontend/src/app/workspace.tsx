@@ -133,6 +133,7 @@ export default function Workspace({
 
   const handleStartSession = async () => {
     if (!selectedRepository) return;
+    const generation = workspaceRequestGeneration.current;
     setSubmitting(true);
     setError(null);
     try {
@@ -141,6 +142,7 @@ export default function Workspace({
         `${selectedRepository.name} read-only review`,
         csrfToken,
       );
+      if (generation !== workspaceRequestGeneration.current) return;
       setSessions((current) => [created, ...current]);
       setSession({ ...created, turns: [] });
       setEvents([]);
@@ -155,12 +157,17 @@ export default function Workspace({
     event.preventDefault();
     const trimmed = message.trim();
     if (!session || trimmed.length < 3) return;
+    const generation = workspaceRequestGeneration.current;
+    const sessionId = session.id;
     setSubmitting(true);
     setError(null);
     try {
-      const turn = await createReadOnlyTurn(session.id, trimmed, csrfToken);
+      const turn = await createReadOnlyTurn(sessionId, trimmed, csrfToken);
+      if (generation !== workspaceRequestGeneration.current) return;
       const persistedEvents = await getPersistedRunEvents(turn.run_id);
-      const detail = await getProductSession(session.id);
+      if (generation !== workspaceRequestGeneration.current) return;
+      const detail = await getProductSession(sessionId);
+      if (generation !== workspaceRequestGeneration.current) return;
       setSession(detail);
       setEvents(persistedEvents);
     } catch {
