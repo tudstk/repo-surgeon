@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
   createProductSession,
@@ -63,6 +63,7 @@ export default function Workspace({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const workspaceRequestGeneration = useRef(0);
 
   const selectedRepository = useMemo(
     () => repositories.find((repository) => repository.id === selectedRepositoryId) ?? null,
@@ -70,15 +71,24 @@ export default function Workspace({
   );
   const latestTurn = session?.turns.at(-1) ?? null;
 
-  const restoreSession = useCallback(async (sessionId: string, signal?: AbortSignal) => {
-    const detail = await getProductSession(sessionId, signal);
-    const latest = detail.turns.at(-1);
-    const persistedEvents = latest
-      ? await getPersistedRunEvents(latest.run_id, undefined, signal)
-      : [];
-    setSession(detail);
-    setEvents(persistedEvents);
-  }, []);
+  const restoreSession = useCallback(
+    async (
+      sessionId: string,
+      signal?: AbortSignal,
+      generation = ++workspaceRequestGeneration.current,
+    ) => {
+      const detail = await getProductSession(sessionId, signal);
+      if (signal?.aborted || generation !== workspaceRequestGeneration.current) return;
+      const latest = detail.turns.at(-1);
+      const persistedEvents = latest
+        ? await getPersistedRunEvents(latest.run_id, undefined, signal)
+        : [];
+      if (signal?.aborted || generation !== workspaceRequestGeneration.current) return;
+      setSession(detail);
+      setEvents(persistedEvents);
+    },
+    [],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -99,17 +109,18 @@ export default function Workspace({
   useEffect(() => {
     if (!selectedRepositoryId) return;
     const controller = new AbortController();
+    const generation = ++workspaceRequestGeneration.current;
     Promise.all([
       getRepositorySummary(selectedRepositoryId, controller.signal),
       listProductSessions(selectedRepositoryId, controller.signal),
     ])
       .then(async ([repositorySummary, availableSessions]) => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || generation !== workspaceRequestGeneration.current) return;
         setSummary(repositorySummary);
         setSessions(availableSessions);
         if (availableSessions[0]) {
-          await restoreSession(availableSessions[0].id, controller.signal);
-        } else {
+          await restoreSession(availableSessions[0].id, controller.signal, generation);
+        } else if (!controller.signal.aborted && generation === workspaceRequestGeneration.current) {
           setSession(null);
           setEvents([]);
         }
@@ -202,6 +213,7 @@ export default function Workspace({
                   className={`session-row ${repository.id === selectedRepositoryId ? 'session-active' : ''}`}
                   key={repository.id}
                   onClick={() => {
+                    workspaceRequestGeneration.current += 1;
                     setSelectedRepositoryId(repository.id);
                     setSummary(null);
                     setSessions([]);

@@ -19,6 +19,52 @@ const persistedSession = {
 describe('authenticated workspace', () => {
   afterEach(() => vi.unstubAllGlobals());
 
+  it('does not apply a session response from a repository selected earlier', async () => {
+    let resolveRepositoryOneDetail: ((response: Response) => void) | undefined;
+    const repositoryOneDetail = new Promise<Response>((resolve) => {
+      resolveRepositoryOneDetail = resolve;
+    });
+    const fetchMock = vi.fn((input: string) => {
+      if (input === '/api/v1/repositories') {
+        return Promise.resolve(
+          json([
+            { id: 'repository-1', name: 'payments-api' },
+            { id: 'repository-2', name: 'web-dashboard' },
+          ]),
+        );
+      }
+      if (input.includes('/summary')) {
+        return Promise.resolve(
+          json({
+            language: input.includes('repository-1') ? 'Python' : 'TypeScript',
+            file_count: 1,
+            approximate_lines: 1,
+          }),
+        );
+      }
+      if (input === '/api/v1/sessions?repository_id=repository-1') {
+        return Promise.resolve(json([{ ...persistedSession, title: 'payments session' }]));
+      }
+      if (input === '/api/v1/sessions?repository_id=repository-2') {
+        return Promise.resolve(json([]));
+      }
+      if (input === '/api/v1/sessions/session-1') return repositoryOneDetail;
+      throw new Error(`Unexpected request: ${input}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
+
+    await screen.findByRole('button', { name: 'web-dashboard' });
+    fireEvent.click(screen.getByRole('button', { name: 'web-dashboard' }));
+    resolveRepositoryOneDetail?.(
+      json({ ...persistedSession, title: 'payments session', turns: [] }),
+    );
+
+    await waitFor(() => expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument());
+    expect(screen.queryByText('payments session')).not.toBeInTheDocument();
+  });
+
   it('restores persisted normalized events and submits a CSRF-protected turn', async () => {
     let turnCreated = false;
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {
