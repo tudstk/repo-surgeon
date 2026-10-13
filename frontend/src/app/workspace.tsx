@@ -64,6 +64,7 @@ export default function Workspace({
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const workspaceRequestGeneration = useRef(0);
+  const selectedRepositoryIdRef = useRef<string | null>(null);
 
   const selectedRepository = useMemo(
     () => repositories.find((repository) => repository.id === selectedRepositoryId) ?? null,
@@ -94,8 +95,22 @@ export default function Workspace({
     const controller = new AbortController();
     listOwnedRepositories(controller.signal)
       .then((owned) => {
+        const currentSelection = selectedRepositoryIdRef.current;
+        const nextSelection =
+          currentSelection && owned.some((repository) => repository.id === currentSelection)
+            ? currentSelection
+            : (owned[0]?.id ?? null);
+        if (nextSelection !== currentSelection) {
+          workspaceRequestGeneration.current += 1;
+          setSummary(null);
+          setSessions([]);
+          setSession(null);
+          setEvents([]);
+          setError(null);
+        }
+        selectedRepositoryIdRef.current = nextSelection;
         setRepositories(owned);
-        setSelectedRepositoryId((current) => current ?? owned[0]?.id ?? null);
+        setSelectedRepositoryId(nextSelection);
       })
       .catch(() => {
         if (!controller.signal.aborted) setError('Owned repositories could not be loaded.');
@@ -226,6 +241,7 @@ export default function Workspace({
                   onClick={() => {
                     if (repository.id === selectedRepositoryId) return;
                     workspaceRequestGeneration.current += 1;
+                    selectedRepositoryIdRef.current = repository.id;
                     setSelectedRepositoryId(repository.id);
                     setSummary(null);
                     setSessions([]);
