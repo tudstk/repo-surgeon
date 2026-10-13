@@ -591,6 +591,8 @@ async def test_slow_tool_is_cancelled_at_turn_deadline() -> None:
 
     assert started.is_set()
     assert result.stop_reason == "duration_limit"
+    assert result.events[0].status == "error"
+    assert result.events[0].error_code == "duration_limit"
 
 
 @pytest.mark.anyio

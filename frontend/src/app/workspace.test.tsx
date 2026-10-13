@@ -99,6 +99,38 @@ describe('authenticated workspace', () => {
     expect(screen.queryByText('payments-api read-only review')).not.toBeInTheDocument();
   });
 
+  it('retries workspace state loading after a repository-state failure', async () => {
+    let summaryAttempts = 0;
+    const fetchMock = vi.fn((input: string) => {
+      if (input === '/api/v1/repositories') {
+        return Promise.resolve(json([{ id: 'repository-1', name: 'payments-api' }]));
+      }
+      if (input === '/api/v1/repositories/repository-1/summary') {
+        summaryAttempts += 1;
+        return summaryAttempts === 1
+          ? Promise.reject(new Error('summary unavailable'))
+          : Promise.resolve(
+              json({ language: 'Python', file_count: 12, approximate_lines: 420 }),
+            );
+      }
+      if (input === '/api/v1/sessions?repository_id=repository-1') {
+        return Promise.resolve(json([]));
+      }
+      throw new Error(`Unexpected request: ${input}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Repository workspace state could not be loaded.',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(screen.getByText('Python')).toBeInTheDocument());
+    expect(summaryAttempts).toBe(2);
+  });
+
   it('restores persisted normalized events and submits a CSRF-protected turn', async () => {
     let turnCreated = false;
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {

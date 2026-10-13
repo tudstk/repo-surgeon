@@ -215,7 +215,7 @@ async def test_authenticated_owner_can_run_and_resume_one_read_only_turn(
         turn = await client.post(
             f"/api/v1/sessions/{product_session_id}/turns",
             headers=_auth_headers(fixture, csrf=True),
-            json={"message": "What does this repository contain?"},
+            json={"message": "Please inspect token=raw-secret password=hunter2"},
         )
         assert turn.status_code == 201
         run_id = turn.json()["run_id"]
@@ -229,7 +229,7 @@ async def test_authenticated_owner_can_run_and_resume_one_read_only_turn(
             {
                 "run_id": run_id,
                 "status": "completed",
-                "question": "What does this repository contain?",
+                "question": "Please inspect token=[REDACTED] password=[REDACTED]",
                 "answer": "I completed a bounded read-only inspection of the selected repository.",
                 "started_at": turn.json()["started_at"],
                 "completed_at": turn.json()["completed_at"],
@@ -275,6 +275,9 @@ async def test_authenticated_owner_can_run_and_resume_one_read_only_turn(
         assert await database.scalar(select(func.count()).select_from(AgentRunRecord)) == 1
         assert await database.scalar(select(func.count()).select_from(ToolCallRecord)) == 1
         assert await database.scalar(select(func.count()).select_from(RunEventRecord)) == 7
+        run = (await database.execute(select(AgentRunRecord))).scalar_one()
+        assert run.question == "Please inspect token=[REDACTED] password=[REDACTED]"
+        assert "raw-secret" not in json.dumps(run.__dict__)
         tool_call = (await database.execute(select(ToolCallRecord))).scalar_one()
         assert tool_call.validated_arguments == {"directory": ".", "max_results": 50}
         assert str(fixture.repository_root) not in json.dumps(tool_call.result_summary)

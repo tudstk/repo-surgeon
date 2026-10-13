@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -30,6 +32,43 @@ from repo_surgeon.infrastructure.run_models import (
 
 def _aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+_SENSITIVE_KEY = re.compile(r"(?:api[_-]?key|authorization|credential|password|passwd|secret|token)", re.I)
+_SENSITIVE_VALUE = re.compile(
+    r"(?i)(\b(?:api[_-]?key|authorization|credential|password|passwd|secret|token)\b\s*[:=]\s*)([^\s,;}'\"]+)"
+)
+_BEARER_VALUE = re.compile(r"(?i)(\bbearer\s+)([^\s,;}'\"]+)")
+_PEM_VALUE = re.compile(
+    r"-----BEGIN ([^-]+)-----.+?-----END \1-----", re.DOTALL
+)
+
+
+def _redact_text(value: str) -> str:
+    value = _PEM_VALUE.sub("[REDACTED PEM]", value)
+    value = _SENSITIVE_VALUE.sub(r"\1[REDACTED]", value)
+    return _BEARER_VALUE.sub(r"\1[REDACTED]", value)
+
+
+def _redact_value(value: object) -> object:
+    if isinstance(value, str):
+        return _redact_text(value)
+    if isinstance(value, dict):
+        return {
+            str(key): "[REDACTED]"
+            if _SENSITIVE_KEY.search(str(key))
+            else _redact_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_redact_value(item) for item in value]
+    return value
+
+
+def _redact_mapping(value: dict[str, object]) -> dict[str, object]:
+    return cast(dict[str, object], _redact_value(value))
 
 
 def _session(record: ConversationSessionRecord) -> ConversationSession:
@@ -188,7 +227,7 @@ class SqlAlchemyAgentSessionStore:
             session_id=session_id,
             correlation_id=uuid4(),
             status=AgentRunStatus.RUNNING.value,
-            question=question,
+            question=_redact_text(question),
             answer="",
             stop_reason=None,
             model_calls=0,
@@ -235,7 +274,8 @@ class SqlAlchemyAgentSessionStore:
         sequence = 2
         for tool_index, tool_event in enumerate(result.events, start=1):
             tool_call_id = uuid4()
-            summary = _result_summary(tool_event)
+            summary = _redact_mapping(_result_summary(tool_event))
+            arguments = _redact_mapping(tool_event.arguments)
             self._database.add(
                 ToolCallRecord(
                     id=tool_call_id,
@@ -244,7 +284,7 @@ class SqlAlchemyAgentSessionStore:
                     provider_call_id=tool_event.call_id,
                     sequence=tool_index,
                     tool_name=tool_event.name,
-                    validated_arguments=tool_event.arguments,
+                    validated_arguments=arguments,
                     result_summary=summary,
                     status=tool_event.status,
                     duration_ms=tool_event.duration_ms,
@@ -260,7 +300,7 @@ class SqlAlchemyAgentSessionStore:
             for event_type, data in (
                 (
                     RunEventType.TOOL_REQUESTED,
-                    {**common_data, "arguments": tool_event.arguments},
+                    {**common_data, "arguments": arguments},
                 ),
                 (RunEventType.TOOL_STARTED, common_data),
                 (
@@ -288,7 +328,7 @@ class SqlAlchemyAgentSessionStore:
                 agent_run_id=record.id,
                 sequence=sequence,
                 event_type=RunEventType.ANSWER_COMPLETED.value,
-                event_data={"content": result.answer},
+                event_data={"content": _redact_text(result.answer)},
                 occurred_at=now,
             )
         )
@@ -315,7 +355,7 @@ class SqlAlchemyAgentSessionStore:
             )
         )
         record.status = status.value
-        record.answer = result.answer
+        record.answer = _redact_text(result.answer)
         record.stop_reason = result.stop_reason
         record.model_calls = result.model_calls
         record.tool_calls = result.tool_calls

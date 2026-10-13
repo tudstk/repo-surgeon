@@ -502,7 +502,11 @@ async def run_turn(
                 except asyncio.CancelledError:
                     raise
                 except TimeoutError:
-                    return limited("duration_limit")
+                    result = ToolErrorOutput(
+                        code="duration_limit",
+                        detail="Tool execution exceeded the turn duration limit.",
+                    )
+                    status = "error"
             payload = _serialized(result)
             if len(payload) > remaining_bytes:
                 result = returned_bytes_limit_error()

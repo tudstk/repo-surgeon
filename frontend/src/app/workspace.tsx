@@ -144,7 +144,7 @@ export default function Workspace({
         if (!controller.signal.aborted) setError('Repository workspace state could not be loaded.');
       });
     return () => controller.abort();
-  }, [restoreSession, selectedRepositoryId]);
+  }, [attempt, restoreSession, selectedRepositoryId]);
 
   const handleStartSession = async () => {
     if (!selectedRepository) return;
