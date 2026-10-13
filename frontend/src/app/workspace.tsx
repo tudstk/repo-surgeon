@@ -224,6 +224,7 @@ export default function Workspace({
                   className={`session-row ${repository.id === selectedRepositoryId ? 'session-active' : ''}`}
                   key={repository.id}
                   onClick={() => {
+                    if (repository.id === selectedRepositoryId) return;
                     workspaceRequestGeneration.current += 1;
                     setSelectedRepositoryId(repository.id);
                     setSummary(null);
