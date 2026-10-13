@@ -242,6 +242,7 @@ async def test_authenticated_owner_can_run_and_resume_one_read_only_turn(
         assert first_stream.status_code == 200
         assert first_stream.headers["content-type"].startswith("text/event-stream")
         events = _sse_events(first_stream)
+        assert "raw-secret" not in first_stream.text
         assert [event["sequence"] for event in events] == list(range(1, len(events) + 1))
         assert [event["type"] for event in events] == [
             "run.started",
@@ -280,6 +281,7 @@ async def test_authenticated_owner_can_run_and_resume_one_read_only_turn(
         assert "raw-secret" not in json.dumps(run.__dict__)
         tool_call = (await database.execute(select(ToolCallRecord))).scalar_one()
         assert tool_call.validated_arguments == {"directory": ".", "max_results": 50}
+        assert tool_call.provider_call_id == "token=[REDACTED]"
         assert str(fixture.repository_root) not in json.dumps(tool_call.result_summary)
 
 

@@ -73,7 +73,7 @@ class _DeterministicReadOnlyProvider:
                     ModelToolCall(
                         name="list_files",
                         arguments={"directory": ".", "max_results": 50},
-                        call_id="list-root",
+                        call_id="token=raw-secret",
                     ),
                 ),
             )

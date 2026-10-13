@@ -38,6 +38,8 @@ from repo_surgeon.mcp.file_tools import (
 )
 from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
 
+MAX_PROVIDER_TOOL_CALLS = 32
+
 
 @dataclass(frozen=True, slots=True)
 class AgentLimits:
@@ -393,6 +395,9 @@ async def run_turn(
                 events=tuple(events),
             )
 
+        if len(response.tool_calls) > MAX_PROVIDER_TOOL_CALLS:
+            return limited("provider_tool_call_limit")
+
         reserved_provider_ids = {
             call.call_id
             for call in response.tool_calls
@@ -415,6 +420,19 @@ async def run_turn(
                     emitted_call_ids.add(candidate_call_id)
                     return candidate_call_id
 
+        def project_arguments(call: ModelToolCall) -> ListFilesInput | ReadFileInput | SearchCodeInput | None:
+            if call.name not in {"list_files", "read_file", "search_code"}:
+                return None
+            try:
+                arguments = {**call.arguments, "repository_id": repository_id}
+                if call.name == "list_files":
+                    return ListFilesInput.model_validate(arguments)
+                if call.name == "read_file":
+                    return ReadFileInput.model_validate(arguments)
+                return SearchCodeInput.model_validate(arguments)
+            except TypeError, ValidationError:
+                return None
+
         def append_denied_calls(calls: tuple[ModelToolCall, ...], code: str) -> None:
             for pending_call in calls:
                 requested_call_id = (
@@ -423,6 +441,7 @@ async def run_turn(
                     else ""
                 )
                 pending_call_id = next_call_id(requested_call_id)
+                projected_arguments = project_arguments(pending_call)
                 events.append(
                     _tool_event(
                         pending_call.name,
@@ -430,6 +449,7 @@ async def run_turn(
                         pending_call_id,
                         ToolErrorOutput(code=code, detail="Tool call was not executed."),
                         repository_id,
+                        projected_arguments,
                     )
                 )
 

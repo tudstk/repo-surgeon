@@ -131,6 +131,40 @@ describe('authenticated workspace', () => {
     expect(summaryAttempts).toBe(2);
   });
 
+  it('clears private workspace state when repository discovery fails', async () => {
+    let discoveryAttempts = 0;
+    const fetchMock = vi.fn((input: string) => {
+      if (input === '/api/v1/repositories') {
+        discoveryAttempts += 1;
+        return discoveryAttempts === 1
+          ? Promise.resolve(json([{ id: 'repository-1', name: 'payments-api' }]))
+          : Promise.reject(new Error('session expired'));
+      }
+      if (input === '/api/v1/repositories/repository-1/summary') {
+        return Promise.resolve(json({ language: 'Python', file_count: 1, approximate_lines: 1 }));
+      }
+      if (input === '/api/v1/sessions?repository_id=repository-1') {
+        return Promise.resolve(json([{ ...persistedSession, turns: [] }]));
+      }
+      if (input === '/api/v1/sessions/session-1') {
+        return Promise.resolve(json({ ...persistedSession, turns: [] }));
+      }
+      throw new Error(`Unexpected request: ${input}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
+
+    expect(await screen.findByText('Session ready')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(
+      'Owned repositories could not be loaded.',
+    ));
+    expect(screen.queryByText('Session ready')).not.toBeInTheDocument();
+    expect(screen.getByText('Select an owned repository.')).toBeInTheDocument();
+  });
+
   it('restores persisted normalized events and submits a CSRF-protected turn', async () => {
     let turnCreated = false;
     const fetchMock = vi.fn((input: string, init?: RequestInit) => {

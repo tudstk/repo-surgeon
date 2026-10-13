@@ -113,7 +113,17 @@ export default function Workspace({
         setSelectedRepositoryId(nextSelection);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setError('Owned repositories could not be loaded.');
+        if (!controller.signal.aborted) {
+          workspaceRequestGeneration.current += 1;
+          selectedRepositoryIdRef.current = null;
+          setRepositories([]);
+          setSelectedRepositoryId(null);
+          setSummary(null);
+          setSessions([]);
+          setSession(null);
+          setEvents([]);
+          setError('Owned repositories could not be loaded.');
+        }
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
