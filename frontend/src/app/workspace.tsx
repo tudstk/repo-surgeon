@@ -268,7 +268,11 @@ export default function Workspace({
                   aria-pressed={item.id === session?.id}
                   className={`session-row ${item.id === session?.id ? 'session-active' : ''}`}
                   key={item.id}
-                  onClick={() => void restoreSession(item.id)}
+                  onClick={() => {
+                    setSession(null);
+                    setEvents([]);
+                    void restoreSession(item.id);
+                  }}
                   type="button"
                 >
                   <span aria-hidden="true">◌</span>
