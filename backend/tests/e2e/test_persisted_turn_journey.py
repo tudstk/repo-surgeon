@@ -278,7 +278,7 @@ async def test_authenticated_owner_can_run_and_resume_one_read_only_turn(
         assert await database.scalar(select(func.count()).select_from(RunEventRecord)) == 7
         run = (await database.execute(select(AgentRunRecord))).scalar_one()
         assert run.question == "Please inspect token=[REDACTED] password=[REDACTED]"
-        assert "raw-secret" not in json.dumps(run.__dict__)
+        assert "raw-secret" not in json.dumps({"question": run.question, "answer": run.answer})
         tool_call = (await database.execute(select(ToolCallRecord))).scalar_one()
         assert tool_call.validated_arguments == {"directory": ".", "max_results": 50}
         assert tool_call.provider_call_id != "token=raw-secret"

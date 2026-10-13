@@ -235,7 +235,7 @@ async def test_unprocessed_provider_calls_are_recorded_as_denied() -> None:
     assert [event.status for event in result.events] == ["success", "denied"]
     assert result.events[1].error_code == "tool_call_limit"
     assert result.events[1].call_id == "second"
-    assert result.events[1].arguments == {"path": "README.md"}
+    assert result.events[1].arguments == {"path": "README.md", "start_line": 1}
 
 
 @pytest.mark.anyio
@@ -577,7 +577,8 @@ async def test_repeat_limit_uses_normalized_application_arguments(
     assert result.status == "limit_reached"
     assert result.stop_reason == "repeated_tool_call_limit"
     assert result.tool_calls == 1
-    assert len(result.events) == 1
+    assert [event.status for event in result.events] == ["success", "denied"]
+    assert result.events[1].error_code == "repeated_tool_call_limit"
     assert dispatches == 1
 
 

@@ -55,8 +55,8 @@ describe('authenticated workspace', () => {
 
     render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
 
-    await screen.findByRole('button', { name: 'web-dashboard' });
-    fireEvent.click(screen.getByRole('button', { name: 'web-dashboard' }));
+    await screen.findByRole('option', { name: 'web-dashboard' });
+    fireEvent.click(screen.getByRole('option', { name: 'web-dashboard' }));
     resolveRepositoryOneDetail?.(
       json({ ...persistedSession, title: 'payments session', turns: [] }),
     );
@@ -92,7 +92,7 @@ describe('authenticated workspace', () => {
 
     await screen.findByRole('button', { name: 'Start read-only session' });
     fireEvent.click(screen.getByRole('button', { name: 'Start read-only session' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'web-dashboard' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'web-dashboard' }));
     resolveCreateSession?.(json({ ...persistedSession, repository_id: 'repository-1' }));
 
     await waitFor(() => expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument());
@@ -137,8 +137,8 @@ describe('authenticated workspace', () => {
       if (input === '/api/v1/repositories') {
         discoveryAttempts += 1;
         return discoveryAttempts === 1
-          ? Promise.resolve(json([{ id: 'repository-1', name: 'payments-api' }]))
-          : Promise.reject(new Error('session expired'));
+          ? Promise.reject(new Error('session expired'))
+          : Promise.resolve(json([{ id: 'repository-1', name: 'payments-api' }]));
       }
       if (input === '/api/v1/repositories/repository-1/summary') {
         return Promise.resolve(json({ language: 'Python', file_count: 1, approximate_lines: 1 }));
@@ -155,14 +155,13 @@ describe('authenticated workspace', () => {
 
     render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
 
-    expect(await screen.findByText('Session ready')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Owned repositories could not be loaded.',
+    );
+    expect(screen.getByText('Select an owned repository.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(
-      'Owned repositories could not be loaded.',
-    ));
-    expect(screen.queryByText('Session ready')).not.toBeInTheDocument();
-    expect(screen.getByText('Select an owned repository.')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument());
   });
 
   it('restores persisted normalized events and submits a CSRF-protected turn', async () => {
