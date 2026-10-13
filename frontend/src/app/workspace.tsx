@@ -147,7 +147,9 @@ export default function Workspace({
       setSession({ ...created, turns: [] });
       setEvents([]);
     } catch {
-      setError('A read-only product session could not be started.');
+      if (generation === workspaceRequestGeneration.current) {
+        setError('A read-only product session could not be started.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -171,7 +173,9 @@ export default function Workspace({
       setSession(detail);
       setEvents(persistedEvents);
     } catch {
-      setError('The bounded read-only turn could not be completed.');
+      if (generation === workspaceRequestGeneration.current) {
+        setError('The bounded read-only turn could not be completed.');
+      }
     } finally {
       setSubmitting(false);
     }
