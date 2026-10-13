@@ -281,7 +281,8 @@ async def test_authenticated_owner_can_run_and_resume_one_read_only_turn(
         assert "raw-secret" not in json.dumps(run.__dict__)
         tool_call = (await database.execute(select(ToolCallRecord))).scalar_one()
         assert tool_call.validated_arguments == {"directory": ".", "max_results": 50}
-        assert tool_call.provider_call_id == "token=[REDACTED]"
+        assert tool_call.provider_call_id != "token=raw-secret"
+        UUID(tool_call.provider_call_id)
         assert str(fixture.repository_root) not in json.dumps(tool_call.result_summary)
 
 

@@ -66,6 +66,17 @@ export default function Workspace({
   const workspaceRequestGeneration = useRef(0);
   const selectedRepositoryIdRef = useRef<string | null>(null);
 
+  const clearPrivateWorkspace = useCallback(() => {
+    workspaceRequestGeneration.current += 1;
+    selectedRepositoryIdRef.current = null;
+    setRepositories([]);
+    setSelectedRepositoryId(null);
+    setSummary(null);
+    setSessions([]);
+    setSession(null);
+    setEvents([]);
+  }, []);
+
   const selectedRepository = useMemo(
     () => repositories.find((repository) => repository.id === selectedRepositoryId) ?? null,
     [repositories, selectedRepositoryId],
@@ -114,14 +125,7 @@ export default function Workspace({
       })
       .catch(() => {
         if (!controller.signal.aborted) {
-          workspaceRequestGeneration.current += 1;
-          selectedRepositoryIdRef.current = null;
-          setRepositories([]);
-          setSelectedRepositoryId(null);
-          setSummary(null);
-          setSessions([]);
-          setSession(null);
-          setEvents([]);
+          clearPrivateWorkspace();
           setError('Owned repositories could not be loaded.');
         }
       })
@@ -151,10 +155,13 @@ export default function Workspace({
         }
       })
       .catch(() => {
-        if (!controller.signal.aborted) setError('Repository workspace state could not be loaded.');
+        if (!controller.signal.aborted && generation === workspaceRequestGeneration.current) {
+          clearPrivateWorkspace();
+          setError('Repository workspace state could not be loaded.');
+        }
       });
     return () => controller.abort();
-  }, [attempt, restoreSession, selectedRepositoryId]);
+  }, [attempt, clearPrivateWorkspace, restoreSession, selectedRepositoryId]);
 
   const handleStartSession = async () => {
     if (!selectedRepository) return;
@@ -173,6 +180,7 @@ export default function Workspace({
       setEvents([]);
     } catch {
       if (generation === workspaceRequestGeneration.current) {
+        clearPrivateWorkspace();
         setError('A read-only product session could not be started.');
       }
     } finally {
@@ -199,6 +207,7 @@ export default function Workspace({
       setEvents(persistedEvents);
     } catch {
       if (generation === workspaceRequestGeneration.current) {
+        clearPrivateWorkspace();
         setError('The bounded read-only turn could not be completed.');
       }
     } finally {
@@ -279,9 +288,15 @@ export default function Workspace({
                   className={`session-row ${item.id === session?.id ? 'session-active' : ''}`}
                   key={item.id}
                   onClick={() => {
+                    const generation = workspaceRequestGeneration.current + 1;
                     setSession(null);
                     setEvents([]);
-                    void restoreSession(item.id);
+                    void restoreSession(item.id).catch(() => {
+                      if (generation === workspaceRequestGeneration.current) {
+                        clearPrivateWorkspace();
+                        setError('Repository workspace state could not be loaded.');
+                      }
+                    });
                   }}
                   type="button"
                 >

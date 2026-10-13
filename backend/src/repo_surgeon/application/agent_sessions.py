@@ -51,6 +51,8 @@ class AgentSessionStore(Protocol):
 
     async def fail_run(self, run_id: UUID, error_code: str, now: datetime) -> None: ...
 
+    async def rollback(self) -> None: ...
+
     async def get_run(self, run_id: UUID) -> AgentRun | None: ...
 
     async def list_events(
@@ -97,5 +99,12 @@ class RunPersistedReadOnlyTurn:
             )
             return await self._store.complete_run(run.id, result, now)
         except Exception as error:
-            await self._store.fail_run(run.id, "turn_execution_failed", now)
+            try:
+                await self._store.rollback()
+            except Exception:
+                pass
+            try:
+                await self._store.fail_run(run.id, "turn_execution_failed", now)
+            except Exception:
+                pass
             raise TurnExecutionError from error

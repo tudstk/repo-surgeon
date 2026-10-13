@@ -71,10 +71,6 @@ def _redact_mapping(value: dict[str, object]) -> dict[str, object]:
     return cast(dict[str, object], _redact_value(value))
 
 
-def _redact_provider_call_id(value: str) -> str:
-    return _redact_text(value)
-
-
 def _session(record: ConversationSessionRecord) -> ConversationSession:
     return ConversationSession(
         id=record.id,
@@ -143,6 +139,9 @@ class SqlAlchemyAgentSessionStore:
     def __init__(self, database: AsyncSession, owner_user_id: UUID) -> None:
         self._database = database
         self._owner_user_id = owner_user_id
+
+    async def rollback(self) -> None:
+        await self._database.rollback()
 
     async def create_session(
         self, repository_id: UUID, title: str, now: datetime
@@ -280,7 +279,7 @@ class SqlAlchemyAgentSessionStore:
             tool_call_id = uuid4()
             summary = _redact_mapping(_result_summary(tool_event))
             arguments = _redact_mapping(tool_event.arguments)
-            provider_call_id = _redact_provider_call_id(tool_event.call_id)
+            provider_call_id = str(uuid4())
             self._database.add(
                 ToolCallRecord(
                     id=tool_call_id,
