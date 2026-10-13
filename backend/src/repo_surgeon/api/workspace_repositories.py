@@ -52,27 +52,6 @@ async def list_owned_repositories(
 
 
 @router.get(
-    "/{repository_id}",
-    response_model=WorkspaceRepositoryResponse,
-    responses={404: {"model": ProblemDetail}},
-)
-async def get_owned_repository(
-    repository_id: UUID,
-    response: Response,
-    principal: CurrentPrincipal,
-    database: DatabaseSession,
-) -> WorkspaceRepositoryResponse:
-    """Return one safe repository identity through an owner-scoped lookup."""
-    response.headers["Cache-Control"] = "no-store"
-    repository = await GetRepository(
-        SqlAlchemyRepositoryStore(database, principal.user_id)
-    ).execute(repository_id)
-    if repository is None:
-        raise _not_found()
-    return WorkspaceRepositoryResponse(id=repository.id, name=Path(repository.canonical_root).name)
-
-
-@router.get(
     "/{repository_id}/summary",
     response_model=RepositorySummaryResponse,
     responses={404: {"model": ProblemDetail}},

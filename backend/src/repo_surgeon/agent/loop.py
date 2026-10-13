@@ -400,10 +400,45 @@ async def run_turn(
         }
         seen_provider_ids: set[str] = set()
         emitted_call_ids: set[str] = set()
-        for call in response.tool_calls:
+        def next_call_id(requested_call_id: str) -> str:
+            nonlocal generated_call_id
+            if requested_call_id and requested_call_id not in emitted_call_ids:
+                emitted_call_ids.add(requested_call_id)
+                return requested_call_id
+            while True:
+                generated_call_id += 1
+                candidate_call_id = f"generated-{generated_call_id}"
+                if (
+                    candidate_call_id not in reserved_provider_ids
+                    and candidate_call_id not in emitted_call_ids
+                ):
+                    emitted_call_ids.add(candidate_call_id)
+                    return candidate_call_id
+
+        def append_denied_calls(calls: tuple[ModelToolCall, ...], code: str) -> None:
+            for pending_call in calls:
+                requested_call_id = (
+                    pending_call.call_id
+                    if isinstance(pending_call.call_id, str) and len(pending_call.call_id) <= 256
+                    else ""
+                )
+                pending_call_id = next_call_id(requested_call_id)
+                events.append(
+                    _tool_event(
+                        pending_call.name,
+                        "denied",
+                        pending_call_id,
+                        ToolErrorOutput(code=code, detail="Tool call was not executed."),
+                        repository_id,
+                    )
+                )
+
+        for call_index, call in enumerate(response.tool_calls):
             if clock() - started >= effective_limits.max_duration_seconds:
+                append_denied_calls(response.tool_calls[call_index:], "duration_limit")
                 return limited("duration_limit")
             if tool_calls >= effective_limits.max_tool_calls:
+                append_denied_calls(response.tool_calls[call_index:], "tool_call_limit")
                 return limited("tool_call_limit")
             serialized_arguments = _json_arguments(call.arguments)
             validated_arguments: ListFilesInput | ReadFileInput | SearchCodeInput | None = None
@@ -429,6 +464,7 @@ async def run_turn(
                 key = _denied_call_key(call.name, serialized_arguments)
             repeated[key] += 1
             if repeated[key] > effective_limits.max_repeated_tool_calls:
+                append_denied_calls(response.tool_calls[call_index:], "repeated_tool_call_limit")
                 return limited("repeated_tool_call_limit")
             tool_calls += 1
             valid_provider_id = isinstance(call.call_id, str) and len(call.call_id) <= 256
@@ -436,20 +472,12 @@ async def run_turn(
             duplicate_call_id = bool(requested_call_id) and requested_call_id in seen_provider_ids
             if requested_call_id:
                 seen_provider_ids.add(requested_call_id)
-            call_id = requested_call_id if requested_call_id and not duplicate_call_id else ""
-            while not call_id:
-                generated_call_id += 1
-                candidate_call_id = f"generated-{generated_call_id}"
-                if (
-                    candidate_call_id not in reserved_provider_ids
-                    and candidate_call_id not in emitted_call_ids
-                ):
-                    call_id = candidate_call_id
-            emitted_call_ids.add(call_id)
+            call_id = next_call_id(requested_call_id if not duplicate_call_id else "")
             result: object
             status: Literal["success", "error", "denied"]
             remaining_bytes = effective_limits.max_returned_bytes - returned_bytes
             if remaining_bytes < MIN_TOOL_RESULT_BYTES:
+                append_denied_calls(response.tool_calls[call_index:], "returned_bytes_limit")
                 return limited("returned_bytes_limit")
             if not valid_provider_id:
                 result = ToolErrorOutput(

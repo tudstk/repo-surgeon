@@ -58,11 +58,16 @@ class FakeModelProvider:
         return response
 
 
-def deterministic_read_only_provider() -> FakeModelProvider:
-    """Create the credential-free provider used by the Stage 0 product journey."""
-    return FakeModelProvider(
-        (
-            ModelResponse(
+class _DeterministicReadOnlyProvider:
+    def __init__(self) -> None:
+        self.requests: list[ModelRequest] = []
+        self._inspected = False
+
+    async def complete(self, request: ModelRequest) -> ModelResponse:
+        self.requests.append(request)
+        if not self._inspected:
+            self._inspected = True
+            return ModelResponse(
                 text="I am inspecting the selected repository with bounded read-only tools.",
                 tool_calls=(
                     ModelToolCall(
@@ -71,9 +76,20 @@ def deterministic_read_only_provider() -> FakeModelProvider:
                         call_id="list-root",
                     ),
                 ),
-            ),
-            ModelResponse(
-                text="I completed a bounded read-only inspection of the selected repository."
-            ),
+            )
+        tool_result = request.messages[-1].get("content")
+        if isinstance(tool_result, dict) and tool_result.get("code") in {
+            "repository_not_found",
+            "repository_unavailable",
+        }:
+            return ModelResponse(
+                text="The selected repository could not be inspected because it is unavailable."
+            )
+        return ModelResponse(
+            text="I completed a bounded read-only inspection of the selected repository."
         )
-    )
+
+
+def deterministic_read_only_provider() -> _DeterministicReadOnlyProvider:
+    """Create the credential-free provider used by the Stage 0 product journey."""
+    return _DeterministicReadOnlyProvider()

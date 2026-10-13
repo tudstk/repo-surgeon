@@ -22,6 +22,7 @@ from repo_surgeon.agent import (
     ModelToolCall,
     run_turn,
 )
+from repo_surgeon.agent.provider import deterministic_read_only_provider
 from repo_surgeon.application.repository_files import MAX_FILE_COUNT, ConfinedRepositoryFiles
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.mcp.file_tools import (
@@ -208,6 +209,50 @@ async def test_hard_limits_return_a_partial_result(limits: AgentLimits, reason: 
     assert result.status == "limit_reached"
     assert result.stop_reason == reason
     assert result.answer == "Partial"
+
+
+@pytest.mark.anyio
+async def test_unprocessed_provider_calls_are_recorded_as_denied() -> None:
+    tools, repository_id = tool_client()
+    provider = FakeModelProvider(
+        [
+            ModelResponse(
+                "Partial",
+                (
+                    ModelToolCall("list_files", {}, "first"),
+                    ModelToolCall("read_file", {"path": "README.md"}, "second"),
+                ),
+            )
+        ]
+    )
+
+    result = await run_turn(
+        provider, tools, repository_id, "Summarize", AgentLimits(max_tool_calls=1)
+    )
+
+    assert result.stop_reason == "tool_call_limit"
+    assert [event.status for event in result.events] == ["success", "denied"]
+    assert result.events[1].error_code == "tool_call_limit"
+    assert result.events[1].call_id == "second"
+
+
+@pytest.mark.anyio
+async def test_deterministic_provider_reports_repository_read_failure() -> None:
+    tools, repository_id = tool_client()
+
+    async def unavailable_list(
+        arguments: ListFilesInput, max_bytes: int | None = None
+    ) -> ToolErrorOutput:
+        return ToolErrorOutput(code="repository_unavailable", detail="unavailable")
+
+    tools.list_files = unavailable_list  # type: ignore[method-assign]
+    result = await run_turn(
+        deterministic_read_only_provider(), tools, repository_id, "Summarize"
+    )
+
+    assert result.status == "complete"
+    assert "could not be inspected" in result.answer
+    assert "completed a bounded" not in result.answer
 
 
 @pytest.mark.anyio
