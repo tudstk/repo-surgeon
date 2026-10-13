@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -99,12 +100,8 @@ class RunPersistedReadOnlyTurn:
             )
             return await self._store.complete_run(run.id, result, now)
         except Exception as error:
-            try:
+            with suppress(Exception):
                 await self._store.rollback()
-            except Exception:
-                pass
-            try:
+            with suppress(Exception):
                 await self._store.fail_run(run.id, "turn_execution_failed", now)
-            except Exception:
-                pass
             raise TurnExecutionError from error

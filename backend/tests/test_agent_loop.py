@@ -242,7 +242,12 @@ async def test_unprocessed_provider_calls_are_recorded_as_denied() -> None:
 async def test_oversized_provider_batch_is_rejected_before_trace_allocation() -> None:
     tools, repository_id = tool_client()
     provider = FakeModelProvider(
-        [ModelResponse("Partial", tuple(ModelToolCall("list_files", {}) for _ in range(MAX_PROVIDER_TOOL_CALLS + 1)))]
+        [
+            ModelResponse(
+                "Partial",
+                tuple(ModelToolCall("list_files", {}) for _ in range(MAX_PROVIDER_TOOL_CALLS + 1)),
+            )
+        ]
     )
 
     result = await run_turn(provider, tools, repository_id, "Summarize")
@@ -261,9 +266,7 @@ async def test_deterministic_provider_reports_repository_read_failure() -> None:
         return ToolErrorOutput(code="repository_unavailable", detail="unavailable")
 
     tools.list_files = unavailable_list  # type: ignore[method-assign]
-    result = await run_turn(
-        deterministic_read_only_provider(), tools, repository_id, "Summarize"
-    )
+    result = await run_turn(deterministic_read_only_provider(), tools, repository_id, "Summarize")
 
     assert result.status == "complete"
     assert "could not be inspected" in result.answer

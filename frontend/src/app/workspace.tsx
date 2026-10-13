@@ -133,7 +133,7 @@ export default function Workspace({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [attempt]);
+  }, [attempt, clearPrivateWorkspace]);
 
   useEffect(() => {
     if (!selectedRepositoryId) return;
@@ -149,7 +149,10 @@ export default function Workspace({
         setSessions(availableSessions);
         if (availableSessions[0]) {
           await restoreSession(availableSessions[0].id, controller.signal, generation);
-        } else if (!controller.signal.aborted && generation === workspaceRequestGeneration.current) {
+        } else if (
+          !controller.signal.aborted &&
+          generation === workspaceRequestGeneration.current
+        ) {
           setSession(null);
           setEvents([]);
         }

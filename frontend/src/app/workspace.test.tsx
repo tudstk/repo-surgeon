@@ -61,7 +61,9 @@ describe('authenticated workspace', () => {
       json({ ...persistedSession, title: 'payments session', turns: [] }),
     );
 
-    await waitFor(() => expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument(),
+    );
     expect(screen.queryByText('payments session')).not.toBeInTheDocument();
   });
 
@@ -95,7 +97,9 @@ describe('authenticated workspace', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'web-dashboard' }));
     resolveCreateSession?.(json({ ...persistedSession, repository_id: 'repository-1' }));
 
-    await waitFor(() => expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument(),
+    );
     expect(screen.queryByText('payments-api read-only review')).not.toBeInTheDocument();
   });
 
@@ -109,9 +113,7 @@ describe('authenticated workspace', () => {
         summaryAttempts += 1;
         return summaryAttempts === 1
           ? Promise.reject(new Error('summary unavailable'))
-          : Promise.resolve(
-              json({ language: 'Python', file_count: 12, approximate_lines: 420 }),
-            );
+          : Promise.resolve(json({ language: 'Python', file_count: 12, approximate_lines: 420 }));
       }
       if (input === '/api/v1/sessions?repository_id=repository-1') {
         return Promise.resolve(json([]));
@@ -161,7 +163,9 @@ describe('authenticated workspace', () => {
     expect(screen.getByText('Select an owned repository.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
-    await waitFor(() => expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument(),
+    );
   });
 
   it('restores persisted normalized events and submits a CSRF-protected turn', async () => {

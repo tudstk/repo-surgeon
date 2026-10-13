@@ -34,14 +34,14 @@ def _aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
-_SENSITIVE_KEY = re.compile(r"(?:api[_-]?key|authorization|credential|password|passwd|secret|token)", re.I)
+_SENSITIVE_KEY = re.compile(
+    r"(?:api[_-]?key|authorization|credential|password|passwd|secret|token)", re.I
+)
 _SENSITIVE_VALUE = re.compile(
     r"(?i)(\b(?:api[_-]?key|authorization|credential|password|passwd|secret|token)\b\s*[:=]\s*)([^\s,;}'\"]+)"
 )
 _BEARER_VALUE = re.compile(r"(?i)(\bbearer\s+)([^\s,;}'\"]+)")
-_PEM_VALUE = re.compile(
-    r"-----BEGIN ([^-]+)-----.+?-----END \1-----", re.DOTALL
-)
+_PEM_VALUE = re.compile(r"-----BEGIN ([^-]+)-----.+?-----END \1-----", re.DOTALL)
 
 
 def _redact_text(value: str) -> str:
@@ -55,9 +55,7 @@ def _redact_value(value: object) -> object:
         return _redact_text(value)
     if isinstance(value, dict):
         return {
-            str(key): "[REDACTED]"
-            if _SENSITIVE_KEY.search(str(key))
-            else _redact_value(item)
+            str(key): "[REDACTED]" if _SENSITIVE_KEY.search(str(key)) else _redact_value(item)
             for key, item in value.items()
         }
     if isinstance(value, list):

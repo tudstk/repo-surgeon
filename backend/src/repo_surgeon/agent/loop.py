@@ -21,6 +21,7 @@ from repo_surgeon.agent.provider import (
     ModelProvider,
     ModelRequest,
     ModelResponse,
+    ModelToolCall,
 )
 from repo_surgeon.application.repository_files import (
     MAX_LINE_COUNT,
@@ -405,22 +406,27 @@ async def run_turn(
         }
         seen_provider_ids: set[str] = set()
         emitted_call_ids: set[str] = set()
-        def next_call_id(requested_call_id: str) -> str:
+
+        def next_call_id(
+            requested_call_id: str,
+            *,
+            reserved_ids: set[str] = reserved_provider_ids,
+            emitted_ids: set[str] = emitted_call_ids,
+        ) -> str:
             nonlocal generated_call_id
-            if requested_call_id and requested_call_id not in emitted_call_ids:
-                emitted_call_ids.add(requested_call_id)
+            if requested_call_id and requested_call_id not in emitted_ids:
+                emitted_ids.add(requested_call_id)
                 return requested_call_id
             while True:
                 generated_call_id += 1
                 candidate_call_id = f"generated-{generated_call_id}"
-                if (
-                    candidate_call_id not in reserved_provider_ids
-                    and candidate_call_id not in emitted_call_ids
-                ):
-                    emitted_call_ids.add(candidate_call_id)
+                if candidate_call_id not in reserved_ids and candidate_call_id not in emitted_ids:
+                    emitted_ids.add(candidate_call_id)
                     return candidate_call_id
 
-        def project_arguments(call: ModelToolCall) -> ListFilesInput | ReadFileInput | SearchCodeInput | None:
+        def project_arguments(
+            call: ModelToolCall,
+        ) -> ListFilesInput | ReadFileInput | SearchCodeInput | None:
             if call.name not in {"list_files", "read_file", "search_code"}:
                 return None
             try:

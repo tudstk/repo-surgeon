@@ -10,7 +10,10 @@ Agent output and tool activity are long-running, and browser connections can dro
 
 Persist normalized application events before publishing them over SSE. Each event has a stable event identifier, run identifier, monotonically increasing sequence number per run, type, timestamp, and structured data. Reconnection uses `Last-Event-ID` to resume committed events without duplication. The stream sends heartbeats for intermediary timeouts and propagates cancellation to active work where safe.
 
-The later implementation will define storage schema, heartbeat interval, retention duration, and client retry policy. This ADR only fixes the semantic contract.
+The concrete Stage 0 storage schema and resume implementation are defined by
+[ADR 0011](0011-persisted-agent-turns.md). Heartbeat interval, retention duration,
+and client retry policy remain implementation details for the streamed product
+surface. This ADR fixes the semantic contract.
 
 ## Alternatives considered
 
