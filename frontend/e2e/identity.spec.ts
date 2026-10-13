@@ -7,7 +7,7 @@ const session = {
     github_avatar_url: 'https://avatars.example/ada.png',
     github_profile_url: 'https://github.com/ada',
   },
-  csrf_token: 'mocked-csrf-token',
+  csrf_token: 'proxy-csrf-token',
 };
 
 const apiHeaders = { 'content-type': 'application/json' };
@@ -86,7 +86,7 @@ test('callback resolves a mocked session into the safe profile and logs out with
   await expect(page).toHaveURL('/profile');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL('/login?signed_out=1');
-  expect(logoutRequest?.headers()['x-csrf-token']).toBe('mocked-csrf-token');
+  expect(logoutRequest?.headers()['x-csrf-token']).toBe('proxy-csrf-token');
 });
 
 test('OAuth callback, profile, and logout use the same-origin Next.js proxy', async ({ page }) => {

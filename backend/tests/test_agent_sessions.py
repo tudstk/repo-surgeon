@@ -1,12 +1,20 @@
 from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import uuid4
 
 import pytest
 
 from repo_surgeon.agent.loop import AgentTurn
+from repo_surgeon.agent.provider import ModelProvider
 from repo_surgeon.application import agent_sessions
 from repo_surgeon.application.agent_sessions import RunPersistedReadOnlyTurn, TurnExecutionError
-from repo_surgeon.domain.sessions import AgentRun, AgentRunStatus, ConversationSession
+from repo_surgeon.application.repositories import RepositoryLookup
+from repo_surgeon.domain.sessions import (
+    AgentRun,
+    AgentRunStatus,
+    ConversationSession,
+    ConversationSessionStatus,
+)
 
 
 class FailingStore:
@@ -17,18 +25,18 @@ class FailingStore:
         self.rollback_called = False
         self.failure_recorded = False
 
-    async def get_session(self, session_id):
+    async def get_session(self, session_id: Any) -> ConversationSession:
         return ConversationSession(
             id=self.session_id,
             owner_user_id=uuid4(),
             repository_id=self.repository_id,
             title="test",
-            status="active",
+            status=ConversationSessionStatus.ACTIVE,
             created_at=datetime.now(UTC),
             updated_at=datetime.now(UTC),
         )
 
-    async def start_run(self, session_id, question, now):
+    async def start_run(self, session_id: Any, question: str, now: datetime) -> AgentRun:
         return AgentRun(
             id=self.run_id,
             owner_user_id=uuid4(),
@@ -45,13 +53,13 @@ class FailingStore:
             completed_at=None,
         )
 
-    async def complete_run(self, run_id, result, now):
+    async def complete_run(self, run_id: Any, result: AgentTurn, now: datetime) -> AgentRun:
         raise RuntimeError("commit failed")
 
-    async def rollback(self):
+    async def rollback(self) -> None:
         self.rollback_called = True
 
-    async def fail_run(self, run_id, error_code, now):
+    async def fail_run(self, run_id: Any, error_code: str, now: datetime) -> None:
         self.failure_recorded = self.rollback_called
 
 
@@ -61,11 +69,15 @@ async def test_completion_failure_rolls_back_before_recording_run_failure(
 ) -> None:
     store = FailingStore()
 
-    async def completed_turn(*args, **kwargs):
+    async def completed_turn(*args: Any, **kwargs: Any) -> AgentTurn:
         return AgentTurn("complete", "Done", None, 1, 0, 0, ())
 
     monkeypatch.setattr(agent_sessions, "run_turn", completed_turn)
-    service = RunPersistedReadOnlyTurn(store, object(), lambda: object())
+    service = RunPersistedReadOnlyTurn(
+        cast(agent_sessions.AgentSessionStore, store),
+        cast(RepositoryLookup, object()),
+        lambda: cast(ModelProvider, object()),
+    )
 
     with pytest.raises(TurnExecutionError):
         await service.execute(store.session_id, "Summarize", datetime.now(UTC))
