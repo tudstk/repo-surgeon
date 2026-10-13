@@ -9,6 +9,7 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from repo_surgeon.infrastructure import run_models as _run_models  # noqa: F401
 from repo_surgeon.infrastructure.repository_models import Base
 from repo_surgeon.settings import Settings
 

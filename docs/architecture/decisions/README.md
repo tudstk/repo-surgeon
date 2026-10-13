@@ -14,5 +14,6 @@ These records capture decisions that guide future implementation. They are not e
 | [0008](0008-bounded-agent-turn.md)                    | Bounded read-only agent turns                        | First agent slice            |
 | [0009](0009-fixed-argument-repository-search.md)      | Fixed-argument exact search and detection catalogs   | Repository search slice      |
 | [0010](0010-github-authentication-and-tenancy-foundation.md) | FastAPI-owned GitHub identity and explicit tenant boundary | Milestones 4.5A-4.5C |
+| [0011](0011-persisted-agent-turns.md) | Tenant-scoped persisted read-only agent turns | Milestone 5 Stage 0 |
 
 The master build plan remains authoritative. Update an ADR through a new decision when evidence changes a foundational choice.

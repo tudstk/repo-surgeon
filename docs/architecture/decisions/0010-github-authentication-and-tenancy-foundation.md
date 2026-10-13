@@ -28,8 +28,10 @@ OAuth/session settings are complete and local filesystem access is disabled. The
 public callback is derived from one exact public origin and cannot be caller chosen.
 
 Milestones 4.5A-4.5C establish these contracts, their persistence foundation, and
-the identity-only OAuth exchange. The current slice does not configure a GitHub
-OAuth App, request scopes, clone repositories, or add write capabilities.
+the identity-only OAuth exchange. Milestone 5 Stage 0 adds owner-scoped access to
+the existing owned repository records and a bounded read-only workspace; it does
+not configure a GitHub OAuth App, request scopes, clone repositories, or add write
+capabilities.
 
 ## Alternatives considered
 
@@ -44,13 +46,13 @@ OAuth App, request scopes, clone repositories, or add write capabilities.
 ## Consequences
 
 Local development remains usable with the existing loopback trust boundary. Public
-mode can truthfully expose only read-only evidence until authenticated repository
-access lands. The settings validator, persistence
-contracts, OAuth adapter, and HTTP repository boundary are intentionally testable
-without real credentials or network.
+mode can truthfully expose only the authenticated, owner-scoped read-only evidence
+currently implemented. The settings validator, persistence contracts, OAuth
+adapter, and HTTP repository boundary are intentionally testable without real
+credentials or network.
 
 ## Review trigger
 
-Revisit when later milestones add authenticated repository access, private scopes, or
-public ingress. Any proposal to retain GitHub tokens or enable public cloning requires
-a new security review and ADR.
+Revisit when later milestones add private scopes, public ingress, or a different
+repository provisioning path. Any proposal to retain GitHub tokens or enable public
+cloning requires a new security review and ADR.

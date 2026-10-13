@@ -1,7 +1,8 @@
 # Authentication threat model
 
-Milestones 4.5A-4.5C establish and exercise the identity foundation. Repository
-tenant authorization remains a later slice.
+Milestones 4.5A-4.5C establish and exercise the identity foundation. Milestone 5
+Stage 0 adds owner-scoped authorization for the existing repository records and
+read-only product sessions.
 
 | Threat | Enforced control and test coverage |
 | --- | --- |
@@ -15,5 +16,5 @@ tenant authorization remains a later slice.
 | Host/proxy confusion | Exact public origin and allowed hosts are validated at startup. Forwarded headers are trusted only from deployment-owned ingress. |
 
 This slice has no GitHub OAuth App configuration, requested scope, public clone
-path, private repository access, or repository authorization retrofit. Tests use a
-deterministic in-process HTTP provider instead of real network credentials.
+path, or private repository provisioning. Tests use a deterministic in-process HTTP
+provider instead of real network credentials.

@@ -1,6 +1,6 @@
 # Glossary
 
-This glossary covers concepts implemented through Milestone 4. Sandboxing, proposals, and approvals remain roadmap-only.
+This glossary covers concepts implemented through Milestone 5 Stage 0. Sandboxing, proposals, and approvals remain roadmap-only.
 
 | Term | Meaning here | C#/.NET bridge |
 | --- | --- | --- |
@@ -18,5 +18,8 @@ This glossary covers concepts implemented through Milestone 4. Sandboxing, propo
 | Quality gate | Required automated CI verification. | A pull-request validation pipeline. |
 | Bug investigation | A bounded read-only search that turns retrieved evidence into ranked hypotheses. | Similar to a diagnostic application service with explicit evidence rather than unrestricted code execution. |
 | Behavioral proof | A deterministic, fixture-bound check used to strengthen one seeded hypothesis. | Similar to a focused characterization test, but owned by the evaluation boundary. |
+| Product session | A tenant-scoped conversation aggregate associated with one owned repository. | Similar to an application-level conversation entity separate from an authentication session. |
+| Normalized run event | A persisted, user-facing event describing bounded turn progress or outcome. | Similar to a durable integration event projection, without exposing hidden reasoning. |
+| Server-sent events (SSE) | A one-way HTTP stream that resumes committed normalized events by `Last-Event-ID`. | Similar to an ordered event feed delivered over an HTTP response. |
 
 ASGI supports asynchronous handlers, but the M0 health handlers are synchronous because they do no I/O. Python `async` work becomes relevant when later milestones add I/O-bound services.

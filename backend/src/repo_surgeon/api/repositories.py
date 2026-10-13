@@ -12,6 +12,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from repo_surgeon.agent.investigation import InvestigationResult, investigate_repository
+from repo_surgeon.api.problems import ApiProblem as RepositoryProblem
+from repo_surgeon.api.problems import ProblemDetail
 from repo_surgeon.application.repositories import (
     GetRepository,
     ListRepositories,
@@ -98,23 +100,6 @@ class InvestigationRequest(BaseModel):
     """A user question routed through the bounded read-only investigator."""
 
     question: str = Field(min_length=3, max_length=2_000)
-
-
-class ProblemDetail(BaseModel):
-    """Stable, typed problem response for expected client errors."""
-
-    type: str
-    title: str
-    status: int
-    detail: str
-    code: str
-
-
-class RepositoryProblem(Exception):
-    """Expected repository failure rendered as an RFC 7807-style response."""
-
-    def __init__(self, problem: ProblemDetail) -> None:
-        self.problem = problem
 
 
 def _ensure_local_repository_access(request: Request) -> None:
