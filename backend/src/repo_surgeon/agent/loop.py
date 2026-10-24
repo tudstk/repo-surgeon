@@ -10,7 +10,7 @@ import time
 from collections import Counter
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 from uuid import UUID
 
@@ -21,6 +21,7 @@ from repo_surgeon.agent.provider import (
     ModelProvider,
     ModelRequest,
     ModelResponse,
+    ModelToolCall,
 )
 from repo_surgeon.application.repository_files import (
     MAX_LINE_COUNT,
@@ -37,6 +38,8 @@ from repo_surgeon.mcp.file_tools import (
     returned_bytes_limit_error,
 )
 from repo_surgeon.mcp.search_tools import SearchCodeInput, SearchCodeOutput
+
+MAX_PROVIDER_TOOL_CALLS = 32
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +77,7 @@ class ToolEvent:
     name: str
     status: Literal["success", "error", "denied"]
     call_id: str = ""
+    arguments: dict[str, object] = field(default_factory=dict)
     summary: str = ""
     duration_ms: int | None = None
     match_count: int | None = None
@@ -168,7 +172,17 @@ def _tool_event(
     call_id: str,
     result: object,
     repository_id: UUID,
+    arguments: ListFilesInput | ReadFileInput | SearchCodeInput | None = None,
 ) -> ToolEvent:
+    safe_arguments = (
+        {
+            key: value
+            for key, value in arguments.model_dump(mode="json", exclude_none=True).items()
+            if key != "repository_id"
+        }
+        if arguments is not None
+        else {}
+    )
     if isinstance(result, SearchCodeOutput):
         citations = tuple(
             Citation(
@@ -195,6 +209,7 @@ def _tool_event(
             name,
             status,
             call_id,
+            safe_arguments,
             summary=_safe_search_summary(result.query),
             duration_ms=result.duration_ms,
             match_count=result.match_count,
@@ -213,6 +228,7 @@ def _tool_event(
             name,
             status,
             call_id,
+            safe_arguments,
             citations=(
                 Citation(
                     citation_id=f"read-{call_id}-1",
@@ -229,8 +245,8 @@ def _tool_event(
             truncated=result.truncated,
         )
     if isinstance(result, ToolErrorOutput):
-        return ToolEvent(name, status, call_id, error_code=result.code)
-    return ToolEvent(name, status, call_id)
+        return ToolEvent(name, status, call_id, safe_arguments, error_code=result.code)
+    return ToolEvent(name, status, call_id, safe_arguments)
 
 
 # Citation validation intentionally keeps all evidence checks in one boundary.
@@ -380,6 +396,9 @@ async def run_turn(
                 events=tuple(events),
             )
 
+        if len(response.tool_calls) > MAX_PROVIDER_TOOL_CALLS:
+            return limited("provider_tool_call_limit")
+
         reserved_provider_ids = {
             call.call_id
             for call in response.tool_calls
@@ -387,10 +406,65 @@ async def run_turn(
         }
         seen_provider_ids: set[str] = set()
         emitted_call_ids: set[str] = set()
-        for call in response.tool_calls:
+
+        def next_call_id(
+            requested_call_id: str,
+            *,
+            reserved_ids: set[str] = reserved_provider_ids,
+            emitted_ids: set[str] = emitted_call_ids,
+        ) -> str:
+            nonlocal generated_call_id
+            if requested_call_id and requested_call_id not in emitted_ids:
+                emitted_ids.add(requested_call_id)
+                return requested_call_id
+            while True:
+                generated_call_id += 1
+                candidate_call_id = f"generated-{generated_call_id}"
+                if candidate_call_id not in reserved_ids and candidate_call_id not in emitted_ids:
+                    emitted_ids.add(candidate_call_id)
+                    return candidate_call_id
+
+        def project_arguments(
+            call: ModelToolCall,
+        ) -> ListFilesInput | ReadFileInput | SearchCodeInput | None:
+            if call.name not in {"list_files", "read_file", "search_code"}:
+                return None
+            try:
+                arguments = {**call.arguments, "repository_id": repository_id}
+                if call.name == "list_files":
+                    return ListFilesInput.model_validate(arguments)
+                if call.name == "read_file":
+                    return ReadFileInput.model_validate(arguments)
+                return SearchCodeInput.model_validate(arguments)
+            except TypeError, ValidationError:
+                return None
+
+        def append_denied_calls(calls: tuple[ModelToolCall, ...], code: str) -> None:
+            for pending_call in calls:
+                requested_call_id = (
+                    pending_call.call_id
+                    if isinstance(pending_call.call_id, str) and len(pending_call.call_id) <= 256
+                    else ""
+                )
+                pending_call_id = next_call_id(requested_call_id)
+                projected_arguments = project_arguments(pending_call)
+                events.append(
+                    _tool_event(
+                        pending_call.name,
+                        "denied",
+                        pending_call_id,
+                        ToolErrorOutput(code=code, detail="Tool call was not executed."),
+                        repository_id,
+                        projected_arguments,
+                    )
+                )
+
+        for call_index, call in enumerate(response.tool_calls):
             if clock() - started >= effective_limits.max_duration_seconds:
+                append_denied_calls(response.tool_calls[call_index:], "duration_limit")
                 return limited("duration_limit")
             if tool_calls >= effective_limits.max_tool_calls:
+                append_denied_calls(response.tool_calls[call_index:], "tool_call_limit")
                 return limited("tool_call_limit")
             serialized_arguments = _json_arguments(call.arguments)
             validated_arguments: ListFilesInput | ReadFileInput | SearchCodeInput | None = None
@@ -416,6 +490,7 @@ async def run_turn(
                 key = _denied_call_key(call.name, serialized_arguments)
             repeated[key] += 1
             if repeated[key] > effective_limits.max_repeated_tool_calls:
+                append_denied_calls(response.tool_calls[call_index:], "repeated_tool_call_limit")
                 return limited("repeated_tool_call_limit")
             tool_calls += 1
             valid_provider_id = isinstance(call.call_id, str) and len(call.call_id) <= 256
@@ -423,20 +498,12 @@ async def run_turn(
             duplicate_call_id = bool(requested_call_id) and requested_call_id in seen_provider_ids
             if requested_call_id:
                 seen_provider_ids.add(requested_call_id)
-            call_id = requested_call_id if requested_call_id and not duplicate_call_id else ""
-            while not call_id:
-                generated_call_id += 1
-                candidate_call_id = f"generated-{generated_call_id}"
-                if (
-                    candidate_call_id not in reserved_provider_ids
-                    and candidate_call_id not in emitted_call_ids
-                ):
-                    call_id = candidate_call_id
-            emitted_call_ids.add(call_id)
+            call_id = next_call_id(requested_call_id if not duplicate_call_id else "")
             result: object
             status: Literal["success", "error", "denied"]
             remaining_bytes = effective_limits.max_returned_bytes - returned_bytes
             if remaining_bytes < MIN_TOOL_RESULT_BYTES:
+                append_denied_calls(response.tool_calls[call_index:], "returned_bytes_limit")
                 return limited("returned_bytes_limit")
             if not valid_provider_id:
                 result = ToolErrorOutput(
@@ -489,14 +556,27 @@ async def run_turn(
                 except asyncio.CancelledError:
                     raise
                 except TimeoutError:
-                    return limited("duration_limit")
+                    result = ToolErrorOutput(
+                        code="duration_limit",
+                        detail="Tool execution exceeded the turn duration limit.",
+                    )
+                    status = "error"
             payload = _serialized(result)
             if len(payload) > remaining_bytes:
                 result = returned_bytes_limit_error()
                 status = "error"
                 payload = _serialized(result)
             returned_bytes += len(payload)
-            events.append(_tool_event(call.name, status, call_id, result, repository_id))
+            events.append(
+                _tool_event(
+                    call.name,
+                    status,
+                    call_id,
+                    result,
+                    repository_id,
+                    validated_arguments,
+                )
+            )
             messages.append(
                 {
                     "role": "assistant",

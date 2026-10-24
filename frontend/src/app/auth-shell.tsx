@@ -11,7 +11,7 @@ import {
   type BrowserSession,
   SessionRequestError,
 } from '@/lib/auth-api';
-import WorkspaceMock from './workspace-mock';
+import Workspace from './workspace';
 
 function Brand() {
   return (
@@ -97,8 +97,8 @@ export function LoginScreen() {
           Continue with GitHub
         </a>
         <p className="identity-footnote">
-          Repository connections are not available yet. Your GitHub access token is never stored by
-          Repo Surgeon.
+          Your GitHub access token is never stored by Repo Surgeon. Repository access remains
+          tenant-scoped and read-only.
         </p>
       </section>
     </main>
@@ -263,7 +263,7 @@ export function ProfileScreen() {
           </div>
           <div>
             <span>Repository access</span>
-            <strong>Connections are not available yet</strong>
+            <strong>Owned repositories are available read-only</strong>
           </div>
         </div>
         {logoutError ? (
@@ -340,5 +340,5 @@ export function WorkspaceScreen() {
     );
   }
 
-  return <WorkspaceMock githubLogin={session.user.github_login} />;
+  return <Workspace githubLogin={session.user.github_login} csrfToken={session.csrf_token} />;
 }

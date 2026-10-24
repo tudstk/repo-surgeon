@@ -4,9 +4,9 @@ Repo Surgeon is a local-first, human-controlled coding assistant for understandi
 
 ## Implemented status
 
-This checkout provides an executable foundation: a typed FastAPI process, a strict TypeScript and Next.js frontend, local PostgreSQL through Docker Compose, and CI quality gates. It also registers an existing local Git working tree and persists its resolved canonical root. The backend includes bounded read-only file and exact-search tools, deterministic repository intelligence, a deterministic model-provider agent loop, and a bounded bug-investigation workflow that ranks evidence-backed hypotheses. The current frontend slice is the identity-only GitHub login and profile journey; repository authorization is not available yet.
+This checkout provides an executable foundation: a typed FastAPI process, a strict TypeScript and Next.js frontend, local PostgreSQL through Docker Compose, and CI quality gates. It also registers an existing local Git working tree and persists its resolved canonical root. The backend includes bounded read-only file and exact-search tools, deterministic repository intelligence, a deterministic model-provider agent loop, a bounded bug-investigation workflow, and the authenticated persisted-turn seam. The frontend includes GitHub login and profile screens plus a tenant-scoped three-pane workspace for one bounded read-only turn.
 
-Registration validates only the selected path and Git worktree boundary. The MCP tools read and search bounded safe content, and the agent loop can use only those read-only capabilities through a provider boundary. Repository intelligence maps bounded manifest evidence to versioned language and test-command catalogs without executing repository code. Bug investigations use a fixed bounded search plan and, for the canonical seeded fixture, an evaluation-owned deterministic behavioral proof; unsupported questions return insufficient evidence. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. The identity UI deliberately does not load repository data until tenant authorization exists. See [safe search](docs/mcp/safe-search-tools.md) and [product scope](docs/product/scope.md).
+Registration validates only the selected path and Git worktree boundary. The MCP tools read and search bounded safe content, and the agent loop can use only those read-only capabilities through a provider boundary. Repository intelligence maps bounded manifest evidence to versioned language and test-command catalogs without executing repository code. Bug investigations use a fixed bounded search plan and, for the canonical seeded fixture, an evaluation-owned deterministic behavioral proof; unsupported questions return insufficient evidence. Authenticated users can select an owned repository, create a product session, submit one deterministic read-only turn, and resume its persisted normalized SSE events. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. Local-trusted repository behavior remains available only through the existing local boundary; public-authenticated workspace requests use the current principal and fail closed for foreign IDs. See [safe search](docs/mcp/safe-search-tools.md), [product scope](docs/product/scope.md), and [persisted turns](docs/architecture/decisions/0011-persisted-agent-turns.md).
 
 No model API key is required.
 
@@ -33,9 +33,10 @@ non-prefixed cookie names; public mode and production reject insecure cookies.
 
 Public mode still rejects every local-repository endpoint at the FastAPI boundary.
 The frontend provides a GitHub identity journey at `/login`, `/auth/callback`, and
-`/profile`. It uses the FastAPI-owned opaque browser session and keeps its CSRF
-token only in component memory. Repository connections, public repository import,
-and authenticated repository access are not available yet.
+`/profile`, followed by a tenant-scoped read-only workspace at `/`. It uses the
+FastAPI-owned opaque browser session and keeps its CSRF token only in component
+memory. Repository connections are read-only and authenticated access is
+owner-scoped.
 
 The security rationale and required negative-test matrix are in the
 [authentication ADR](docs/architecture/decisions/0010-github-authentication-and-tenancy-foundation.md)
@@ -154,6 +155,6 @@ The workflow runs on pushes and pull requests. It uses `backend/uv.lock` and `fr
 
 ## Learn the foundation
 
-The identity request path is `browser -> same-origin Next.js /api proxy -> Uvicorn ASGI server -> FastAPI authentication router -> application use case -> PostgreSQL`, with GitHub profile retrieval isolated behind the OAuth adapter. The bounded repository and investigation paths remain backend capabilities awaiting tenant authorization. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
+The identity request path is `browser -> same-origin Next.js /api proxy -> Uvicorn ASGI server -> FastAPI authentication router -> application use case -> PostgreSQL`, with GitHub profile retrieval isolated behind the OAuth adapter. The workspace path adds owner-scoped repository lookup, product-session persistence, a bounded fake-provider turn, normalized run-event persistence, and resumable SSE. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
 
-Future work continues with persisted API events, Git context, test sandboxing, proposals, approvals, patch application, audits, and pull requests. The provider boundary and in-process MCP tools now support the read-only investigation workflow; they are not yet connected to write or sandbox workflows.
+Future work continues with Git context, test sandboxing, proposals, approvals, patch application, audits, and pull requests. The provider boundary and in-process MCP tools support only bounded read-only workflows; they are not connected to write or sandbox workflows.

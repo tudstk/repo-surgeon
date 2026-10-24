@@ -55,7 +55,9 @@ describe('identity journey', () => {
       '/api/v1/auth/github/start',
     );
     expect(screen.getByText(/only your public profile identity/i)).toBeInTheDocument();
-    expect(screen.getByText(/Repository connections are not available yet/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Repository access remains tenant-scoped and read-only/i),
+    ).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       '/api/v1/auth/session',
       expect.objectContaining({ cache: 'no-store', credentials: 'include' }),
@@ -134,7 +136,7 @@ describe('identity journey', () => {
       .getAllByRole('link', { name: /@ada/i })
       .find((link) => link.getAttribute('href') === 'https://github.com/ada');
     expect(githubProfileLink).toHaveAttribute('href', 'https://github.com/ada');
-    expect(screen.getByText('Connections are not available yet')).toBeInTheDocument();
+    expect(screen.getByText('Owned repositories are available read-only')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Continue to workspace' })).toHaveAttribute(
       'href',
       '/',
@@ -208,27 +210,56 @@ describe('identity journey', () => {
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeEnabled();
   });
 
-  it('opens the authenticated workspace without requesting repository data', async () => {
-    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse(browserSession)));
+  it('opens the authenticated workspace and requests only the owned repository seam', async () => {
+    const fetchMock = vi.fn((input: string) => {
+      if (input === '/api/v1/auth/session') return Promise.resolve(jsonResponse(browserSession));
+      if (input === '/api/v1/repositories') {
+        return Promise.resolve(jsonResponse([{ id: 'repository-1', name: 'payments-api' }]));
+      }
+      if (input.endsWith('/summary')) {
+        return Promise.resolve(
+          jsonResponse({
+            language: 'Python',
+            language_confidence: 'high',
+            file_count: 12,
+            total_bytes: 2000,
+            approximate_lines: 420,
+            test_framework: 'pytest',
+            test_command: 'uv run pytest',
+            test_detection: 'detected',
+            detected_at: '2026-09-26T00:00:00Z',
+            truncated: false,
+          }),
+        );
+      }
+      if (input.startsWith('/api/v1/sessions?')) return Promise.resolve(jsonResponse([]));
+      throw new Error(`Unexpected request: ${input}`);
+    });
     vi.stubGlobal('fetch', fetchMock);
 
     render(<WorkspaceScreen />);
 
     expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
-      'Understand the code. Keep people in control.',
+      'Authenticated read-only repository workspace',
     );
-    expect(screen.getByRole('navigation', { name: 'Workspace map' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('complementary', { name: 'Repositories and sessions' }),
+    ).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Conversation & agent trace' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Work panel' })).toBeInTheDocument();
-    expect(screen.getByText(/Repository connections are unavailable/i)).toBeInTheDocument();
+    expect(await screen.findByText('payments-api')).toBeInTheDocument();
+    expect(screen.getByText(/Start a tenant-scoped product session/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open profile for @ada' })).toHaveAttribute(
       'href',
       '/profile',
     );
     expect(screen.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/auth/session',
+      expect.objectContaining({ cache: 'no-store', credentials: 'include' }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/repositories',
       expect.objectContaining({ cache: 'no-store', credentials: 'include' }),
     );
   });
