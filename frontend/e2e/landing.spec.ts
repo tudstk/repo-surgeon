@@ -72,11 +72,15 @@ test('landing artwork respects reduced motion and keyboard navigation', async ({
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('main')).toBeFocused();
-  const artwork = page.locator('[data-visual="inspection-mark"]');
-  await artwork.hover();
-  const scanLine = artwork.locator('g').last();
-  await expect(scanLine).toHaveCSS('transform', 'none');
-  await expect(scanLine).toHaveCSS('transition-duration', '0s');
+  const field = page.locator('[data-visual="circuit-field"]');
+  await expect(field).toHaveAttribute('data-motion', 'reduced');
+  expect(
+    await field
+      .locator('svg')
+      .first()
+      .evaluate((node) => node.getAnimations({ subtree: true }).length),
+  ).toBe(0);
+  await expect(field.getByRole('button')).toHaveCount(0);
 });
 
 test('background pulses move, can be paused, and stop offscreen or for reduced motion', async ({
@@ -110,6 +114,17 @@ test('background pulses move, can be paused, and stop offscreen or for reduced m
     style: 'nextjs-portal { visibility: hidden !important; }',
   });
   await testInfo.attach('hero-electric-pulse', { path: screenshot, contentType: 'image/png' });
+  await expect
+    .poll(() => pulse.evaluate((node) => node.getAnimations({ subtree: true }).length), {
+      intervals: [25, 50, 100],
+    })
+    .toBe(0);
+  await expect
+    .poll(() => pulse.evaluate((node) => node.getAnimations({ subtree: true }).length), {
+      intervals: [25, 50, 100],
+      timeout: 1600,
+    })
+    .toBe(3);
   await page.getByRole('button', { name: 'Pause background motion' }).click();
   await expect(field).toHaveAttribute('data-motion', 'paused');
   await expect
@@ -126,6 +141,52 @@ test('background pulses move, can be paused, and stop offscreen or for reduced m
   await page.getByRole('heading', { level: 1 }).scrollIntoViewIfNeeded();
   await expect(field).toHaveAttribute('data-motion', 'reduced');
   await expect(field.getByRole('button')).toHaveCount(0);
+});
+
+test('pointer movement sends bounded circuit pulses and respects pause and reduced motion', async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'no-preference' });
+  await page.goto('/landing');
+  const field = page.locator('[data-visual="circuit-field"]');
+  const cursorPulses = field.locator('[data-cursor-pulse]');
+  await expect(field).toHaveAttribute('data-motion', 'playing');
+  await page.mouse.move(260, 210, { steps: 3 });
+  const active = await cursorPulses.evaluateAll(
+    (groups) => groups.flatMap((node) => node.getAnimations({ subtree: true })).length,
+  );
+  expect(active).toBeGreaterThan(0);
+  expect(active).toBeLessThanOrEqual(6);
+  const screenshot = testInfo.outputPath('hero-cursor-pulses.png');
+  await page.screenshot({
+    path: screenshot,
+    style: 'nextjs-portal { visibility: hidden !important; }',
+  });
+  await testInfo.attach('hero-cursor-pulses', { path: screenshot, contentType: 'image/png' });
+  await page.getByRole('button', { name: 'Pause background motion' }).click();
+  await expect
+    .poll(() =>
+      field
+        .locator('svg')
+        .first()
+        .evaluate((node) => node.getAnimations({ subtree: true }).length),
+    )
+    .toBe(0);
+  await page.mouse.move(600, 300, { steps: 3 });
+  expect(
+    await cursorPulses.evaluateAll(
+      (groups) => groups.flatMap((node) => node.getAnimations({ subtree: true })).length,
+    ),
+  ).toBe(0);
+  await page.getByRole('button', { name: 'Resume background motion' }).click();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(field).toHaveAttribute('data-motion', 'reduced');
+  await page.mouse.move(300, 250, { steps: 3 });
+  expect(
+    await cursorPulses.evaluateAll(
+      (groups) => groups.flatMap((node) => node.getAnimations({ subtree: true })).length,
+    ),
+  ).toBe(0);
 });
 
 for (const scenario of [

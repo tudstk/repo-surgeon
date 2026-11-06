@@ -34,7 +34,7 @@ No browser capability flag identifies deployment mode; never infer it from the h
 Keep the Repo Surgeon name.
 The confirmed redesign reference is DeepSource, interpreted originally through a calm, dark-first developer workspace.
 Do not copy DeepSource branding, assets or unsupported product claims.
-The public landing preview follows the user's revised technology-first direction: clear IBM Plex typography, an immediate view of the real workspace, and a restrained original document/bracket motif. Keep a single charcoal ground, existing green and a narrow coral accent. The user also requested a faint geometric circuit texture with sparse fast accent pulses in the landing hero, and the same texture plus a vignette behind a distinct sign-in panel. Keep this texture off the working workspace. The shared brand returns to `/landing`; the Workspace destination stays at `/`.
+The public landing preview follows the user's revised technology-first direction: clear IBM Plex typography, an immediate view of the real workspace, and a restrained original paper document motif. Keep a single charcoal ground, existing green and a narrow coral accent. The user also requested a faint geometric circuit texture with sparse fast accent pulses in the landing hero, and the same texture plus a vignette behind a distinct sign-in panel. Keep this texture off the working workspace. The shared brand returns to `/landing`; the Workspace destination stays at `/`.
 
 ## Evidence on Hand
 

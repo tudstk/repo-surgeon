@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T16:16:40.409441+00:00",
+  "generatedAt": "2026-11-06T16:49:20.116670+00:00",
   "title": "Design System: Repo Surgeon",
   "extensions": {
     "motion": [
@@ -11,8 +11,13 @@
       },
       {
         "name": "circuit-pulse",
-        "value": "950-1450ms linear; 1800-4400ms quiet",
+        "value": "950-1450ms linear; 350-1000ms quiet",
         "purpose": "One random visible route and one three-layer pulse at a time. Pause, reduced-motion, visibility and unmount cancel it."
+      },
+      {
+        "name": "circuit-pointer",
+        "value": "350ms linear; 180ms throttle; two slots",
+        "purpose": "Mouse movement energizes the nearest fixed route. Shares pause, visibility and reduced-motion cancellation with the ambient pulse."
       }
     ],
     "breakpoints": [

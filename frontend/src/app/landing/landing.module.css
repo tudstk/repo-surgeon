@@ -168,22 +168,12 @@
 }
 .inspectionMark {
   width: 100%;
-  max-width: 440px;
+  max-width: 240px;
   height: auto;
   overflow: visible;
 }
-.markGuides {
-  stroke: #343c45;
-}
-.markBoundary {
-  stroke: var(--accent);
-}
 .markSource {
   stroke: #a8b0ba;
-}
-.scanLine {
-  color: var(--signal);
-  stroke: currentColor;
 }
 .productView {
   border: 1px solid #343c45;
@@ -524,7 +514,6 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .scanLine,
   .page a {
     transition: none;
   }

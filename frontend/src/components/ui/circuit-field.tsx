@@ -22,6 +22,7 @@ export function CircuitField({ vignette = false }: { vignette?: boolean }) {
   const fieldRef = useRef<HTMLDivElement>(null);
   const tracksRef = useRef<SVGGElement>(null);
   const pulseRef = useRef<SVGGElement>(null);
+  const cursorRefs = useRef<(SVGGElement | null)[]>([]);
   const lastTrack = useRef(-1);
   const [paused, setPaused] = useState(false);
   const [environment, setEnvironment] = useState({
@@ -115,14 +116,78 @@ export function CircuitField({ vignette = false }: { vignette?: boolean }) {
       });
       timer = setTimeout(() => {
         animations.forEach((animation) => animation.cancel());
-        timer = setTimeout(fire, 1800 + Math.random() * 2600);
+        timer = setTimeout(fire, 350 + Math.random() * 650);
       }, duration);
     };
-    timer = setTimeout(fire, 1200 + Math.random() * 1000);
+    timer = setTimeout(fire, 350 + Math.random() * 300);
     return () => {
       disposed = true;
       clearTimeout(timer);
       animations.forEach((animation) => animation.cancel());
+    };
+  }, [playing]);
+
+  useEffect(() => {
+    const field = fieldRef.current;
+    const surface = field?.parentElement;
+    const svg = field?.querySelector('svg');
+    if (!playing || !surface || !svg) return;
+    // Sample the fixed geometry once. Pointer updates only search this small cached set.
+    const samples = [...(tracksRef.current?.querySelectorAll('path') ?? [])].flatMap(
+      (path, route) => {
+        const length = path.getTotalLength();
+        return Array.from({ length: 49 }, (_, index) => {
+          const point = path.getPointAtLength((index / 48) * length);
+          return { x: point.x, y: point.y, route, progress: (index / 48) * 1000 };
+        });
+      },
+    );
+    let lastEmission = -Infinity;
+    let slot = 0;
+    const animations: Animation[][] = [[], []];
+    const followPointer = (event: PointerEvent) => {
+      if (event.pointerType !== 'mouse' || performance.now() - lastEmission < 180) return;
+      const matrix = svg.getScreenCTM();
+      if (!matrix) return;
+      const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
+      let nearest = samples[0];
+      let distance = Infinity;
+      for (const sample of samples) {
+        const candidate = (sample.x - point.x) ** 2 + (sample.y - point.y) ** 2;
+        if (candidate < distance) {
+          nearest = sample;
+          distance = candidate;
+        }
+      }
+      const group = cursorRefs.current[slot];
+      if (!group || !nearest) return;
+      const direction = nearest.progress > 500 ? -1 : 1;
+      const offsets = direction === 1 ? [77, 27, 0] : [0, 0, 0];
+      animations[slot].forEach((animation) => animation.cancel());
+      group.style.color = Math.random() < 0.4 ? 'var(--signal, #f47b68)' : 'var(--accent)';
+      animations[slot] = [...group.querySelectorAll('path')].map((path, layer) => {
+        path.setAttribute('d', tracks[nearest.route]);
+        const start = -nearest.progress + offsets[layer];
+        return path.animate(
+          [
+            { strokeDashoffset: `${start}`, opacity: 0 },
+            {
+              strokeDashoffset: `${start - direction * 18}`,
+              opacity: [0.2, 0.5, 0.9][layer],
+              offset: 0.1,
+            },
+            { strokeDashoffset: `${start - direction * 180}`, opacity: 0 },
+          ],
+          { duration: 350, easing: 'linear' },
+        );
+      });
+      lastEmission = performance.now();
+      slot = (slot + 1) % 2;
+    };
+    surface.addEventListener('pointermove', followPointer, { passive: true });
+    return () => {
+      surface.removeEventListener('pointermove', followPointer);
+      animations.flat().forEach((animation) => animation.cancel());
     };
   }, [playing]);
 
@@ -141,6 +206,26 @@ export function CircuitField({ vignette = false }: { vignette?: boolean }) {
             <path key={track} d={track} vectorEffect="non-scaling-stroke" />
           ))}
         </g>
+        {[0, 1].map((slot) => (
+          <g
+            key={slot}
+            ref={(node) => {
+              cursorRefs.current[slot] = node;
+            }}
+            className={styles.pulse}
+            data-cursor-pulse=""
+          >
+            {[84, 34, 7].map((length) => (
+              <path
+                key={length}
+                d={tracks[0]}
+                pathLength="1000"
+                strokeDasharray={`${length} ${1000 - length}`}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          </g>
+        ))}
         <g ref={pulseRef} className={styles.pulse}>
           {[84, 34, 7].map((length) => (
             <path
