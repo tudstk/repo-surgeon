@@ -12,7 +12,7 @@ No model API key is required.
 
 ### Workspace interface
 
-A public landing-page preview is available at `/landing`; the working workspace remains at `/`.
+A public landing-page preview is available at `/landing`; the working workspace remains at `/`. The shared brand returns to the landing page. The hero and sign-in screen share a faint circuit texture with pausable accent pulses; reduced-motion preference keeps it static.
 The landing page uses locally hosted type and actual UI captures with synthetic demo data. It makes no model calls and loads no private workspace records.
 
 GitHub sign-in identifies your account; it does not connect or import your GitHub repositories.

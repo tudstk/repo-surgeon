@@ -3,6 +3,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import localFont from 'next/font/local';
 import { Brand, Icon } from '@/components/ui/shell';
+import { CircuitField } from '@/components/ui/circuit-field';
 import { InspectionMark } from './inspection-mark';
 import desktop from './workspace-desktop.png';
 import phone from './workspace-phone.png';
@@ -44,36 +45,39 @@ export default function LandingPage() {
         </nav>
       </header>
       <main id="landing-content" tabIndex={-1}>
-        <section className={`${styles.wrap} ${styles.hero}`} aria-labelledby="landing-title">
-          <div className={styles.heroCopy}>
-            <h1 id="landing-title" className={styles.headline}>
-              Inspect the repo.
-              <br />
-              <span className={styles.titleAccent}>
-                Keep control.
-                <span aria-hidden="true" className={styles.textSeam}>
+        <section className={styles.heroSurface} aria-labelledby="landing-title">
+          <CircuitField />
+          <div className={`${styles.wrap} ${styles.hero}`}>
+            <div className={styles.heroCopy}>
+              <h1 id="landing-title" className={styles.headline}>
+                Inspect the repo.
+                <br />
+                <span className={styles.titleAccent}>
                   Keep control.
+                  <span aria-hidden="true" className={styles.textSeam}>
+                    Keep control.
+                  </span>
                 </span>
-              </span>
-            </h1>
-            <p className={styles.intro}>
-              A read-only repository workspace. Inspect within clear boundaries, follow the
-              activity, and pick up where you left off. Your source files stay yours.
-            </p>
-            <div className={styles.heroActions}>
-              <Link href="/" className={styles.primary}>
-                Open workspace
-                <Icon name="arrow" />
-              </Link>
-              <a className={styles.secondary} href="#workspace">
-                See the workspace
-                <Icon name="arrow" />
-              </a>
+              </h1>
+              <p className={styles.intro}>
+                A read-only repository workspace. Inspect within clear boundaries, follow the
+                activity, and pick up where you left off. Your source files stay yours.
+              </p>
+              <div className={styles.heroActions}>
+                <Link href="/" className={styles.primary}>
+                  Open workspace
+                  <Icon name="arrow" />
+                </Link>
+                <a className={styles.secondary} href="#workspace">
+                  See the workspace
+                  <Icon name="arrow" />
+                </a>
+              </div>
+              <span className={styles.finePrint}>Early release · deterministic demo provider</span>
             </div>
-            <span className={styles.finePrint}>Early release · deterministic demo provider</span>
-          </div>
-          <div className={styles.heroArt}>
-            <InspectionMark />
+            <div className={styles.heroArt}>
+              <InspectionMark />
+            </div>
           </div>
         </section>
         <section className={styles.wrap} id="workspace" aria-labelledby="workspace-title">

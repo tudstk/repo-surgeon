@@ -799,6 +799,21 @@ code {
 .identity-card {
   width: min(100%, 440px);
 }
+.identity-textured {
+  position: relative;
+  isolation: isolate;
+  background: var(--canvas);
+  padding-bottom: 88px;
+}
+.identity-card.identity-panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 520px);
+  padding: 40px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
 .identity-card > .brand {
   margin-bottom: 48px;
 }
@@ -1083,6 +1098,12 @@ code {
   }
   .identity-shell {
     padding: 32px 24px;
+  }
+  .identity-textured {
+    padding: 32px 16px 88px;
+  }
+  .identity-card.identity-panel {
+    padding: 24px;
   }
   .identity-card > .brand {
     margin-bottom: 40px;

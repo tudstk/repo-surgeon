@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T13:06:49.263583+00:00",
+  "generatedAt": "2026-11-06T16:16:40.409441+00:00",
   "title": "Design System: Repo Surgeon",
   "extensions": {
     "motion": [
@@ -10,9 +10,9 @@
         "purpose": "Color and border feedback; disabled for reduced motion."
       },
       {
-        "name": "landing-scan",
-        "value": "600ms cubic-bezier(0.16, 1, 0.3, 1)",
-        "purpose": "Single hover response on the decorative document scan line; static for reduced motion and coarse pointers."
+        "name": "circuit-pulse",
+        "value": "950-1450ms linear; 1800-4400ms quiet",
+        "purpose": "One random visible route and one three-layer pulse at a time. Pause, reduced-motion, visibility and unmount cancel it."
       }
     ],
     "breakpoints": [
@@ -46,7 +46,15 @@
         "displayName": "Landing display",
         "purpose": "Locally hosted variable IBM Plex Sans, with readable 500-weight technical headings scoped to /landing."
       }
-    }
+    },
+    "textures": [
+      {
+        "name": "circuit-field",
+        "strokeWidth": "1px",
+        "opacity": 0.13,
+        "scope": "Landing hero and sign-in only; sign-in adds a radial vignette."
+      }
+    ]
   },
   "components": [
     {

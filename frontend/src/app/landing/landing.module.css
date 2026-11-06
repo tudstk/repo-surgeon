@@ -72,7 +72,14 @@
   width: auto;
   height: auto;
 }
+.heroSurface {
+  --circuit-control-inset: max(64px, calc((100% - 1280px) / 2));
+  position: relative;
+  isolation: isolate;
+}
 .hero {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
   align-items: center;
@@ -177,12 +184,6 @@
 .scanLine {
   color: var(--signal);
   stroke: currentColor;
-  transition: transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-  .inspectionMark:hover .scanLine {
-    transform: translateY(-28px);
-  }
 }
 .productView {
   border: 1px solid #343c45;
@@ -355,6 +356,9 @@
   gap: 12px;
 }
 @media (max-width: 1100px) {
+  .heroSurface {
+    --circuit-control-inset: 40px;
+  }
   .wrap {
     width: calc(100% - 80px);
   }
@@ -429,7 +433,7 @@
     height: 20px;
   }
   .hero {
-    padding-block: 48px 40px;
+    padding-block: 48px 80px;
   }
   .headline {
     font-size: clamp(34px, 10.8vw, 60px);
