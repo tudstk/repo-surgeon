@@ -7,7 +7,7 @@ The composer explains the deterministic provider before submission so a saved fi
 
 ## Read these files
 
-1. `frontend/src/components/ui/shell.tsx` defines shared identity, navigation and icons.
+1. `frontend/src/components/ui/shell.tsx` composes shared identity and navigation; `icons.tsx` defines the common SVG symbols.
 2. `frontend/src/app/globals.css` owns semantic dark/light tokens and structural breakpoints.
 3. `frontend/src/app/workspace.tsx` coordinates existing API calls and presents the selected session.
 
@@ -20,6 +20,7 @@ Creating a session also advances the generation after success, so an older resto
 
 Desktop uses fixed 260-280px repository and 420px evidence panes, with a fluid conversation between plain noninteractive rules.
 At 1100px and below, the side panes become native dialogs with Tab wrapping, Escape dismissal and focus restoration.
+The account avatar opens a menu with native Profile/Settings links, arrow/Home/End navigation, Escape/Tab exit and outside dismissal. The shared avatar falls back to an initial if its safe GitHub image fails. Settings reuses the identity session guard and currently explains defaults without editable controls.
 Selections use real buttons with `aria-pressed`; unavailable features use static explanations instead of disabled-looking navigation.
 The light palette follows `prefers-color-scheme`; there is no theme toggle to persist or hydrate.
 

@@ -242,8 +242,89 @@ code {
 .app-header nav a:hover {
   color: var(--text);
 }
-.app-header > .status-badge {
+.account-menu,
+.account-link {
+  position: relative;
+  flex-shrink: 0;
   margin-left: auto;
+}
+.account-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  color: var(--text);
+  background: transparent;
+  text-decoration: none;
+}
+.account-trigger:hover,
+.account-trigger[aria-expanded='true'] {
+  background: var(--hover);
+  border-color: var(--border);
+}
+.account-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.account-avatar.avatar-fallback {
+  font-size: 14px;
+  font-weight: 600;
+}
+.account-tooltip,
+.account-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.account-tooltip {
+  visibility: hidden;
+  padding: 6px 10px;
+  width: max-content;
+  max-width: min(240px, calc(100vw - 32px));
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  pointer-events: none;
+}
+.account-trigger:hover + .account-tooltip,
+.account-trigger:focus-visible + .account-tooltip {
+  visibility: visible;
+}
+.account-dropdown {
+  width: min(200px, calc(100vw - 32px));
+  padding: 4px;
+}
+.account-dropdown a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 4px;
+  text-decoration: none;
+}
+.account-dropdown a:hover,
+.account-dropdown a:focus-visible {
+  background: var(--hover);
+}
+.account-dropdown a:focus-visible {
+  outline-offset: -2px;
+}
+.account-dropdown a[aria-current='page'] {
+  color: var(--accent);
+}
+.settings-return {
+  margin-top: 32px;
 }
 .status-badge {
   display: inline-flex;
@@ -829,7 +910,7 @@ code {
   border-radius: 50%;
   flex-shrink: 0;
 }
-.profile-avatar-fallback {
+.avatar-fallback {
   display: grid;
   place-items: center;
   background: var(--selected);
@@ -948,11 +1029,8 @@ code {
     gap: 6px;
   }
   .app-header nav {
-    margin-left: auto;
+    margin-left: 0;
     gap: 16px;
-  }
-  .app-header > .status-badge {
-    display: none;
   }
   .repository-context {
     padding: 12px 16px;

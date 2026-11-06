@@ -53,8 +53,8 @@
     {
       "name": "Navigation",
       "kind": "nav",
-      "description": "Two real destinations with an active underline.",
-      "html": "<nav class=\"ds-nav\"><a href=\"/\" aria-current=\"page\">Workspace</a><a href=\"/profile\">Profile</a></nav>",
+      "description": "Main workspace destination. Profile and Settings live in the account avatar menu.",
+      "html": "<nav class=\"ds-nav\"><a href=\"/\" aria-current=\"page\">Workspace</a></nav>",
       "css": ".ds-nav{display:flex;gap:24px;font:14px/1.5 sans-serif}.ds-nav a{padding:16px 0;color:var(--muted,#a8b0ba);text-decoration:none;border-bottom:2px solid transparent}.ds-nav a[aria-current]{color:var(--text,#eef1f4);border-color:var(--accent,#64d8c5)}.ds-nav a:hover{color:var(--text,#eef1f4)}.ds-nav a:focus-visible{outline:2px solid var(--accent,#64d8c5);outline-offset:3px}"
     },
     {

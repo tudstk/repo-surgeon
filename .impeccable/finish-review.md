@@ -30,3 +30,7 @@ GitHub login does not import repositories. The deterministic provider lists file
 ## Composer focus follow-up
 
 A user-reported nested focus outline was reproduced in both palettes: the textarea had its own outline inside the focused composer border, visually separating the footer. Focus now uses one outline on the shared composer container while Inspect retains its own keyboard outline. Desktop and phone captures were visually reviewed. The updated frontend passed formatting, lint, types, 30 unit tests, 20 browser tests and the production build; the earlier 18-test production-fixture run above remains the recorded production journey.
+
+## Account navigation follow-up
+
+Replaced the workspace header's read-only badge and Profile tab with the safe GitHub avatar, username tooltip and icon-labelled Profile/Settings menu. Profile and Settings share that header; static public unavailable pages keep a generic account link. The new authenticated Settings page describes current appearance/provider defaults without claiming configuration support. Dark/light desktop/phone screenshots, menu keyboard/outside-dismissal behavior, navigation, missing-image fallback and signed-out Settings access were checked. No authentication or backend capability was added. Frontend formatting, lint, types, 31 unit tests, 23 browser tests and the production build passed.

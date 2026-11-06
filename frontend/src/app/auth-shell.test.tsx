@@ -156,17 +156,20 @@ describe('identity journey', () => {
     );
   });
 
-  it('redirects unauthenticated profile requests to login and leaves repository data unloaded', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() => Promise.resolve(jsonResponse({}, 401))),
-    );
+  it.each(['profile', 'settings'] as const)(
+    'redirects unauthenticated %s requests to login and leaves repository data unloaded',
+    async (view) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(() => Promise.resolve(jsonResponse({}, 401))),
+      );
 
-    render(<ProfileScreen />);
+      render(<ProfileScreen view={view} />);
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
-    expect(screen.queryByText(/repository-1|payments-api/i)).not.toBeInTheDocument();
-  });
+      await waitFor(() => expect(replace).toHaveBeenCalledWith('/login'));
+      expect(screen.queryByText(/repository-1|payments-api/i)).not.toBeInTheDocument();
+    },
+  );
 
   it('renders a profile without a GitHub profile URL safely', async () => {
     vi.stubGlobal(
@@ -183,11 +186,10 @@ describe('identity journey', () => {
 
     render(<ProfileScreen />);
 
-    expect(await screen.findAllByText('@ada')).toHaveLength(1);
+    expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument();
     expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
       '/',
       '/',
-      '/profile',
       '/',
     ]);
   });
@@ -249,10 +251,8 @@ describe('identity journey', () => {
     expect(screen.getByRole('region', { name: 'Run events' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'payments-api' })).toBeInTheDocument();
     expect(screen.getByText(/Start a read-only session/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Open profile for @ada' })).toHaveAttribute(
-      'href',
-      '/profile',
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu for @ada' }));
+    expect(screen.getByRole('menuitem', { name: 'Profile' })).toHaveAttribute('href', '/profile');
     expect(screen.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/auth/session',

@@ -1,6 +1,7 @@
 'use client';
 
-import { AppHeader, Icon, ReadOnlyBadge } from '@/components/ui/shell';
+import { AppHeader, Icon } from '@/components/ui/shell';
+import type { SafeProfile } from '@/lib/auth-api';
 import { Drawer } from '@/components/ui/drawer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -39,13 +40,7 @@ function eventMessage(event: RunEvent) {
   return 'Saved run activity';
 }
 
-export default function Workspace({
-  githubLogin,
-  csrfToken,
-}: {
-  githubLogin: string;
-  csrfToken: string;
-}) {
+export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrfToken: string }) {
   const [drawer, setDrawer] = useState<'repositories' | 'events' | null>(null);
   const closeDrawer = useCallback(() => setDrawer(null), []);
   const [repositories, setRepositories] = useState<OwnedRepository[]>([]);
@@ -431,9 +426,7 @@ export default function Workspace({
 
   return (
     <main className="workspace-shell">
-      <AppHeader active="workspace" profileLabel={`Open profile for @${githubLogin}`}>
-        <ReadOnlyBadge />
-      </AppHeader>
+      <AppHeader active="workspace" user={user} />
       <div className="repository-context">
         <Icon name="repo" />
         <span title={selectedRepository?.name}>{selectedRepository?.name ?? 'Your workspace'}</span>

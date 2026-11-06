@@ -376,3 +376,113 @@ for (const colorScheme of ['dark', 'light'] as const) {
     }
   });
 }
+
+for (const colorScheme of ['dark', 'light'] as const) {
+  test(`GitHub account menu works on desktop and phone in ${colorScheme} mode`, async ({
+    page,
+  }, testInfo) => {
+    await fixture(page);
+    const avatar = 'https://avatars.githubusercontent.com/u/fixture?s=64';
+    await page.route(avatar, (route) =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#116a5b"/><text x="32" y="43" text-anchor="middle" fill="white" font-size="32">A</text></svg>',
+      }),
+    );
+    await page.route('**/api/v1/auth/session', (route) =>
+      route.fulfill({ json: { ...account, user: { ...account.user, github_avatar_url: avatar } } }),
+    );
+    await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+    await page.goto('/');
+    const trigger = page.getByRole('button', { name: 'Account menu for @ada' });
+    await expect(trigger.locator('img')).toHaveAttribute('src', avatar);
+    await expect
+      .poll(() => trigger.locator('img').evaluate((img: HTMLImageElement) => img.naturalWidth))
+      .toBeGreaterThan(0);
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Main navigation' })
+        .getByRole('link', { name: 'Profile' }),
+    ).toHaveCount(0);
+    await expect(page.locator('.app-header')).not.toContainText('Read-only');
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await trigger.hover();
+      await expect(page.getByRole('tooltip')).toHaveText('@ada');
+      await expect(page.getByRole('tooltip')).toBeVisible();
+      await trigger.click();
+      await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      const profile = page.getByRole('menuitem', { name: 'Profile', exact: true });
+      const settings = page.getByRole('menuitem', { name: 'Settings', exact: true });
+      await expect(profile).toHaveAttribute('href', '/profile');
+      await expect(settings).toHaveAttribute('href', '/settings');
+      await expect(profile.locator('svg')).toHaveCount(1);
+      await expect(settings.locator('svg')).toHaveCount(1);
+      await expect(profile).toBeFocused();
+      await capture(page, testInfo, `account-menu-${colorScheme}-${width}`);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page.keyboard.press('ArrowDown');
+      await expect(settings).toBeFocused();
+      await page.keyboard.press('ArrowDown');
+      await expect(profile).toBeFocused();
+      await page.keyboard.press('End');
+      await expect(settings).toBeFocused();
+      await page.keyboard.press('Home');
+      await expect(profile).toBeFocused();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('menu')).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+      await page.keyboard.press('ArrowUp');
+      await expect(settings).toBeFocused();
+      await page.keyboard.press('Tab');
+      await expect(page.getByRole('menu')).toHaveCount(0);
+      await trigger.click();
+      await page.getByRole('heading', { name: 'Latest exchange' }).click();
+      await expect(page.getByRole('menu')).toHaveCount(0);
+    }
+    await trigger.click();
+    await page.getByRole('menuitem', { name: 'Settings' }).click();
+    await expect(page).toHaveURL('/settings');
+    await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+    await capture(page, testInfo, `settings-${colorScheme}-390`);
+    await expect(
+      page.getByText('There are no configurable settings in this release.', { exact: false }),
+    ).toBeVisible();
+    await trigger.click();
+    await expect(page.getByRole('menuitem', { name: 'Settings' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    await page.getByRole('menuitem', { name: 'Profile' }).click();
+    await expect(page).toHaveURL('/profile');
+    await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
+  });
+}
+
+test('a broken GitHub picture falls back to an initial without losing account navigation', async ({
+  page,
+}) => {
+  await fixture(page);
+  await page.route('https://avatars.githubusercontent.com/broken', (route) => route.abort());
+  await page.route('**/api/v1/auth/session', (route) =>
+    route.fulfill({
+      json: {
+        ...account,
+        user: {
+          ...account.user,
+          github_avatar_url: 'https://avatars.githubusercontent.com/broken',
+        },
+      },
+    }),
+  );
+  await page.goto('/');
+  const trigger = page.getByRole('button', { name: 'Account menu for @ada' });
+  await expect(trigger).toHaveText('A');
+  await expect(trigger.locator('img')).toHaveCount(0);
+  await trigger.focus();
+  await expect(page.getByRole('tooltip')).toBeVisible();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('menuitem', { name: 'Profile' })).toBeFocused();
+});

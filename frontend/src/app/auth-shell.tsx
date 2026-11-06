@@ -12,6 +12,7 @@ import {
   SessionRequestError,
 } from '@/lib/auth-api';
 import Workspace from './workspace';
+import { Avatar } from '@/components/ui/avatar';
 import { AppHeader, Brand, Icon, ReadOnlyBadge } from '@/components/ui/shell';
 
 function GitHubMark() {
@@ -143,22 +144,7 @@ export function CallbackScreen() {
   );
 }
 
-function ProfileAvatar({ session }: { session: BrowserSession }) {
-  const { user } = session;
-  if (user.github_avatar_url) {
-    // GitHub supplies this safe profile field. Rendering it directly avoids proxying an
-    // externally controlled URL through the Next.js image optimizer.
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img className="profile-avatar" src={user.github_avatar_url} alt="" />;
-  }
-  return (
-    <div className="profile-avatar profile-avatar-fallback" aria-hidden="true">
-      {user.display_name[0]}
-    </div>
-  );
-}
-
-export function ProfileScreen() {
+export function ProfileScreen({ view = 'profile' }: { view?: 'profile' | 'settings' }) {
   const router = useRouter();
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -199,7 +185,10 @@ export function ProfileScreen() {
     return (
       <LoadingShell>
         <div className="identity-alert" role="alert">
-          Your profile is temporarily unavailable. No repository data has been loaded.
+          {view === 'settings'
+            ? 'Settings are temporarily unavailable.'
+            : 'Your profile is temporarily unavailable.'}{' '}
+          No repository data has been loaded.
         </div>
         <button
           className="secondary-button"
@@ -209,7 +198,7 @@ export function ProfileScreen() {
             setAttempt((value) => value + 1);
           }}
         >
-          Retry profile
+          {view === 'settings' ? 'Retry settings' : 'Retry profile'}
         </button>
       </LoadingShell>
     );
@@ -219,20 +208,50 @@ export function ProfileScreen() {
     return (
       <LoadingShell>
         <p aria-live="polite" className="identity-status">
-          Loading your profile…
+          {view === 'settings' ? 'Loading your settings…' : 'Loading your profile…'}
         </p>
       </LoadingShell>
     );
   }
 
   const { user } = session;
+  if (view === 'settings') {
+    return (
+      <main className="profile-shell">
+        <AppHeader active="settings" user={user} />
+        <section className="profile-card" aria-labelledby="settings-title">
+          <h1 id="settings-title" className="account-heading">
+            Settings
+          </h1>
+          <div className="profile-details">
+            <div>
+              <span>Appearance</span>
+              <strong>Follows your device</strong>
+            </div>
+            <div>
+              <span>Inspection provider</span>
+              <strong>Deterministic demo</strong>
+            </div>
+          </div>
+          <p className="profile-scope">
+            There are no configurable settings in this release. Light and dark appearance follow
+            your device preference; the inspection provider cannot be changed here.
+          </p>
+          <Link className="primary-button settings-return" href="/">
+            Return to workspace
+            <Icon name="arrow" />
+          </Link>
+        </section>
+      </main>
+    );
+  }
   return (
     <main className="profile-shell">
-      <AppHeader active="profile" />
+      <AppHeader active={view} user={user} />
       <section className="profile-card" aria-labelledby="profile-title">
         <h2 className="account-heading">Your account</h2>
         <div className="profile-identity">
-          <ProfileAvatar session={session} />
+          <Avatar user={user} className="profile-avatar" />
           <div>
             <h1 id="profile-title">{user.display_name}</h1>
             {user.github_profile_url ? (
@@ -332,5 +351,5 @@ export function WorkspaceScreen() {
     );
   }
 
-  return <Workspace githubLogin={session.user.github_login} csrfToken={session.csrf_token} />;
+  return <Workspace user={session.user} csrfToken={session.csrf_token} />;
 }

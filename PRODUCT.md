@@ -24,6 +24,7 @@ The workspace shows repositories already assigned to the account.
 The deterministic demo provider lists files and returns a fixed completion message, not tailored answers.
 Sessions, turns and normalized events are saved; repository files are not modified and no Git commit is created.
 Only the latest exchange is displayed when restoring a session.
+The GitHub avatar menu links to Profile and an authenticated informational Settings page; appearance/provider settings are not editable.
 Public GitHub import, proposals, sandbox execution, approval, application and a complete audit ledger are unavailable in this UI release.
 Existing local operator read/search/investigation capabilities remain separate from the public authenticated workspace.
 No browser capability flag identifies deployment mode; never infer it from the hostname.

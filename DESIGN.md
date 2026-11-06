@@ -111,7 +111,7 @@ Controls and messages use the control radius; small badges use the badge radius.
 
 ## Components
 
-- **Header:** Brand link plus Workspace and Profile links; `aria-current` marks the current page. Read-only status is subdued and source-file safety remains stated in mobile context.
+- **Header:** Brand and Workspace links, plus a circular GitHub avatar at the right. Hover/focus reveals the username; click opens icon-labelled Profile and Settings links. Menus support arrows, Home/End, Escape, Tab exit and outside dismissal. The trigger is 44px with a 32px image and an initial fallback. Source-file safety remains stated in repository context.
 - **Buttons:** Teal primary and outlined neutral secondary actions; stable hover treatments, explicit disabled states, and 2px accent focus outlines with 3px offset. Principal phone actions are at least 44px high.
 - **Selection rows:** Native buttons use `aria-pressed`, teal text and a selected surface. Full names remain available through wrapping and titles.
 - **Composer:** Textarea focus outlines the shared input container, including its footer, without a nested textarea ring. Inspect keeps its own keyboard focus outline. A visible demo-provider disclosure precedes the bordered textarea. Inspect is disabled without a session, during submission and for instructions shorter than three trimmed characters. Input is capped at 8000 characters.

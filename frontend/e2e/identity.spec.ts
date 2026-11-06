@@ -80,7 +80,8 @@ test('callback resolves a mocked session into the safe profile and logs out with
   await page.getByRole('button', { name: 'Send instruction' }).click();
   await expect(page.getByText(/Saved to session history/)).toBeVisible();
 
-  await page.getByRole('link', { name: 'Open profile for @ada' }).click();
+  await page.getByRole('button', { name: 'Account menu for @ada' }).click();
+  await page.getByRole('menuitem', { name: 'Profile' }).click();
   await expect(page).toHaveURL('/profile');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL('/login?signed_out=1');
@@ -99,7 +100,8 @@ test('OAuth callback, profile, and logout use the same-origin Next.js proxy', as
     page.getByRole('complementary', { name: 'Repositories and sessions' }),
   ).toBeVisible();
 
-  await page.getByRole('link', { name: 'Open profile for @ada' }).click();
+  await page.getByRole('button', { name: 'Account menu for @ada' }).click();
+  await page.getByRole('menuitem', { name: 'Profile' }).click();
   await expect(page).toHaveURL('/profile');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL('/login?signed_out=1');

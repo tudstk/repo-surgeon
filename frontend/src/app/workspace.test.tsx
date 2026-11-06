@@ -53,7 +53,17 @@ describe('authenticated workspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
+    render(
+      <Workspace
+        user={{
+          display_name: 'Ada Lovelace',
+          github_login: 'ada',
+          github_avatar_url: null,
+          github_profile_url: null,
+        }}
+        csrfToken="session-csrf"
+      />,
+    );
 
     await screen.findByRole('button', { name: 'web-dashboard' });
     fireEvent.click(screen.getByRole('button', { name: 'web-dashboard' }));
@@ -88,7 +98,17 @@ describe('authenticated workspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
+    render(
+      <Workspace
+        user={{
+          display_name: 'Ada Lovelace',
+          github_login: 'ada',
+          github_avatar_url: null,
+          github_profile_url: null,
+        }}
+        csrfToken="session-csrf"
+      />,
+    );
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Start read-only session' })).toBeEnabled(),
@@ -124,7 +144,17 @@ describe('authenticated workspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
+    render(
+      <Workspace
+        user={{
+          display_name: 'Ada Lovelace',
+          github_login: 'ada',
+          github_avatar_url: null,
+          github_profile_url: null,
+        }}
+        csrfToken="session-csrf"
+      />,
+    );
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Repository workspace state could not be loaded.',
@@ -157,7 +187,17 @@ describe('authenticated workspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
+    render(
+      <Workspace
+        user={{
+          display_name: 'Ada Lovelace',
+          github_login: 'ada',
+          github_avatar_url: null,
+          github_profile_url: null,
+        }}
+        csrfToken="session-csrf"
+      />,
+    );
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Owned repositories could not be loaded.',
@@ -237,7 +277,17 @@ describe('authenticated workspace', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
+    render(
+      <Workspace
+        user={{
+          display_name: 'Ada Lovelace',
+          github_login: 'ada',
+          github_avatar_url: null,
+          github_profile_url: null,
+        }}
+        csrfToken="session-csrf"
+      />,
+    );
 
     expect(await screen.findByText(/bounded read-only inspection/i)).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Run events' })).toHaveTextContent('run.completed');
