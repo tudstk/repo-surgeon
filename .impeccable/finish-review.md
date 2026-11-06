@@ -26,3 +26,7 @@ The prior mechanical detector had no findings. This continuation reused that res
 These browser journeys use synthetic identities and responses, not live GitHub OAuth or PostgreSQL. Existing database rows and ownership were preserved. Local startup registered a fresh synthetic demo through the existing API after the earlier temporary source disappeared. The user's actual desktop viewport and mobile software-keyboard behavior were not measured. Token contrast checks are not a comprehensive accessibility audit.
 
 GitHub login does not import repositories. The deterministic provider lists files and returns a fixed completion message. Only the latest exchange is displayed. Proposals, test execution, approval, application, repository writes and a complete audit ledger remain unavailable. Fixed desktop dividers are intentional; resizing is not implemented in this slice. There are no shipping raster assets requiring provenance.
+
+## Composer focus follow-up
+
+A user-reported nested focus outline was reproduced in both palettes: the textarea had its own outline inside the focused composer border, visually separating the footer. Focus now uses one outline on the shared composer container while Inspect retains its own keyboard outline. Desktop and phone captures were visually reviewed. The updated frontend passed formatting, lint, types, 30 unit tests, 20 browser tests and the production build; the earlier 18-test production-fixture run above remains the recorded production journey.

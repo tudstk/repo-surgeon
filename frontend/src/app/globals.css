@@ -556,6 +556,13 @@ code {
 .composer-input:focus-within {
   border-color: var(--accent);
 }
+.composer-input:has(textarea:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.composer textarea:focus-visible {
+  outline: none;
+}
 .composer textarea {
   display: block;
   resize: vertical;

@@ -351,3 +351,28 @@ test('repository authorization failures still clear all private workspace choice
   await expect(page.getByRole('button', { name: repository.name, exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
 });
+
+for (const colorScheme of ['dark', 'light'] as const) {
+  test(`composer focus stays on its shared boundary in ${colorScheme} mode`, async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+    await fixture(page);
+    await page.goto('/');
+    const instruction = page.getByRole('textbox', { name: 'Agent instruction' });
+    await expect(instruction).toBeEnabled();
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await instruction.click();
+      await expect(instruction).toBeFocused();
+      await capture(page, testInfo, `composer-focus-${colorScheme}-${width}`);
+      await expect(instruction).toHaveCSS('outline-style', 'none');
+      await expect(page.locator('.composer-input')).toHaveCSS('outline-style', 'solid');
+      await page.keyboard.press('Tab');
+      const inspect = page.getByRole('button', { name: 'Send instruction' });
+      await expect(inspect).toBeFocused();
+      await expect(inspect).toHaveCSS('outline-style', 'solid');
+      await expect(page.locator('.composer-input')).toHaveCSS('outline-style', 'none');
+    }
+  });
+}
