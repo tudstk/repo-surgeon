@@ -81,6 +81,19 @@ async function fixture(page: Page, state: 'saved' | 'empty' | 'failed' | 'ready'
   );
 }
 
+test('workspace brand returns to the landing page and the workspace link returns to the app', async ({
+  page,
+}) => {
+  await fixture(page);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: 'Latest exchange' })).toBeVisible();
+  await page.getByRole('link', { name: 'Repo Surgeon', exact: true }).click();
+  await expect(page).toHaveURL('/landing');
+  await page.getByRole('banner').getByRole('link', { name: 'Open workspace', exact: true }).click();
+  await expect(page).toHaveURL('/');
+  await expect(page.getByRole('heading', { name: 'Latest exchange' })).toBeVisible();
+});
+
 for (const viewport of [
   { width: 1440, height: 900 },
   { width: 1280, height: 800 },

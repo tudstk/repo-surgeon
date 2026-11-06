@@ -1,0 +1,16 @@
+{
+  "capturedAt": "2026-11-06T11:02:30.011Z",
+  "sourceCommit": "b20ef17",
+  "source": "Current Repo Surgeon UI rendered against frontend/e2e/proxy-api-server.mjs on isolated ports 3001/8010. Synthetic demo identity/repository/session only. No live account, database or OAuth credentials.",
+  "captures": {
+    "workspace-desktop.png": "1440x900 dark",
+    "workspace-phone.png": "390x844 dark"
+  },
+  "excluded": "Next.js development indicator only; product UI unchanged.",
+  "font": {
+    "name": "IBM Plex Sans variable, upright",
+    "source": "https://github.com/google/fonts/tree/main/ofl/ibmplexsans",
+    "license": "OFL.txt"
+  },
+  "geometry": "Original code-native SVG: an unframed paper document and a shared geometric circuit field. Decorative presentation only, not working inspection telemetry."
+}
