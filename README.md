@@ -10,6 +10,19 @@ Registration validates only the selected path and Git worktree boundary. The MCP
 
 No model API key is required.
 
+### Workspace interface
+
+GitHub sign-in identifies your account; it does not connect or import your GitHub repositories.
+The workspace shows repositories already assigned to your account.
+Its demo provider lists files and returns a fixed completion message, rather than a tailored answer.
+Selecting a saved session restores its latest exchange and run events, not a complete transcript.
+“Persisted” means saved to session history; it does not mean a Git commit was created or a tool succeeded.
+
+The interface uses three fixed desktop panes with plain dividers and conversation-first drawers at 1100px and below.
+The light palette follows the operating system preference; keyboard focus and reduced motion are supported.
+The four unfinished direct URLs explain their availability and link back to the workspace.
+See the [design system](DESIGN.md), [product context](PRODUCT.md) and the [interface learning note](docs/learning/workspace-interface.md).
+
 ## Access modes and authentication foundation
 
 The checked-in default is `local_trusted`: the API accepts loopback clients and
@@ -124,8 +137,8 @@ Next.js proxies them to FastAPI at `REPO_SURGEON_API_ORIGIN` (default:
 page resolves only the opaque browser session before showing the safe profile
 projection at `/profile`. FastAPI always redirects callback completion to the
 validated fixed frontend destination, rather than resolving it from an API-origin
-relative path. Repository data is intentionally unavailable from this identity UI
-until tenant authorization is complete.
+relative path. Repository requests begin only after the workspace confirms the browser session;
+the API enforces account ownership for repository and session reads.
 
 ## Verify quality gates
 
