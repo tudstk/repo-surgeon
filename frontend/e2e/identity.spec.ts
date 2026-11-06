@@ -41,9 +41,7 @@ test('logged-out login starts the same-origin OAuth endpoint without loading rep
     'href',
     '/api/v1/auth/github/start',
   );
-  await expect(
-    page.getByText(/Repository access remains tenant-scoped and read-only/),
-  ).toBeVisible();
+  await expect(page.getByText(/Sign-in does not import your GitHub repositories/)).toBeVisible();
   await expect(page.getByText('payments-api')).toHaveCount(0);
 });
 
@@ -66,23 +64,24 @@ test('callback resolves a mocked session into the safe profile and logs out with
   await page.goto('/auth/callback');
   await expect(page).toHaveURL('/profile');
   await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
-  await expect(page.getByText('Owned repositories are available read-only')).toBeVisible();
+  await expect(page.getByText('Assigned repositories, read-only')).toBeVisible();
 
   await page.getByRole('link', { name: 'Continue to workspace' }).click();
   await expect(page).toHaveURL('/');
   await expect(
     page.getByRole('complementary', { name: 'Repositories and sessions' }),
   ).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Conversation & agent trace' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Work panel' })).toBeVisible();
-  await expect(page.getByRole('option', { name: 'payments-api' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Latest exchange' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Run events' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'payments-api', exact: true })).toBeVisible();
   await expect(page.getByText(/bounded read-only inspection/i)).toBeVisible();
   await expect(page.getByLabel('Normalized run events')).toContainText('run.completed');
 
   await page.getByRole('button', { name: 'Send instruction' }).click();
-  await expect(page.getByText(/Persisted turn restored from normalized events/)).toBeVisible();
+  await expect(page.getByText(/Saved to session history/)).toBeVisible();
 
-  await page.getByRole('link', { name: 'Open profile for @ada' }).click();
+  await page.getByRole('button', { name: 'Account menu for @ada' }).click();
+  await page.getByRole('menuitem', { name: 'Profile' }).click();
   await expect(page).toHaveURL('/profile');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL('/login?signed_out=1');
@@ -101,7 +100,8 @@ test('OAuth callback, profile, and logout use the same-origin Next.js proxy', as
     page.getByRole('complementary', { name: 'Repositories and sessions' }),
   ).toBeVisible();
 
-  await page.getByRole('link', { name: 'Open profile for @ada' }).click();
+  await page.getByRole('button', { name: 'Account menu for @ada' }).click();
+  await page.getByRole('menuitem', { name: 'Profile' }).click();
   await expect(page).toHaveURL('/profile');
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page).toHaveURL('/login?signed_out=1');

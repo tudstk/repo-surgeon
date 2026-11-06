@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-06T09:49:12.966573+00:00",
+  "title": "Design System: Repo Surgeon",
+  "extensions": {
+    "motion": [
+      {
+        "name": "state-transition",
+        "value": "160ms ease-out",
+        "purpose": "Color and border feedback; disabled for reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact-desktop",
+        "value": "1280px"
+      },
+      {
+        "name": "drawers",
+        "value": "1100px"
+      },
+      {
+        "name": "phone",
+        "value": "600px"
+      }
+    ],
+    "shadows": []
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "A real action with explicit disabled and keyboard-focus states.",
+      "html": "<button class=\"ds-button-primary\">Inspect</button>",
+      "css": ".ds-button-primary{font:600 14px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;border-radius:var(--radius,6px);padding:8px 14px;min-height:40px;cursor:pointer;transition:background-color 160ms ease-out,border-color 160ms ease-out,color 160ms ease-out;background:var(--accent,#64d8c5);color:var(--accent-ink,#092c27);border:1px solid transparent;}.ds-button-primary:hover:not(:disabled){filter:brightness(1.08)}.ds-button-primary:focus-visible{outline:2px solid var(--accent,#64d8c5);outline-offset:3px}.ds-button-primary:disabled{background:var(--raised,#1b1f24);color:var(--muted,#a8b0ba);cursor:default}@media(prefers-reduced-motion:reduce){.ds-button-primary{transition:none}}"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A real action with explicit disabled and keyboard-focus states.",
+      "html": "<button class=\"ds-button-secondary\">Inspect</button>",
+      "css": ".ds-button-secondary{font:600 14px/1.5 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;border-radius:var(--radius,6px);padding:8px 14px;min-height:40px;cursor:pointer;transition:background-color 160ms ease-out,border-color 160ms ease-out,color 160ms ease-out;background:var(--panel,#15181c);color:var(--text,#eef1f4);border:1px solid var(--control-border,#65717e);}.ds-button-secondary:hover:not(:disabled){filter:brightness(1.08)}.ds-button-secondary:focus-visible{outline:2px solid var(--accent,#64d8c5);outline-offset:3px}.ds-button-secondary:disabled{background:var(--raised,#1b1f24);color:var(--muted,#a8b0ba);cursor:default}@media(prefers-reduced-motion:reduce){.ds-button-secondary{transition:none}}"
+    },
+    {
+      "name": "Instruction field",
+      "kind": "input",
+      "description": "Bounded instruction with visible focus.",
+      "html": "<label for=\"ds-instruction\">Agent instruction</label><textarea id=\"ds-instruction\" class=\"ds-field\">List repository files</textarea>",
+      "css": ".ds-field{display:block;width:100%;padding:12px;border:1px solid var(--control-border,#65717e);border-radius:6px;background:var(--panel,#15181c);color:var(--text,#eef1f4);font:14px/1.5 sans-serif;caret-color:var(--accent,#64d8c5)}.ds-field:focus-visible{outline:2px solid var(--accent,#64d8c5);outline-offset:3px}"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "description": "Main workspace destination. Profile and Settings live in the account avatar menu.",
+      "html": "<nav class=\"ds-nav\"><a href=\"/\" aria-current=\"page\">Workspace</a></nav>",
+      "css": ".ds-nav{display:flex;gap:24px;font:14px/1.5 sans-serif}.ds-nav a{padding:16px 0;color:var(--muted,#a8b0ba);text-decoration:none;border-bottom:2px solid transparent}.ds-nav a[aria-current]{color:var(--text,#eef1f4);border-color:var(--accent,#64d8c5)}.ds-nav a:hover{color:var(--text,#eef1f4)}.ds-nav a:focus-visible{outline:2px solid var(--accent,#64d8c5);outline-offset:3px}"
+    },
+    {
+      "name": "Read-only badge",
+      "kind": "chip",
+      "description": "A static capability label.",
+      "html": "<span class=\"ds-badge\">Read-only</span>",
+      "css": ".ds-badge{display:inline-flex;padding:1px 7px;border:1px solid var(--border,#343c45);border-radius:4px;color:var(--success,#83d9ad);font:12px/20px sans-serif}"
+    },
+    {
+      "name": "Selection row",
+      "kind": "custom",
+      "description": "Repository or session selection with a pressed state.",
+      "html": "<button class=\"ds-row\" aria-pressed=\"true\">inspection-fixture</button>",
+      "css": ".ds-row{width:100%;text-align:left;overflow-wrap:anywhere;padding:10px 8px;min-height:40px;border:1px solid var(--border,#343c45);border-radius:6px;font:14px/1.5 sans-serif;color:var(--accent,#64d8c5);background:var(--selected,#19352f)}.ds-row:hover{background:var(--hover,#242a30)}.ds-row:focus-visible{outline:2px solid var(--accent,#64d8c5);outline-offset:3px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Calm repository inspection",
+    "overview": "DeepSource-informed neutral charcoal, quiet rules and restrained teal create a compact developer workspace for sustained inspection. System sans typography carries the interface; monospace is reserved for code, paths and event identifiers. The light palette follows the operating system.",
+    "keyCharacteristics": [
+      "Three connected work areas with aligned headings.",
+      "Flat tonal surfaces, readable rows and an original SVG identity.",
+      "Explicit selection, saving and outcome states."
+    ],
+    "rules": [],
+    "dos": [
+      "Do use semantic tokens across both palettes.",
+      "Do pair outcome colors with readable status text.",
+      "Do keep visible keyboard focus and usable phone touch targets.",
+      "Do wrap repository names and source paths within their panes."
+    ],
+    "donts": [
+      "Don't imply resizing with decorative handles.",
+      "Don't add inert tabs or fictional telemetry.",
+      "Don't equate persistence with successful execution.",
+      "Don't hide repository context to fit the desktop header."
+    ]
+  }
+}

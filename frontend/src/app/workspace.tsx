@@ -1,6 +1,8 @@
 'use client';
 
-import Link from 'next/link';
+import { AppHeader, Icon } from '@/components/ui/shell';
+import type { SafeProfile } from '@/lib/auth-api';
+import { Drawer } from '@/components/ui/drawer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import {
@@ -16,16 +18,8 @@ import {
   type ProductSessionDetail,
   type RepositorySummary,
   type RunEvent,
+  WorkspaceRequestError,
 } from '@/lib/workspace-api';
-
-function PanelHeading({ number, children }: { number: number; children: React.ReactNode }) {
-  return (
-    <div className="panel-heading">
-      <span className="panel-number">{number}</span>
-      <span>{children}</span>
-    </div>
-  );
-}
 
 function formatLines(lines: number | null) {
   return lines === null
@@ -41,17 +35,14 @@ function eventMessage(event: RunEvent) {
     return event.data.tool;
   }
   if (event.type === 'answer.completed') return 'Visible answer persisted';
-  if (event.type === 'run.completed') return 'Run completed and durable';
-  return 'Persisted normalized event';
+  if (event.type === 'run.completed') return 'Run completed';
+  if (event.type === 'run.failed') return 'Run failed';
+  return 'Saved run activity';
 }
 
-export default function Workspace({
-  githubLogin,
-  csrfToken,
-}: {
-  githubLogin: string;
-  csrfToken: string;
-}) {
+export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrfToken: string }) {
+  const [drawer, setDrawer] = useState<'repositories' | 'events' | null>(null);
+  const closeDrawer = useCallback(() => setDrawer(null), []);
   const [repositories, setRepositories] = useState<OwnedRepository[]>([]);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [summary, setSummary] = useState<RepositorySummary | null>(null);
@@ -60,7 +51,9 @@ export default function Workspace({
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [message, setMessage] = useState('What does this repository contain?');
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'session' | 'turn' | null>(null);
+  const submitting = pendingAction !== null;
+  const creatingSession = pendingAction === 'session';
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const workspaceRequestGeneration = useRef(0);
@@ -157,19 +150,34 @@ export default function Workspace({
           setEvents([]);
         }
       })
-      .catch(() => {
+      .catch((cause: unknown) => {
         if (!controller.signal.aborted && generation === workspaceRequestGeneration.current) {
-          clearPrivateWorkspace();
-          setError('Repository workspace state could not be loaded.');
+          if (
+            cause instanceof WorkspaceRequestError &&
+            cause.status === 503 &&
+            cause.code === 'repository_unavailable'
+          ) {
+            // Source availability is distinct from authorization. Clear selected content,
+            // but retain the already-authorized choices so another repository is reachable.
+            workspaceRequestGeneration.current += 1;
+            setSummary(null);
+            setSessions([]);
+            setSession(null);
+            setEvents([]);
+            setError('This repository is unavailable. Choose another repository or retry later.');
+          } else {
+            clearPrivateWorkspace();
+            setError('Repository workspace state could not be loaded.');
+          }
         }
       });
     return () => controller.abort();
   }, [attempt, clearPrivateWorkspace, restoreSession, selectedRepositoryId]);
 
   const handleStartSession = async () => {
-    if (!selectedRepository) return;
+    if (!selectedRepository || !summary || submitting) return;
     const generation = workspaceRequestGeneration.current;
-    setSubmitting(true);
+    setPendingAction('session');
     setError(null);
     try {
       const created = await createProductSession(
@@ -178,6 +186,8 @@ export default function Workspace({
         csrfToken,
       );
       if (generation !== workspaceRequestGeneration.current) return;
+      // A new selection supersedes any older session restore still in flight.
+      workspaceRequestGeneration.current += 1;
       setSessions((current) => [created, ...current]);
       setSession({ ...created, turns: [] });
       setEvents([]);
@@ -187,17 +197,17 @@ export default function Workspace({
         setError('A read-only product session could not be started.');
       }
     } finally {
-      setSubmitting(false);
+      setPendingAction(null);
     }
   };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = message.trim();
-    if (!session || trimmed.length < 3) return;
+    if (!session || submitting || trimmed.length < 3) return;
     const generation = workspaceRequestGeneration.current;
     const sessionId = session.id;
-    setSubmitting(true);
+    setPendingAction('turn');
     setError(null);
     try {
       const turn = await createReadOnlyTurn(sessionId, trimmed, csrfToken);
@@ -214,276 +224,396 @@ export default function Workspace({
         setError('The bounded read-only turn could not be completed.');
       }
     } finally {
-      setSubmitting(false);
+      setPendingAction(null);
     }
   };
 
+  const repositoryPane = (
+    <>
+      <div className="panel-heading">
+        <h2>Repositories</h2>
+        <span className="count">{repositories.length}</span>
+      </div>
+      <div className="repo-content">
+        {loading ? (
+          <div className="loading-state" role="status">
+            <span className="skeleton" />
+            <span className="skeleton short" />
+            Loading repositories…
+          </div>
+        ) : null}
+        {!loading && !error && repositories.length === 0 ? (
+          <p className="empty-state">No repositories assigned yet.</p>
+        ) : null}
+        <div className="selection-list" role="group" aria-label="Repositories">
+          {repositories.map((repository) => (
+            <button
+              aria-pressed={repository.id === selectedRepositoryId}
+              className="selection-row"
+              key={repository.id}
+              onClick={() => {
+                if (repository.id === selectedRepositoryId) return;
+                workspaceRequestGeneration.current += 1;
+                selectedRepositoryIdRef.current = repository.id;
+                setSelectedRepositoryId(repository.id);
+                setSummary(null);
+                setSessions([]);
+                setSession(null);
+                setEvents([]);
+                setError(null);
+              }}
+              type="button"
+              title={repository.name}
+            >
+              <Icon name="repo" />
+              <span>{repository.name}</span>
+            </button>
+          ))}
+        </div>
+        <div className="section-heading">
+          <h2>Sessions</h2>
+          <button
+            className="icon-button"
+            aria-label="Start read-only session"
+            disabled={!selectedRepository || !summary || submitting}
+            onClick={() => void handleStartSession()}
+            type="button"
+          >
+            <Icon name="plus" />
+          </button>
+        </div>
+        <div className="selection-list" role="group" aria-label="Sessions">
+          {sessions.map((item) => (
+            <button
+              aria-pressed={item.id === session?.id}
+              className="selection-row"
+              key={item.id}
+              title={item.title}
+              onClick={() => {
+                const generation = workspaceRequestGeneration.current + 1;
+                setSession(null);
+                setEvents([]);
+                void restoreSession(item.id).catch(() => {
+                  if (generation === workspaceRequestGeneration.current) {
+                    clearPrivateWorkspace();
+                    setError('Repository workspace state could not be loaded.');
+                  }
+                });
+                closeDrawer();
+              }}
+              type="button"
+            >
+              <Icon name="activity" />
+              <span>{item.title}</span>
+            </button>
+          ))}
+          {selectedRepository && sessions.length === 0 ? (
+            <p className="empty-state">Your read-only sessions will appear here.</p>
+          ) : null}
+        </div>
+      </div>
+      <section className="repo-summary" aria-labelledby="repo-summary-title">
+        <div className="section-heading">
+          <h2 id="repo-summary-title">Repository summary</h2>
+          {summary?.truncated ? <span className="status-badge warning">Partial scan</span> : null}
+        </div>
+        {summary ? (
+          <>
+            <dl>
+              <div>
+                <dt>Language</dt>
+                <dd>{summary.language ?? 'Not detected'}</dd>
+              </div>
+              <div>
+                <dt>Confidence</dt>
+                <dd>{summary.language_confidence ?? 'Unknown'}</dd>
+              </div>
+              <div>
+                <dt>Files</dt>
+                <dd>{summary.file_count}</dd>
+              </div>
+              <div>
+                <dt>Size</dt>
+                <dd>{formatLines(summary.approximate_lines)}</dd>
+              </div>
+              <div>
+                <dt>Tests detected</dt>
+                <dd>{summary.test_framework ?? 'Not detected'}</dd>
+              </div>
+            </dl>
+            {summary.test_command ? (
+              <code className="test-command">{summary.test_command}</code>
+            ) : null}
+            <p className="summary-note">
+              Test detection is not a test result.
+              {summary.truncated ? ' Partial scan: counts cover only inspected files.' : ''}
+            </p>
+            {summary.detected_at ? (
+              <p className="summary-note">
+                Scanned{' '}
+                <time dateTime={summary.detected_at}>
+                  {new Date(summary.detected_at).toISOString().slice(0, 10)}
+                </time>
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className="empty-state">Select an assigned repository.</p>
+        )}
+      </section>
+    </>
+  );
+
+  const eventPane = (
+    <>
+      <div className="panel-heading">
+        <h2>Run events</h2>
+        <span className="count">{events.length}</span>
+      </div>
+      <div className="evidence-intro">
+        <Icon name="activity" />
+        <p>
+          Saved activity for the latest exchange. Events are persisted to session history; no Git
+          commit occurred.
+        </p>
+      </div>
+      <div className="event-ledger" aria-label="Normalized run events">
+        {events.length ? (
+          events.map((item) => {
+            const failed = item.type.endsWith('.failed');
+            const completed = item.type.endsWith('.completed');
+            return (
+              <article className={`event-row ${failed ? 'event-failed' : ''}`} key={item.event_id}>
+                <span className="event-sequence">{String(item.sequence).padStart(2, '0')}</span>
+                <div className="event-content">
+                  <code>{item.type}</code>
+                  <p>{eventMessage(item)}</p>
+                  <div className="event-metadata">
+                    {failed || completed ? (
+                      <span className={failed ? 'outcome danger' : 'outcome success'}>
+                        <Icon name={failed ? 'error' : 'check'} />
+                        {failed ? 'Failed' : 'Completed'}
+                      </span>
+                    ) : null}
+                    <span className="persisted">Persisted</span>
+                    <time dateTime={item.occurred_at}>
+                      {new Date(item.occurred_at).toISOString().slice(11, 19)} UTC
+                    </time>
+                  </div>
+                </div>
+              </article>
+            );
+          })
+        ) : (
+          <div className="workspace-empty compact-empty">
+            <Icon name="activity" />
+            <h3>No run events yet</h3>
+            <p>
+              {creatingSession
+                ? 'Starting a new session. No inspection has been requested.'
+                : submitting
+                  ? 'Saved events will appear after this inspection finishes.'
+                  : 'Run a demo inspection in a session to see its saved activity here.'}
+            </p>
+          </div>
+        )}
+      </div>
+      <div className="read-only-footer">
+        Proposals and test execution are not available in this release.
+      </div>
+    </>
+  );
+
   return (
     <main className="workspace-shell">
-      <header className="global-bar">
-        <div className="brand-lockup">
-          <span className="brand-mark" aria-hidden="true">
-            ⚒
-          </span>
-          <span className="brand-name">Repo Surgeon</span>
-          <span className="bar-divider" />
-          <span className="branch-context">
-            {selectedRepository?.name ?? 'Select a repository'} · tenant workspace
-          </span>
-        </div>
-        <div className="global-status">
-          <span className="read-only-badge">
-            <span className="status-dot" aria-hidden="true" /> READ-ONLY
-          </span>
-          <Link
-            className="compact-button"
-            href="/profile"
-            aria-label={`Open profile for @${githubLogin}`}
-          >
-            @{githubLogin}
-          </Link>
-        </div>
-      </header>
-
-      <div className="workspace-grid live-workspace-grid" data-layout="wide">
+      <AppHeader active="workspace" user={user} />
+      <div className="repository-context">
+        <Icon name="repo" />
+        <span title={selectedRepository?.name}>{selectedRepository?.name ?? 'Your workspace'}</span>
+        <span className="context-caption">Repository files stay unchanged</span>
+      </div>
+      <div className="mobile-pane-controls">
+        <button type="button" aria-haspopup="dialog" onClick={() => setDrawer('repositories')}>
+          <Icon name="repo" />
+          Repositories
+        </button>
+        <button type="button" aria-haspopup="dialog" onClick={() => setDrawer('events')}>
+          <Icon name="activity" />
+          Run events<span className="count">{events.length}</span>
+        </button>
+      </div>
+      <div className="workspace-grid">
         <aside className="repo-panel" aria-label="Repositories and sessions">
-          <PanelHeading number={1}>Repositories &amp; sessions</PanelHeading>
-          <div className="repo-content">
-            <div className="section-kicker">OWNED REPOSITORIES</div>
-            {loading ? <p className="empty-state">Loading owned repositories…</p> : null}
-            {!loading && repositories.length === 0 ? (
-              <p className="empty-state">No owned repositories are available.</p>
-            ) : null}
-            <div className="session-list" role="listbox" aria-label="Owned repositories">
-              {repositories.map((repository) => (
-                <button
-                  aria-selected={repository.id === selectedRepositoryId}
-                  className={`session-row ${repository.id === selectedRepositoryId ? 'session-active' : ''}`}
-                  key={repository.id}
-                  onClick={() => {
-                    if (repository.id === selectedRepositoryId) return;
-                    workspaceRequestGeneration.current += 1;
-                    selectedRepositoryIdRef.current = repository.id;
-                    setSelectedRepositoryId(repository.id);
-                    setSummary(null);
-                    setSessions([]);
-                    setSession(null);
-                    setEvents([]);
-                    setError(null);
-                  }}
-                  role="option"
-                  type="button"
-                >
-                  <span aria-hidden="true">▣</span>
-                  <span>{repository.name}</span>
-                  {repository.id === selectedRepositoryId ? (
-                    <span className="status-dot" aria-hidden="true" />
-                  ) : null}
-                </button>
-              ))}
-            </div>
-
-            <div className="section-kicker context-kicker">PRODUCT SESSIONS</div>
-            <div className="session-list" aria-label="Product sessions">
-              {sessions.map((item) => (
-                <button
-                  aria-pressed={item.id === session?.id}
-                  className={`session-row ${item.id === session?.id ? 'session-active' : ''}`}
-                  key={item.id}
-                  onClick={() => {
-                    const generation = workspaceRequestGeneration.current + 1;
-                    setSession(null);
-                    setEvents([]);
-                    void restoreSession(item.id).catch(() => {
-                      if (generation === workspaceRequestGeneration.current) {
-                        clearPrivateWorkspace();
-                        setError('Repository workspace state could not be loaded.');
-                      }
-                    });
-                  }}
-                  type="button"
-                >
-                  <span aria-hidden="true">◌</span>
-                  <span>{item.title}</span>
-                </button>
-              ))}
-              <button
-                className="connect-row"
-                disabled={!selectedRepository || submitting}
-                onClick={() => void handleStartSession()}
-                type="button"
-              >
-                <span aria-hidden="true">＋</span> Start read-only session
-              </button>
-            </div>
-          </div>
-          <section className="repo-summary" aria-labelledby="repo-summary-title">
-            <div className="summary-heading">
-              <h2 id="repo-summary-title">REPOSITORY SUMMARY</h2>
-              {summary?.truncated ? <span className="partial-pill">SCAN PARTIAL</span> : null}
-            </div>
-            {summary ? (
-              <dl>
-                <div>
-                  <dt>Language</dt>
-                  <dd>{summary.language ?? 'Not detected'}</dd>
-                </div>
-                <div>
-                  <dt>Size</dt>
-                  <dd>
-                    {summary.file_count} files · {formatLines(summary.approximate_lines)}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Tests</dt>
-                  <dd>{summary.test_framework ?? 'Not detected'}</dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="empty-state">Select an owned repository.</p>
-            )}
-          </section>
+          {drawer === 'repositories' ? null : repositoryPane}
         </aside>
-
-        <div className="pane-separator" aria-hidden="true" />
-
         <section className="conversation" aria-labelledby="conversation-title">
-          <PanelHeading number={2}>
-            <span id="conversation-title">Conversation &amp; agent trace</span>
-            <span className="stream-status">PERSISTED</span>
-          </PanelHeading>
+          <div className="panel-heading">
+            <h1 id="conversation-title">Latest exchange</h1>
+            <span className={`exchange-state ${submitting ? 'warning' : ''}`} role="status">
+              {creatingSession
+                ? 'Starting session…'
+                : submitting
+                  ? 'Inspecting…'
+                  : latestTurn
+                    ? 'Saved'
+                    : session
+                      ? 'Ready'
+                      : 'Read-only'}
+            </span>
+          </div>
           <div className="conversation-body">
             {error ? (
               <div className="identity-alert workspace-alert" role="alert">
-                {error}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoading(true);
-                    setError(null);
-                    setAttempt((value) => value + 1);
-                  }}
-                >
-                  Retry
-                </button>
+                <Icon name="error" />
+                <div>
+                  <strong>Workspace unavailable</strong>
+                  <p>{error}</p>
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => {
+                      setLoading(true);
+                      setError(null);
+                      setAttempt((value) => value + 1);
+                    }}
+                  >
+                    Retry
+                  </button>
+                </div>
               </div>
             ) : null}
-            {!session ? (
+            {!error && loading ? (
+              <div className="loading-state" role="status">
+                <span className="skeleton" />
+                <span className="skeleton short" />
+                Loading your workspace…
+              </div>
+            ) : null}
+            {!error && !loading && !session ? (
               <div className="workspace-empty">
-                <strong>Start a tenant-scoped product session</strong>
+                <Icon name="repo" />
+                <h2>
+                  {selectedRepository
+                    ? 'Start a read-only session'
+                    : 'No repositories in this workspace yet'}
+                </h2>
                 <p>
-                  Select an owned repository, then start a read-only session to ask one bounded
-                  question.
+                  {selectedRepository
+                    ? 'Keep an inspection and its saved activity together in a session.'
+                    : 'This release shows repositories already assigned to your account. Connecting or importing a GitHub repository is not available yet.'}
                 </p>
+                {selectedRepository ? (
+                  <button
+                    className="primary-button"
+                    disabled={!summary || submitting}
+                    type="button"
+                    onClick={() => void handleStartSession()}
+                  >
+                    <Icon name="plus" />
+                    New session
+                  </button>
+                ) : null}
               </div>
             ) : null}
             {latestTurn ? (
-              <>
-                <div className="message-meta">YOU</div>
+              <div className="exchange">
+                <div className="message-meta">You</div>
                 <div className="user-message">{latestTurn.question}</div>
-                <div className="message-meta agent-meta">REPO SURGEON</div>
-                <p className="agent-message">{latestTurn.answer}</p>
+                <div className="message-meta agent-meta">
+                  <Icon name="activity" />
+                  Repo Surgeon<span className="status-badge">Demo</span>
+                </div>
+                <p className="agent-message">
+                  {latestTurn.answer || 'No answer was returned for this run.'}
+                </p>
                 <div className="activity-list" aria-label="Persisted agent activity">
                   {events
                     .filter((item) => item.type === 'tool.completed' || item.type === 'tool.failed')
                     .map((item) => (
                       <div className="activity-row" key={item.event_id}>
-                        <span aria-hidden="true">›</span>
+                        <Icon name={item.type === 'tool.failed' ? 'error' : 'check'} />
                         <code>{typeof item.data.tool === 'string' ? item.data.tool : 'tool'}</code>
-                        <span className="activity-detail">Persisted normalized result</span>
-                        <strong>{item.type === 'tool.completed' ? 'DONE' : 'FAILED'}</strong>
+                        <span className={item.type === 'tool.failed' ? 'danger' : 'success'}>
+                          {item.type === 'tool.completed' ? 'Completed' : 'Failed'}
+                        </span>
                       </div>
                     ))}
                 </div>
-                <div className="read-only-note">
-                  <span aria-hidden="true">✓</span>
-                  Persisted turn restored from normalized events. No repository write capability was
-                  available.
-                </div>
-              </>
+                <p className="read-only-note">
+                  <Icon name="shield" />
+                  Saved to session history. Repository files are unchanged.
+                </p>
+                <p
+                  className={latestTurn.status === 'failed' ? 'run-outcome danger' : 'run-outcome'}
+                >
+                  Run outcome: {latestTurn.status}
+                </p>
+              </div>
             ) : session ? (
               <div className="workspace-empty">
-                <strong>Session ready</strong>
+                <Icon name="activity" />
+                <h2>Session ready</h2>
                 <p>
-                  Submit one question. The deterministic provider can use only bounded read tools.
+                  Run a demo inspection to list repository files and save its activity. This view
+                  shows the latest exchange in the selected session.
                 </p>
               </div>
             ) : null}
           </div>
           <form className="composer" onSubmit={handleSubmit}>
-            <div className="slash-hints">
-              <span>Bounded list, read, and exact-search tools only.</span>
+            <div className="demo-disclosure" id="demo-disclosure">
+              <strong>Demo inspection</strong>
+              <p>
+                The current provider lists files and returns a fixed completion message. It does not
+                generate tailored answers.
+              </p>
             </div>
-            <textarea
-              aria-label="Agent instruction"
-              disabled={!session || submitting}
-              onChange={(event) => setMessage(event.target.value)}
-              placeholder="Start a session to ask a repository question…"
-              value={message}
-            />
-            <div className="composer-controls">
-              <span className="composer-policy">
-                <span className="status-dot" aria-hidden="true" /> Deterministic fake provider
-              </span>
-              <button
-                aria-label="Send instruction"
-                className="send"
-                disabled={!session || submitting || message.trim().length < 3}
-                type="submit"
-              >
-                {submitting ? '…' : '↑'}
-                <span className="sr-only">Send instruction</span>
-              </button>
+            <div className="composer-input">
+              <label className="sr-only" htmlFor="instruction">
+                Agent instruction
+              </label>
+              <textarea
+                id="instruction"
+                aria-describedby="demo-disclosure"
+                disabled={!session || submitting}
+                onChange={(event) => setMessage(event.target.value)}
+                placeholder="Start a session to run an inspection…"
+                value={message}
+                maxLength={8000}
+              />
+              <div className="composer-controls">
+                <span>
+                  {creatingSession
+                    ? 'Starting read-only session…'
+                    : submitting
+                      ? 'Running read-only inspection…'
+                      : 'Bounded, read-only access'}
+                </span>
+                <button
+                  aria-label="Send instruction"
+                  className="primary-button send"
+                  disabled={!session || submitting || message.trim().length < 3}
+                  type="submit"
+                >
+                  {creatingSession ? 'Starting…' : submitting ? 'Running…' : 'Inspect'}
+                  <Icon name="arrow" />
+                </button>
+              </div>
             </div>
           </form>
         </section>
-
-        <div className="pane-separator" aria-hidden="true" />
-
-        <section className="work-panel" aria-labelledby="work-panel-title">
-          <h2 className="sr-only" id="work-panel-title">
-            Work panel
-          </h2>
-          <div className="work-toolbar">
-            <div className="work-tabs" role="tablist" aria-label="Work views">
-              <button className="tab-selected" role="tab" aria-selected="true" type="button">
-                Run events
-              </button>
-              <button role="tab" aria-selected="false" disabled type="button">
-                Diff unavailable
-              </button>
-            </div>
-          </div>
-          <div className="file-heading">
-            <strong>Normalized persisted trace</strong>
-            <span>READ-ONLY</span>
-          </div>
-          <div className="event-ledger" aria-label="Normalized run events">
-            {events.length ? (
-              events.map((item) => (
-                <article className="event-row" key={item.event_id}>
-                  <span className="event-sequence">{String(item.sequence).padStart(2, '0')}</span>
-                  <div>
-                    <code>{item.type}</code>
-                    <p>{eventMessage(item)}</p>
-                  </div>
-                  <span className="event-state">COMMITTED</span>
-                </article>
-              ))
-            ) : (
-              <div className="workspace-empty compact-empty">
-                <strong>No run selected</strong>
-                <p>Persisted normalized events appear here after a bounded turn.</p>
-              </div>
-            )}
-          </div>
-          <div className="read-only-footer">
-            <span className="status-dot" aria-hidden="true" />
-            Read-only repository access · proposal and write actions are out of scope
-          </div>
+        <section className="work-panel" aria-label="Run events">
+          {drawer === 'events' ? null : eventPane}
         </section>
       </div>
-      <h1 className="sr-only">Authenticated read-only repository workspace</h1>
+      {drawer ? (
+        <Drawer
+          title={drawer === 'repositories' ? 'Repositories and sessions' : 'Run events'}
+          onClose={closeDrawer}
+        >
+          {drawer === 'repositories' ? repositoryPane : eventPane}
+        </Drawer>
+      ) : null}
     </main>
   );
 }

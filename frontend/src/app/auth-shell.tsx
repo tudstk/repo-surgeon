@@ -12,17 +12,8 @@ import {
   SessionRequestError,
 } from '@/lib/auth-api';
 import Workspace from './workspace';
-
-function Brand() {
-  return (
-    <div className="identity-brand">
-      <span aria-hidden="true" className="brand-mark">
-        ⚒
-      </span>
-      <span>Repo Surgeon</span>
-    </div>
-  );
-}
+import { Avatar } from '@/components/ui/avatar';
+import { AppHeader, Brand, Icon, ReadOnlyBadge } from '@/components/ui/shell';
 
 function GitHubMark() {
   return (
@@ -75,12 +66,8 @@ export function LoginScreen() {
       <section className="identity-card" aria-labelledby="login-title">
         <Brand />
         <div className="identity-copy">
-          <p className="eyebrow">IDENTITY</p>
           <h1 id="login-title">Sign in to Repo Surgeon</h1>
-          <p>
-            Continue with GitHub to create or access your Repo Surgeon identity. We request only
-            your public profile identity.
-          </p>
+          <p>A workspace for inspecting repositories, with you in control.</p>
         </div>
         {signedOut ? (
           <p className="identity-notice" role="status">
@@ -97,9 +84,16 @@ export function LoginScreen() {
           Continue with GitHub
         </a>
         <p className="identity-footnote">
-          Your GitHub access token is never stored by Repo Surgeon. Repository access remains
-          tenant-scoped and read-only.
+          We use only your public profile identity to identify your account. Your GitHub access
+          token is never stored by Repo Surgeon.
         </p>
+        <div className="identity-scope">
+          <ReadOnlyBadge />
+          <p>
+            Sign-in does not import your GitHub repositories. This release shows repositories
+            already assigned to your account.
+          </p>
+        </div>
       </section>
     </main>
   );
@@ -150,22 +144,7 @@ export function CallbackScreen() {
   );
 }
 
-function ProfileAvatar({ session }: { session: BrowserSession }) {
-  const { user } = session;
-  if (user.github_avatar_url) {
-    // GitHub supplies this safe profile field. Rendering it directly avoids proxying an
-    // externally controlled URL through the Next.js image optimizer.
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img className="profile-avatar" src={user.github_avatar_url} alt="" />;
-  }
-  return (
-    <div className="profile-avatar profile-avatar-fallback" aria-hidden="true">
-      {user.display_name[0]}
-    </div>
-  );
-}
-
-export function ProfileScreen() {
+export function ProfileScreen({ view = 'profile' }: { view?: 'profile' | 'settings' }) {
   const router = useRouter();
   const [session, setSession] = useState<BrowserSession | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -206,7 +185,10 @@ export function ProfileScreen() {
     return (
       <LoadingShell>
         <div className="identity-alert" role="alert">
-          Your profile is temporarily unavailable. No repository data has been loaded.
+          {view === 'settings'
+            ? 'Settings are temporarily unavailable.'
+            : 'Your profile is temporarily unavailable.'}{' '}
+          No repository data has been loaded.
         </div>
         <button
           className="secondary-button"
@@ -216,7 +198,7 @@ export function ProfileScreen() {
             setAttempt((value) => value + 1);
           }}
         >
-          Retry profile
+          {view === 'settings' ? 'Retry settings' : 'Retry profile'}
         </button>
       </LoadingShell>
     );
@@ -226,30 +208,55 @@ export function ProfileScreen() {
     return (
       <LoadingShell>
         <p aria-live="polite" className="identity-status">
-          Loading your profile…
+          {view === 'settings' ? 'Loading your settings…' : 'Loading your profile…'}
         </p>
       </LoadingShell>
     );
   }
 
   const { user } = session;
-  return (
-    <main className="identity-shell">
-      <section className="profile-card" aria-labelledby="profile-title">
-        <header className="profile-header">
-          <Brand />
-          <Link className="account-control" href="/profile" aria-current="page">
-            <span aria-hidden="true" className="account-dot" /> @{user.github_login}
+  if (view === 'settings') {
+    return (
+      <main className="profile-shell">
+        <AppHeader active="settings" user={user} />
+        <section className="profile-card" aria-labelledby="settings-title">
+          <h1 id="settings-title" className="account-heading">
+            Settings
+          </h1>
+          <div className="profile-details">
+            <div>
+              <span>Appearance</span>
+              <strong>Follows your device</strong>
+            </div>
+            <div>
+              <span>Inspection provider</span>
+              <strong>Deterministic demo</strong>
+            </div>
+          </div>
+          <p className="profile-scope">
+            There are no configurable settings in this release. Light and dark appearance follow
+            your device preference; the inspection provider cannot be changed here.
+          </p>
+          <Link className="primary-button settings-return" href="/">
+            Return to workspace
+            <Icon name="arrow" />
           </Link>
-        </header>
+        </section>
+      </main>
+    );
+  }
+  return (
+    <main className="profile-shell">
+      <AppHeader active={view} user={user} />
+      <section className="profile-card" aria-labelledby="profile-title">
+        <h2 className="account-heading">Your account</h2>
         <div className="profile-identity">
-          <ProfileAvatar session={session} />
+          <Avatar user={user} className="profile-avatar" />
           <div>
-            <p className="eyebrow">ACCOUNT</p>
             <h1 id="profile-title">{user.display_name}</h1>
             {user.github_profile_url ? (
               <a href={user.github_profile_url} rel="noreferrer" target="_blank">
-                @{user.github_login} <span aria-hidden="true">↗</span>
+                @{user.github_login} <Icon name="arrow" />
               </a>
             ) : (
               <p className="profile-login">@{user.github_login}</p>
@@ -262,10 +269,14 @@ export function ProfileScreen() {
             <strong>Signed in with GitHub</strong>
           </div>
           <div>
-            <span>Repository access</span>
-            <strong>Owned repositories are available read-only</strong>
+            <span>Workspace access</span>
+            <strong>Assigned repositories, read-only</strong>
           </div>
         </div>
+        <p className="profile-scope">
+          GitHub sign-in identifies your account. Connecting or importing a GitHub repository is not
+          available yet.
+        </p>
         {logoutError ? (
           <div className="identity-alert" role="alert">
             We could not sign you out. Your session may still be active, so please retry.
@@ -340,5 +351,5 @@ export function WorkspaceScreen() {
     );
   }
 
-  return <Workspace githubLogin={session.user.github_login} csrfToken={session.csrf_token} />;
+  return <Workspace user={session.user} csrfToken={session.csrf_token} />;
 }
