@@ -1,4 +1,10 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
+
+async function capture(page: Page, testInfo: TestInfo, name: string) {
+  const path = testInfo.outputPath(`${name}.png`);
+  await page.screenshot({ path });
+  await testInfo.attach(name, { path, contentType: 'image/png' });
+}
 
 const account = {
   user: {
@@ -99,10 +105,7 @@ for (const viewport of [
       })),
     ).toEqual({ width: viewport.width, overflow: false });
     await expect(page.getByText(repository.name, { exact: true }).first()).toBeVisible();
-    await testInfo.attach(`workspace-${viewport.width}`, {
-      body: await page.screenshot(),
-      contentType: 'image/png',
-    });
+    await capture(page, testInfo, `workspace-${viewport.width}`);
     if (viewport.width > 1100) {
       await expect(
         page.getByRole('complementary', { name: 'Repositories and sessions' }),
@@ -115,10 +118,7 @@ for (const viewport of [
       await trigger.click();
       const dialog = page.getByRole('dialog', { name: 'Repositories and sessions' });
       await expect(dialog).toBeVisible();
-      await testInfo.attach('repositories-drawer', {
-        body: await page.screenshot(),
-        contentType: 'image/png',
-      });
+      await capture(page, testInfo, 'repositories-drawer');
       await page.getByRole('button', { name: repository.name }).focus();
       await page.keyboard.press('Shift+Tab');
       await expect(
@@ -131,10 +131,7 @@ for (const viewport of [
       await expect(trigger).toBeFocused();
       await page.getByRole('button', { name: /Run events/ }).click();
       await expect(page.getByRole('dialog', { name: 'Run events' })).toContainText('Persisted');
-      await testInfo.attach('events-drawer', {
-        body: await page.screenshot(),
-        contentType: 'image/png',
-      });
+      await capture(page, testInfo, 'events-drawer');
       await page.keyboard.press('Escape');
       await expect(page.getByRole('button', { name: /Run events/ })).toBeFocused();
     }
