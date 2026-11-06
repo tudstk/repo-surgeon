@@ -25,6 +25,7 @@ The light palette follows `prefers-color-scheme`; there is no theme toggle to pe
 
 A request flows from the composer to the unchanged CSRF-protected turn API, then retrieves saved events and session detail.
 Only current-generation responses update the display.
+A typed 503 source-unavailable response clears selected content while preserving already-authorized repository choices; other failures still clear private workspace state. This lets a missing source recover through another assigned repository without weakening authorization errors.
 No new repository import, write, sandbox, approval or backend capability is introduced.
 
 ## Verify and extend

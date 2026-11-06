@@ -17,6 +17,7 @@ import {
   type ProductSessionDetail,
   type RepositorySummary,
   type RunEvent,
+  WorkspaceRequestError,
 } from '@/lib/workspace-api';
 
 function formatLines(lines: number | null) {
@@ -154,10 +155,25 @@ export default function Workspace({
           setEvents([]);
         }
       })
-      .catch(() => {
+      .catch((cause: unknown) => {
         if (!controller.signal.aborted && generation === workspaceRequestGeneration.current) {
-          clearPrivateWorkspace();
-          setError('Repository workspace state could not be loaded.');
+          if (
+            cause instanceof WorkspaceRequestError &&
+            cause.status === 503 &&
+            cause.code === 'repository_unavailable'
+          ) {
+            // Source availability is distinct from authorization. Clear selected content,
+            // but retain the already-authorized choices so another repository is reachable.
+            workspaceRequestGeneration.current += 1;
+            setSummary(null);
+            setSessions([]);
+            setSession(null);
+            setEvents([]);
+            setError('This repository is unavailable. Choose another repository or retry later.');
+          } else {
+            clearPrivateWorkspace();
+            setError('Repository workspace state could not be loaded.');
+          }
         }
       });
     return () => controller.abort();

@@ -310,3 +310,44 @@ test('session creation is labelled separately from running an inspection', async
   }
   await expect(page.getByRole('button', { name: 'Send instruction' })).toBeEnabled();
 });
+
+test('an unavailable repository still lets the user select another assigned repository', async ({
+  page,
+}) => {
+  await fixture(page, 'ready');
+  const available = { id: 'repository-2', name: 'available-demo' };
+  await page.route('**/api/v1/repositories', (route) =>
+    route.fulfill({ json: [repository, available] }),
+  );
+  await page.route('**/api/v1/repositories/repository-1/summary', (route) =>
+    route.fulfill({ status: 503, json: { code: 'repository_unavailable' } }),
+  );
+  await page.route('**/api/v1/sessions?*', (route) => route.fulfill({ json: [] }));
+  await page.goto('/');
+  await expect(
+    page.getByRole('region', { name: 'Latest exchange' }).getByRole('alert'),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: available.name, exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
+  await page.getByRole('button', { name: available.name, exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Start a read-only session' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start read-only session' })).toBeEnabled();
+  await expect(
+    page.getByRole('region', { name: 'Latest exchange' }).getByRole('alert'),
+  ).toHaveCount(0);
+});
+
+test('repository authorization failures still clear all private workspace choices', async ({
+  page,
+}) => {
+  await fixture(page, 'ready');
+  await page.route('**/api/v1/repositories/repository-1/summary', (route) =>
+    route.fulfill({ status: 403, json: { code: 'repository_unavailable' } }),
+  );
+  await page.goto('/');
+  await expect(
+    page.getByRole('region', { name: 'Latest exchange' }).getByRole('alert'),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: repository.name, exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
+});
