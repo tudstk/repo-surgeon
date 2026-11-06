@@ -24,7 +24,7 @@ The pinned direction is carried by scale, asymmetry, restrained detail and the t
 
 ## material_fixes
 
-None within this review's scope. The initial pass corrected the footer's unintended extra line, strengthened phone typography and aligned FAQ wording with its behavioral test. The confirmation pass inspected every required viewport.
+None remain within this review's scope. The initial pass corrected the footer's unintended extra line, strengthened phone typography and aligned FAQ wording with its behavioral test. The confirmation pass inspected every required viewport. The production smoke check found the browser's fallback favicon request returning 404; a scoped landing icon now reuses the original brand mark through Next's file convention.
 
 Taste's rigid house-template checker is not reported as clean: its first pass returned 35 FAIL / 3 WARN across four widths. Rendering, fonts, assets, contrast, links, clipping, overlap and viewport containment passed. The remaining design-rule categories were reviewed directly: a text-led hero and staggered lines follow the pinned brief; natural section heights and the closing grid are deliberate; the framework footer contains the real action despite its class-name heuristic; no invented number is added for its numeric-fact rule; and its suggestion to hide synthetic-data labels is rejected by product truth. The product heading was clarified in the correction batch. Full diagnostics remain ignored under `.impeccable/review/landing-taste/`.
 
