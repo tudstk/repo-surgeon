@@ -17,6 +17,7 @@ colors:
   warning: "#edc16a"
   danger: "#ff9ca6"
   danger-surface: "#302025"
+  landing-signal: "#f47b68"
   light-canvas: "#ffffff"
   light-panel: "#f5f7f8"
   light-raised: "#ebeff2"
@@ -49,9 +50,16 @@ typography:
     fontFamily: "'SFMono-Regular', Consolas, monospace"
     fontSize: "12px"
     lineHeight: 1.6
+  landing-display:
+    fontFamily: "Barlow Condensed, sans-serif"
+    fontSize: "clamp(64px, 19.5vw, 320px)"
+    fontWeight: 600
+    lineHeight: 0.82
+    letterSpacing: "-0.035em"
 rounded:
   control: "6px"
   badge: "4px"
+  landing-action: "2px"
 spacing:
   sm: "8px"
   md: "16px"
@@ -68,6 +76,11 @@ components:
     textColor: "{colors.text}"
     rounded: "{rounded.control}"
     padding: "8px 14px"
+  landing-action:
+    backgroundColor: "{colors.accent}"
+    textColor: "{colors.accent-ink}"
+    rounded: "{rounded.landing-action}"
+    padding: "12px 20px"
 ---
 
 # Design System: Repo Surgeon
@@ -89,10 +102,12 @@ DeepSource-informed neutral charcoal, quiet rules and restrained teal create a c
 The frontmatter records the actual semantic tokens from `frontend/src/app/globals.css`; `light-` entries replace their dark counterparts under `prefers-color-scheme: light`.
 Teal identifies primary actions, focus and selected rows. Neutral canvas, panel and raised surfaces establish hierarchy. Muted text carries supporting explanations. Success, warning and danger retain distinct meanings and always accompany words or icons.
 Control borders use their dedicated higher-contrast token; subtle dividers use the ordinary border token.
+The `/landing` variant stays on the dark canvas in every OS theme. It combines the existing green with the landing signal coral in one diagonal text seam; neutral white/muted copy provides the remaining hierarchy. No additional background bands are used.
 
 ## Typography
 
 Body text uses the platform sans stack at the body role. Page headings use the heading role; pane headings are 14px/20px semibold. Supporting labels are 12px, repository and session rows remain body-sized. The phone composer uses 16px input text to avoid browser focus zoom.
+The user-pinned landing display is locally hosted Barlow Condensed SemiBold. Its oversized scale is scoped to the marketing page: two lines on desktop, with the second phrase reflowing to two larger lines on phones. The application retains its readable interface typography.
 Code uses the code role. Conversation copy is constrained to 70ch and explanatory copy to 65ch where space permits.
 
 ## Layout
@@ -100,6 +115,8 @@ Code uses the code role. Conversation copy is constrained to 70ch and explanator
 The shared header is at least 56px high; a separate repository context row keeps the selection visible. Desktop uses 280px repositories/sessions, a fluid center, and 420px saved events. From 1101px through 1280px the left pane is 260px. Dividers are fixed 1px rules.
 At 1100px and below only the conversation is shown in the main grid; labelled buttons open repository/session and event drawers. At 600px and below, spacing tightens, context wraps, and primary controls have a 44px minimum height. The shell uses dynamic viewport height. Conversation and event content scroll within their own areas; the composer stays in view.
 Spacing mostly follows 8/12/16/20/24/32px steps. Login content is capped at 440px; account content at 720px. Keep all grid/flex children shrinkable and wrap long user data.
+
+The public `/landing` preview has consistent 64px desktop gutters, 40px intermediate gutters and 20px phone gutters. The hero fills at least the first viewport, the real workspace capture follows, and current-release disclosures precede the closing action. At 700px the explanatory columns stack and the phone capture replaces the desktop view. Sections grow naturally for text reflow.
 
 ## Elevation & Depth
 
@@ -118,6 +135,8 @@ Controls and messages use the control radius; small badges use the badge radius.
 - **Events:** Ordered identifiers, tool or event names, UTC time, and separate outcome and persistence labels. Failure uses danger text and a danger surface, including when the event was saved successfully.
 - **Drawers:** Native modal dialogs provide protected focus, Tab wrapping, Escape dismissal and trigger-focus restoration. Returning to desktop closes the drawer. They reuse pane content rather than displaying duplicate controls.
 - **Identity and unavailable pages:** Shared brand and typography, factual scope, specific retry paths, and real return links. No imaginary repository or sandbox context.
+
+The landing headline duplicates live text in an aria-hidden coral layer, clipped by a four-point geometric band. Mouse position shifts that seam by at most 4%; coarse pointers and reduced-motion users get a static treatment. Its clip-path transition is 280ms ease-out. No automatic loop or scroll-linked animation runs. Native disclosure elements present the release limits.
 
 Transitions use 160ms ease-out for color and borders. Reduced-motion preference disables transitions and animations. There is no theme switch; both palettes follow the operating system preference without client state.
 

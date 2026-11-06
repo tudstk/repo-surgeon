@@ -34,6 +34,7 @@ No browser capability flag identifies deployment mode; never infer it from the h
 Keep the Repo Surgeon name.
 The confirmed redesign reference is DeepSource, interpreted originally through a calm, dark-first developer workspace.
 Do not copy DeepSource branding, assets or unsupported product claims.
+The public landing preview uses the user-pinned cyberpunk/wabi-sabi direction: oversized typography, a single charcoal ground, existing green and a coral accent passing through the text. This direction is scoped to `/landing`; the working application retains its established interface.
 
 ## Evidence on Hand
 

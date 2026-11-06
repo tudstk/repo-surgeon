@@ -49,3 +49,7 @@ Questions to check understanding:
 
 As a small extension, add a keyboard-focused regression for switching between two saved sessions without weakening the existing generation guard.
 The useful lesson from this slice is to describe actual capability before polishing its visual presentation.
+
+## Landing preview
+
+`frontend/src/app/landing/` is a public presentation surface, with its own scoped charcoal/green/coral palette and locally hosted OFL font. It makes no identity or workspace API request. The workspace CTA enters the existing authenticated `/` flow. Product images are actual isolated fixture captures, with provenance in `assets.json`; they are shipped presentation assets, distinct from ignored QA captures. The coral text layer is hidden from assistive technology, so the heading is announced once. Pointer movement is optional and reduced-motion preference keeps the seam still.
