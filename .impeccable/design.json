@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T11:16:46.781053+00:00",
+  "generatedAt": "2026-11-06T13:06:49.263583+00:00",
   "title": "Design System: Repo Surgeon",
   "extensions": {
     "motion": [
@@ -10,9 +10,9 @@
         "purpose": "Color and border feedback; disabled for reduced motion."
       },
       {
-        "name": "landing-fault",
-        "value": "280ms ease-out",
-        "purpose": "Pointer-reactive coral text seam. Static for reduced motion and non-mouse pointers."
+        "name": "landing-scan",
+        "value": "600ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Single hover response on the decorative document scan line; static for reduced motion and coarse pointers."
       }
     ],
     "breakpoints": [
@@ -30,21 +30,21 @@
       },
       {
         "name": "landing-stack",
-        "value": "700px"
+        "value": "800px"
       }
     ],
     "shadows": [],
     "colorMeta": {
       "landing-signal": {
         "role": "accent",
-        "displayName": "Weathered coral",
+        "displayName": "Coral scan",
         "canonical": "#f47b68"
       }
     },
     "typographyMeta": {
       "landing-display": {
         "displayName": "Landing display",
-        "purpose": "Locally hosted Barlow Condensed SemiBold; oversized live text scoped to /landing."
+        "purpose": "Locally hosted variable IBM Plex Sans, with readable 500-weight technical headings scoped to /landing."
       }
     }
   },
@@ -99,7 +99,7 @@
       "refersTo": "landing-action",
       "description": "The real Open workspace action from the public landing preview.",
       "html": "<a class=\"ds-landing-action\" href=\"/\">Open workspace <svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></a>",
-      "css": ".ds-landing-action{display:inline-flex;align-items:center;gap:32px;min-height:48px;padding:12px 20px;border:1px solid var(--accent,#64d8c5);border-radius:2px;background:var(--accent,#64d8c5);color:var(--accent-ink,#092c27);font:600 14px/1.6 sans-serif;text-decoration:none}.ds-landing-action:hover{background:var(--canvas,#101214);color:var(--accent,#64d8c5)}.ds-landing-action:focus-visible{outline:2px solid var(--accent,#64d8c5);outline-offset:3px}.ds-landing-action:active{transform:translateY(1px)}@media(prefers-reduced-motion:reduce){.ds-landing-action:active{transform:none}}"
+      "css": ".ds-landing-action{display:inline-flex;align-items:center;gap:32px;min-height:48px;padding:12px 20px;border:1px solid var(--accent,#64d8c5);border-radius:4px;background:var(--accent,#64d8c5);color:var(--accent-ink,#092c27);font:600 14px/1.6 sans-serif;text-decoration:none}.ds-landing-action:hover{background:var(--canvas,#101214);color:var(--accent,#64d8c5)}.ds-landing-action:focus-visible{outline:2px solid var(--accent,#64d8c5);outline-offset:3px}.ds-landing-action:active{transform:translateY(1px)}@media(prefers-reduced-motion:reduce){.ds-landing-action:active{transform:none}}"
     }
   ],
   "narrative": {

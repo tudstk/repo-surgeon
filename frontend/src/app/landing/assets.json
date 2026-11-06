@@ -8,8 +8,9 @@
   },
   "excluded": "Next.js development indicator only; product UI unchanged.",
   "font": {
-    "name": "Barlow Condensed SemiBold",
-    "source": "https://github.com/google/fonts/tree/main/ofl/barlowcondensed",
+    "name": "IBM Plex Sans variable, upright",
+    "source": "https://github.com/google/fonts/tree/main/ofl/ibmplexsans",
     "license": "OFL.txt"
-  }
+  },
+  "geometry": "Original code-native SVG: repository brackets, a document and a bounded scan line. Decorative, not a working inspection control."
 }

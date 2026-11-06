@@ -1,10 +1,12 @@
 Kind: software.
-Direction: user-pinned cyberpunk/wabi-sabi typography; Taste word hero adapted to a coral fracture rather than rotating product claims. One ground, original identity, green actions, coral text seam. Impeccable seed 946c3046 is subordinate to the pinned brief; no competing visual-world tournament is necessary.
+Direction: technology-first repository workspace, with a restrained artistic layer. This replaces the initial poster direction following user feedback. Inspiration is the direct product explanation and demonstration on impeccable.style and tasteskill.dev, without copying their layout, assets or signature effects.
 
-Hero, one viewport: Code has fault lines. Repo Surgeon is a human-controlled repository inspection workspace. Read-only sessions, saved activity, no surprise writes. Open workspace. See the workspace. Current release: deterministic demo provider.
+Opening: Inspect the repo. Keep control. A read-only repository workspace. Inspect within clear boundaries, follow the activity, and pick up where you left off. Your source files stay yours. Open workspace. See the workspace. Early release: deterministic demo provider.
 
-Product, natural content height: The workspace. A real interface for a deliberately small first step. Choose an assigned repository, run a bounded demo inspection, return to the saved exchange. The capture uses synthetic demo data. Product screenshot: actual current three-pane UI on desktop, actual conversation-first UI on phone.
+Product proof: The read-only workspace. Synthetic demo data. Actual desktop/phone product captures directly follow the opening.
 
-Release: A small release. A clear boundary. Sessions and events are saved. Source files stay unchanged. GitHub sign-in identifies your account; it does not import repositories. The current provider lists files and returns a fixed completion message. Tailored answers, proposals and sandbox tests are not available. FAQ uses real native disclosures.
+Workflow: The repository. The run. The record. Select an assigned repository, follow the deterministic demo inspection, return to its latest saved exchange and run activity. Saving a run does not mean every step succeeded.
 
-Close: Your code. Still yours. Open workspace. Source on GitHub.
+Release: The current boundary. Working sessions and saved activity. The provider lists files and returns a fixed message. GitHub sign-in identifies the account; it does not import repositories. Tailored answers, proposals, sandbox tests, approvals and repository writes remain unavailable. Native FAQ disclosures explain these limits.
+
+Close: Start with a closer look. Open workspace. Source on GitHub.

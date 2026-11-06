@@ -20,7 +20,7 @@ for (const viewport of [
     await page.goto('/landing');
     await page.evaluate(() => document.fonts.ready);
     await expect(
-      page.getByRole('heading', { name: 'CODE HAS FAULT LINES.', exact: true }),
+      page.getByRole('heading', { name: 'Inspect the repo. Keep control.', exact: true }),
     ).toBeVisible();
     const hero = page.locator('section').first();
     await expect(hero.getByRole('link', { name: 'Open workspace', exact: true })).toBeInViewport();
@@ -71,10 +71,9 @@ test('landing artwork respects reduced motion and keyboard navigation', async ({
   await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('main')).toBeFocused();
-  const title = page.getByRole('heading', { level: 1 });
-  await title.hover();
-  expect(
-    await title.evaluate((node) => (node as HTMLElement).style.getPropertyValue('--fault-shift')),
-  ).toBe('');
-  await expect(page.locator('h1 [aria-hidden="true"]')).toHaveCSS('transition-duration', '0s');
+  const artwork = page.locator('[data-visual="inspection-mark"]');
+  await artwork.hover();
+  const scanLine = artwork.locator('g').last();
+  await expect(scanLine).toHaveCSS('transform', 'none');
+  await expect(scanLine).toHaveCSS('transition-duration', '0s');
 });
