@@ -12,8 +12,11 @@ describe('WorkspacePlaceholder', () => {
     render(<WorkspacePlaceholder path={path} title={title} />);
 
     expect(screen.getByRole('heading', { level: 1, name: title })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: title })).toHaveAttribute('href', path);
-    expect(screen.getByRole('link', { name: title })).toHaveAttribute('aria-current', 'page');
-    expect(screen.queryByText(/STATIC PREVIEW|\(PREVIEW\)/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Return to workspace/i })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/profile');
+    expect(screen.queryByText(/acme|SAFE SANDBOX/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/not available in this release|Run activity is available/),
+    ).toBeInTheDocument();
   });
 });

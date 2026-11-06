@@ -99,5 +99,14 @@ jobs:
       - name: Browser test
         run: pnpm test:e2e
 
+      - name: Upload browser review evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: browser-review-evidence
+          path: frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Build
         run: pnpm build

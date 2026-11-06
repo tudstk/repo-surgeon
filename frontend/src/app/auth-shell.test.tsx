@@ -56,7 +56,7 @@ describe('identity journey', () => {
     );
     expect(screen.getByText(/only your public profile identity/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Repository access remains tenant-scoped and read-only/i),
+      screen.getByText(/Sign-in does not import your GitHub repositories/i),
     ).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       '/api/v1/auth/session',
@@ -136,7 +136,7 @@ describe('identity journey', () => {
       .getAllByRole('link', { name: /@ada/i })
       .find((link) => link.getAttribute('href') === 'https://github.com/ada');
     expect(githubProfileLink).toHaveAttribute('href', 'https://github.com/ada');
-    expect(screen.getByText('Owned repositories are available read-only')).toBeInTheDocument();
+    expect(screen.getByText('Assigned repositories, read-only')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Continue to workspace' })).toHaveAttribute(
       'href',
       '/',
@@ -183,8 +183,10 @@ describe('identity journey', () => {
 
     render(<ProfileScreen />);
 
-    expect(await screen.findAllByText('@ada')).toHaveLength(2);
+    expect(await screen.findAllByText('@ada')).toHaveLength(1);
     expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+      '/',
+      '/',
       '/profile',
       '/',
     ]);
@@ -239,16 +241,14 @@ describe('identity journey', () => {
 
     render(<WorkspaceScreen />);
 
-    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent(
-      'Authenticated read-only repository workspace',
-    );
+    expect(await screen.findByRole('heading', { level: 1 })).toHaveTextContent('Latest exchange');
     expect(
       screen.getByRole('complementary', { name: 'Repositories and sessions' }),
     ).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Conversation & agent trace' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Work panel' })).toBeInTheDocument();
-    expect(await screen.findByText('payments-api')).toBeInTheDocument();
-    expect(screen.getByText(/Start a tenant-scoped product session/i)).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Latest exchange' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Run events' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'payments-api' })).toBeInTheDocument();
+    expect(screen.getByText(/Start a read-only session/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open profile for @ada' })).toHaveAttribute(
       'href',
       '/profile',

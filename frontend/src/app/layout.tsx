@@ -4,7 +4,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Repo Surgeon',
-  description: 'A local-first, human-controlled coding agent.',
+  description: 'Read-only repository inspections with saved sessions.',
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

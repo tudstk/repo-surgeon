@@ -35,6 +35,8 @@ function json(response, status, body) {
 }
 
 const server = createServer((request, response) => {
+  // Isolated, synthetic visual-review scenarios. Never mounted by the product server.
+  const reviewState = request.headers.cookie?.match(/review_state=(\w+)/)?.[1];
   if (request.url?.startsWith('/health')) {
     response.writeHead(200, { 'content-type': 'application/json' });
     response.end('{"status":"ok"}');
@@ -63,7 +65,17 @@ const server = createServer((request, response) => {
   }
 
   if (request.url === '/api/v1/repositories' && request.method === 'GET') {
-    json(response, 200, [{ id: 'repository-1', name: 'payments-api' }]);
+    if (reviewState === 'error') {
+      json(response, 503, { code: 'fixture_unavailable' });
+    } else if (reviewState === 'loading') {
+      setTimeout(() => json(response, 200, []), 30000);
+    } else {
+      json(
+        response,
+        200,
+        reviewState === 'empty' ? [] : [{ id: 'repository-1', name: 'payments-api' }],
+      );
+    }
     return;
   }
 
@@ -89,7 +101,19 @@ const server = createServer((request, response) => {
   }
 
   if (request.url === '/api/v1/sessions/session-1' && request.method === 'GET') {
-    json(response, 200, { ...productSession, turns: [persistedTurn] });
+    json(response, 200, {
+      ...productSession,
+      turns:
+        reviewState === 'ready'
+          ? []
+          : [
+              {
+                ...persistedTurn,
+                status: reviewState === 'failed' ? 'failed' : persistedTurn.status,
+                answer: reviewState === 'failed' ? '' : persistedTurn.answer,
+              },
+            ],
+    });
     return;
   }
 
@@ -100,7 +124,11 @@ const server = createServer((request, response) => {
         json(response, 403, { code: 'request_forbidden' });
         return;
       }
-      json(response, 201, persistedTurn);
+      if (reviewState === 'busy') {
+        setTimeout(() => json(response, 201, persistedTurn), 30000);
+      } else {
+        json(response, 201, persistedTurn);
+      }
     });
     return;
   }
@@ -119,9 +147,9 @@ const server = createServer((request, response) => {
         event_id: 'event-2',
         run_id: 'run-1',
         sequence: 2,
-        type: 'tool.completed',
+        type: reviewState === 'failed' ? 'tool.failed' : 'tool.completed',
         occurred_at: '2026-09-26T00:00:02Z',
-        data: { tool: 'list_files', status: 'success' },
+        data: { tool: 'list_files', status: reviewState === 'failed' ? 'failed' : 'success' },
       },
       {
         event_id: 'event-3',
@@ -135,7 +163,7 @@ const server = createServer((request, response) => {
         event_id: 'event-4',
         run_id: 'run-1',
         sequence: 4,
-        type: 'run.completed',
+        type: reviewState === 'failed' ? 'run.failed' : 'run.completed',
         occurred_at: '2026-09-26T00:00:02Z',
         data: { status: 'completed' },
       },
@@ -145,7 +173,13 @@ const server = createServer((request, response) => {
       'content-type': 'text/event-stream',
     });
     response.end(
-      `: persisted-event-stream\n\n${events.map((item) => `id: ${item.event_id}\nevent: ${item.type}\ndata: ${JSON.stringify(item)}\n\n`).join('')}`,
+      `: persisted-event-stream\n\n${events
+        .filter((item) => reviewState !== 'failed' || item.type !== 'answer.completed')
+        .map(
+          (item, index) =>
+            `id: ${item.event_id}\nevent: ${item.type}\ndata: ${JSON.stringify({ ...item, sequence: index + 1 })}\n\n`,
+        )
+        .join('')}`,
     );
     return;
   }

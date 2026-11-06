@@ -30,6 +30,7 @@ coverage/
 playwright-report/
 test-results/
 blob-report/
+.impeccable/review/
 
 # Local tooling and operating-system files
 .DS_Store

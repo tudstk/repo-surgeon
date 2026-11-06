@@ -55,15 +55,13 @@ describe('authenticated workspace', () => {
 
     render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
 
-    await screen.findByRole('option', { name: 'web-dashboard' });
-    fireEvent.click(screen.getByRole('option', { name: 'web-dashboard' }));
+    await screen.findByRole('button', { name: 'web-dashboard' });
+    fireEvent.click(screen.getByRole('button', { name: 'web-dashboard' }));
     resolveRepositoryOneDetail?.(
       json({ ...persistedSession, title: 'payments session', turns: [] }),
     );
 
-    await waitFor(() =>
-      expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText('Start a read-only session')).toBeInTheDocument());
     expect(screen.queryByText('payments session')).not.toBeInTheDocument();
   });
 
@@ -92,14 +90,18 @@ describe('authenticated workspace', () => {
 
     render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
 
-    await screen.findByRole('button', { name: 'Start read-only session' });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Start read-only session' })).toBeEnabled(),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Start read-only session' }));
-    fireEvent.click(await screen.findByRole('option', { name: 'web-dashboard' }));
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/sessions',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'web-dashboard' }));
     resolveCreateSession?.(json({ ...persistedSession, repository_id: 'repository-1' }));
 
-    await waitFor(() =>
-      expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText('Start a read-only session')).toBeInTheDocument());
     expect(screen.queryByText('payments-api read-only review')).not.toBeInTheDocument();
   });
 
@@ -160,12 +162,10 @@ describe('authenticated workspace', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Owned repositories could not be loaded.',
     );
-    expect(screen.getByText('Select an owned repository.')).toBeInTheDocument();
+    expect(screen.getByText('Select an assigned repository.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
-    await waitFor(() =>
-      expect(screen.getByText('Start a tenant-scoped product session')).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText('Start a read-only session')).toBeInTheDocument());
   });
 
   it('restores persisted normalized events and submits a CSRF-protected turn', async () => {
@@ -240,8 +240,8 @@ describe('authenticated workspace', () => {
     render(<Workspace githubLogin="ada" csrfToken="session-csrf" />);
 
     expect(await screen.findByText(/bounded read-only inspection/i)).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Work panel' })).toHaveTextContent('run.completed');
-    expect(screen.getByRole('tab', { name: 'Diff unavailable' })).toBeDisabled();
+    expect(screen.getByRole('region', { name: 'Run events' })).toHaveTextContent('run.completed');
+    expect(screen.getByText(/Proposals and test execution are not available/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Send instruction' }));
 
