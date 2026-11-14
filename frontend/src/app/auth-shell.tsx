@@ -263,7 +263,11 @@ export function ProfileScreen({ view = 'profile' }: { view?: 'profile' | 'settin
       <section className="profile-card" aria-labelledby="profile-title">
         <h2 className="account-heading">Your account</h2>
         <div className="profile-identity">
-          <Avatar user={user} className="profile-avatar" />
+          <Avatar
+            name={user.display_name || user.github_login}
+            url={user.github_avatar_url}
+            className="profile-avatar"
+          />
           <div>
             <h1 id="profile-title">{user.display_name}</h1>
             {user.github_profile_url ? (

@@ -2,9 +2,10 @@
 
 import asyncio
 from pathlib import Path
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter, Query, Request, Response, status
 from pydantic import BaseModel
 
 from repo_surgeon.api.dependencies import CurrentPrincipal, DatabaseSession
@@ -13,6 +14,12 @@ from repo_surgeon.api.repositories import RepositorySummaryResponse
 from repo_surgeon.application.repositories import GetRepository, ListRepositories
 from repo_surgeon.application.repository_files import RepositoryFileError
 from repo_surgeon.application.repository_intelligence import detect_repository_summary
+from repo_surgeon.infrastructure.github_repository_search import (
+    SEARCH_PATTERN,
+    GitHubRepositorySearch,
+    GitHubRepositorySearchError,
+    PublicGitHubRepository,
+)
 from repo_surgeon.infrastructure.repository_store import SqlAlchemyRepositoryStore
 
 router = APIRouter(prefix="/api/v1/repositories", tags=["workspace repositories"])
@@ -49,6 +56,37 @@ async def list_owned_repositories(
         WorkspaceRepositoryResponse(id=repository.id, name=Path(repository.canonical_root).name)
         for repository in repositories
     ]
+
+
+@router.get(
+    "/github/search",
+    responses={429: {"model": ProblemDetail}, 502: {"model": ProblemDetail}},
+)
+async def search_public_github_repositories(
+    request: Request,
+    response: Response,
+    _principal: CurrentPrincipal,
+    q: Annotated[str, Query(min_length=3, max_length=100, pattern=SEARCH_PATTERN)],
+) -> list[PublicGitHubRepository]:
+    """Return public suggestions for a signed-in workspace user."""
+    response.headers["Cache-Control"] = "no-store"
+    search: GitHubRepositorySearch = request.app.state.github_repository_search
+    try:
+        return await search.search(q)
+    except GitHubRepositorySearchError as error:
+        if error.rate_limited:
+            raise problem(
+                code="github_search_rate_limited",
+                title="GitHub search rate limit reached",
+                status=429,
+                detail="Try searching again in a minute.",
+            ) from error
+        raise problem(
+            code="github_search_unavailable",
+            title="GitHub search unavailable",
+            status=502,
+            detail="GitHub could not return repository suggestions.",
+        ) from error
 
 
 @router.get(

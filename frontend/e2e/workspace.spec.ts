@@ -499,3 +499,43 @@ test('a broken GitHub picture falls back to an initial without losing account na
   await page.keyboard.press('Enter');
   await expect(page.getByRole('menuitem', { name: 'Profile' })).toBeFocused();
 });
+
+for (const width of [1440, 390]) {
+  test(`public GitHub discovery opens a focused modal at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await fixture(page, 'empty');
+    const avatar = 'https://avatars.githubusercontent.com/u/16748505?s=64';
+    await page.route(avatar, (route) =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><rect width="28" height="28" fill="#116a5b"/></svg>',
+      }),
+    );
+    await page.route('**/api/v1/repositories/github/search?*', (route) => {
+      const query = new URL(route.request().url()).searchParams.get('q');
+      expect(query).toBe('pallets/flask');
+      return route.fulfill({ json: [{ full_name: 'pallets/flask', owner_avatar_url: avatar }] });
+    });
+
+    await page.goto('/');
+    const trigger = page.getByRole('button', { name: 'Add repository' });
+    await trigger.click();
+    const dialog = page.getByRole('dialog', { name: 'Find a GitHub repository' });
+    const search = dialog.getByRole('searchbox', { name: 'Search GitHub' });
+    await expect(search).toBeFocused();
+    await expect(dialog).toBeInViewport();
+    expect(
+      await dialog.evaluate((node) => getComputedStyle(node, '::backdrop').backdropFilter),
+    ).toBe('blur(5px)');
+    await search.fill('pallets/flask');
+    const suggestion = dialog.getByRole('link', { name: /pallets\/flask/ });
+    await expect(suggestion).toHaveAttribute('href', 'https://github.com/pallets/flask');
+    await expect(suggestion.locator('img')).toHaveAttribute('src', avatar);
+    await capture(page, testInfo, `github-repository-picker-${width}`);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+}

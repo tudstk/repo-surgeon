@@ -20,7 +20,7 @@ The current authenticated release offers read-only inspection demonstrations and
 ## Capabilities and Constraints
 
 GitHub sign-in identifies the user through their public profile; it does not import repositories.
-The workspace shows repositories already assigned to the account.
+The workspace inspects repositories assigned to the account. The Add repository dialog can search public GitHub repositories and open their GitHub pages.
 The deterministic demo provider lists files and returns a fixed completion message, not tailored answers.
 Sessions, turns and normalized events are saved; repository files are not modified and no Git commit is created.
 Only the latest exchange is displayed when restoring a session.

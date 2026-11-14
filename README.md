@@ -15,6 +15,8 @@ No model API key is required.
 A public landing-page preview is available at `/landing`; the working workspace remains at `/`. The shared brand returns to the landing page. The hero and sign-in screen share a faint circuit texture with pausable accent pulses; reduced-motion preference keeps it static.
 The landing page uses locally hosted type and actual UI captures with synthetic demo data. It makes no model calls and loads no private workspace records.
 
+The workspace’s **Add repository** dialog currently supports public discovery. Search by name or `owner/repository` and open suggestions on GitHub. The search uses GitHub’s unauthenticated public endpoint and may be rate-limited. Importing repositories and connecting private repositories remain in development.
+
 GitHub sign-in identifies your account; it does not connect or import your GitHub repositories.
 The workspace shows repositories already assigned to your account.
 Its demo provider lists files and returns a fixed completion message, rather than a tailored answer.

@@ -25,3 +25,5 @@ FIRST VIEWPORT: A 56px shared header and context row anchor three aligned panes:
 FORM: Pinned DeepSource Operate direction; no tournament or comp. seed: none (unavailable). System sans serves sustained desktop work under subdued room light; intentional light tokens follow OS preference.
 
 FINISH: Direct solo source and rendered review, package quality checks, DESIGN.md and the design sidecar. Review captures use synthetic fixtures; no raster assets ship in the product.
+
+REPOSITORY DISCOVERY: The workspace context bar opens a focused dialog with a blurred backdrop. Public results show owner/repository and an owner avatar. Results link to GitHub while import and private authorization are in development.

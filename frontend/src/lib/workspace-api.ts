@@ -84,6 +84,18 @@ export function listOwnedRepositories(signal?: AbortSignal) {
   return requestJson<OwnedRepository[]>('/api/v1/repositories', { signal });
 }
 
+export type PublicGitHubRepository = {
+  full_name: string;
+  owner_avatar_url: string | null;
+};
+
+export function searchPublicGitHubRepositories(query: string, signal?: AbortSignal) {
+  const params = new URLSearchParams({ q: query });
+  return requestJson<PublicGitHubRepository[]>(`/api/v1/repositories/github/search?${params}`, {
+    signal,
+  });
+}
+
 export function getRepositorySummary(repositoryId: string, signal?: AbortSignal) {
   return requestJson<RepositorySummary>(`/api/v1/repositories/${repositoryId}/summary`, {
     signal,

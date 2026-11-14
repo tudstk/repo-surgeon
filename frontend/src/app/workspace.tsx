@@ -4,6 +4,7 @@ import { AppHeader, Icon } from '@/components/ui/shell';
 import type { SafeProfile } from '@/lib/auth-api';
 import { Drawer } from '@/components/ui/drawer';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { GitHubRepositoryPicker } from './github-repository-picker';
 
 import {
   createProductSession,
@@ -43,6 +44,7 @@ function eventMessage(event: RunEvent) {
 export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrfToken: string }) {
   const [drawer, setDrawer] = useState<'repositories' | 'events' | null>(null);
   const closeDrawer = useCallback(() => setDrawer(null), []);
+  const [showRepositoryPicker, setShowRepositoryPicker] = useState(false);
   const [repositories, setRepositories] = useState<OwnedRepository[]>([]);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [summary, setSummary] = useState<RepositorySummary | null>(null);
@@ -431,6 +433,18 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         <Icon name="repo" />
         <span title={selectedRepository?.name}>{selectedRepository?.name ?? 'Your workspace'}</span>
         <span className="context-caption">Repository files stay unchanged</span>
+        <button
+          className="secondary-button add-repository"
+          type="button"
+          aria-haspopup="dialog"
+          onClick={(event) => {
+            event.currentTarget.focus();
+            setShowRepositoryPicker(true);
+          }}
+        >
+          <Icon name="plus" />
+          Add repository
+        </button>
       </div>
       <div className="mobile-pane-controls">
         <button type="button" aria-haspopup="dialog" onClick={() => setDrawer('repositories')}>
@@ -613,6 +627,9 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         >
           {drawer === 'repositories' ? repositoryPane : eventPane}
         </Drawer>
+      ) : null}
+      {showRepositoryPicker ? (
+        <GitHubRepositoryPicker onClose={() => setShowRepositoryPicker(false)} />
       ) : null}
     </main>
   );
