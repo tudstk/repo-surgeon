@@ -4,9 +4,9 @@ import { AccountMenu } from './account-menu';
 import { Icon } from './icons';
 export { Icon } from './icons';
 
-export function Brand() {
+export function Brand({ href = '/landing' }: { href?: string }) {
   return (
-    <Link href="/" className="brand">
+    <Link href={href} className="brand">
       <svg
         viewBox="0 0 24 24"
         className="brand-symbol"

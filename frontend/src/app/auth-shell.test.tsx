@@ -188,7 +188,7 @@ describe('identity journey', () => {
 
     expect(await screen.findByRole('heading', { name: 'Ada Lovelace' })).toBeInTheDocument();
     expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
-      '/',
+      '/landing',
       '/',
       '/',
     ]);
