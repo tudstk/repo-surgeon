@@ -135,6 +135,10 @@ for (const viewport of [
       await capture(page, testInfo, 'repositories-drawer');
       await page.getByRole('button', { name: repository.name }).focus();
       await page.keyboard.press('Shift+Tab');
+      await expect(dialog.getByRole('button', { name: 'Add repository' })).toBeFocused();
+      await page.keyboard.press('Shift+Tab');
+      await expect(dialog.getByRole('button', { name: 'Repositories 1' })).toBeFocused();
+      await page.keyboard.press('Shift+Tab');
       await expect(
         page.getByRole('button', { name: 'Close Repositories and sessions' }),
       ).toBeFocused();
@@ -627,5 +631,50 @@ for (const width of [1440, 390]) {
       )
       .toBeGreaterThan(0);
     await capture(page, testInfo, `language-summary-${width}`);
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`sidebar sections collapse independently and keep counts and add actions at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+    await fixture(page);
+    await page.goto('/');
+    if (width === 390)
+      await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    const pane =
+      width === 390
+        ? page.getByRole('dialog', { name: 'Repositories and sessions' })
+        : page.getByRole('complementary', { name: 'Repositories and sessions' });
+    const repos = pane.getByRole('button', { name: 'Repositories 1' });
+    const sessions = pane.getByRole('button', { name: 'Sessions 1' });
+    await expect(sessions).toHaveAttribute('aria-expanded', 'true');
+    await repos.click();
+    await expect(repos).toHaveAttribute('aria-expanded', 'false');
+    await expect(pane.getByRole('button', { name: repository.name, exact: true })).toBeHidden();
+    await expect(pane.getByRole('button', { name: session.title, exact: true })).toBeVisible();
+    await sessions.focus();
+    await page.keyboard.press('Enter');
+    await expect(sessions).toHaveAttribute('aria-expanded', 'false');
+    await expect(pane.getByRole('button', { name: session.title, exact: true })).toBeHidden();
+    const add = pane.getByRole('button', { name: 'Add repository' });
+    await add.click();
+    await expect(page.getByRole('dialog', { name: 'Add a repository' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(add).toBeFocused();
+    await capture(page, testInfo, `sidebar-collapsed-${width}`);
+    await repos.click();
+    await sessions.click();
+    await expect(pane.getByRole('button', { name: repository.name, exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(pane.getByRole('button', { name: session.title, exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await capture(page, testInfo, `sidebar-expanded-${width}`);
   });
 }

@@ -60,6 +60,8 @@ function eventMessage(event: RunEvent) {
 }
 
 export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrfToken: string }) {
+  const [repositoriesExpanded, setRepositoriesExpanded] = useState(true);
+  const [sessionsExpanded, setSessionsExpanded] = useState(true);
   const [drawer, setDrawer] = useState<'repositories' | 'events' | null>(null);
   const closeDrawer = useCallback(() => setDrawer(null), []);
   const [showRepositoryPicker, setShowRepositoryPicker] = useState(false);
@@ -196,6 +198,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   }, [attempt, clearPrivateWorkspace, restoreSession, selectedRepositoryId]);
 
   const handleStartSession = async () => {
+    setSessionsExpanded(true);
     if (!selectedRepository || !summary || submitting) return;
     const generation = workspaceRequestGeneration.current;
     setPendingAction('session');
@@ -251,55 +254,93 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
 
   const repositoryPane = (
     <>
-      <div className="panel-heading">
-        <h2>Repositories</h2>
-        <span className="count">{repositories.length}</span>
+      <div className="panel-heading sidebar-section-heading">
+        <h2>
+          <button
+            type="button"
+            className="section-toggle"
+            aria-expanded={repositoriesExpanded}
+            aria-controls="repository-choices"
+            onClick={() => setRepositoriesExpanded((value) => !value)}
+          >
+            <Icon name="chevron" />
+            <span>Repositories</span>
+            <span className="count">{repositories.length}</span>
+          </button>
+        </h2>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Add repository"
+          title="Add repository"
+          aria-haspopup="dialog"
+          onClick={(event) => {
+            event.currentTarget.focus();
+            setShowRepositoryPicker(true);
+          }}
+        >
+          <Icon name="plus" />
+        </button>
       </div>
       <div className="repo-content">
-        {loading ? (
-          <div className="loading-state" role="status">
-            <span className="skeleton" />
-            <span className="skeleton short" />
-            Loading repositories…
+        <div id="repository-choices" className="disclosure-body" hidden={!repositoriesExpanded}>
+          {loading ? (
+            <div className="loading-state" role="status">
+              <span className="skeleton" />
+              <span className="skeleton short" />
+              Loading repositories…
+            </div>
+          ) : null}
+          {!loading && !error && repositories.length === 0 ? (
+            <p className="empty-state">No repositories added yet.</p>
+          ) : null}
+          <div className="selection-list" role="group" aria-label="Repositories">
+            {repositories.map((repository) => (
+              <button
+                aria-pressed={repository.id === selectedRepositoryId}
+                className="selection-row"
+                key={repository.id}
+                onClick={() => {
+                  if (repository.id === selectedRepositoryId) return;
+                  workspaceRequestGeneration.current += 1;
+                  selectedRepositoryIdRef.current = repository.id;
+                  setSelectedRepositoryId(repository.id);
+                  setSummary(null);
+                  setSessions([]);
+                  setSession(null);
+                  setEvents([]);
+                  setError(null);
+                }}
+                type="button"
+                title={repository.name}
+              >
+                <Icon name="repo" />
+                <span>
+                  {repository.name}
+                  {repository.github_commit ? (
+                    <small className="snapshot-revision">
+                      Snapshot {repository.github_commit.slice(0, 7)}
+                    </small>
+                  ) : null}
+                </span>
+              </button>
+            ))}
           </div>
-        ) : null}
-        {!loading && !error && repositories.length === 0 ? (
-          <p className="empty-state">No repositories added yet.</p>
-        ) : null}
-        <div className="selection-list" role="group" aria-label="Repositories">
-          {repositories.map((repository) => (
-            <button
-              aria-pressed={repository.id === selectedRepositoryId}
-              className="selection-row"
-              key={repository.id}
-              onClick={() => {
-                if (repository.id === selectedRepositoryId) return;
-                workspaceRequestGeneration.current += 1;
-                selectedRepositoryIdRef.current = repository.id;
-                setSelectedRepositoryId(repository.id);
-                setSummary(null);
-                setSessions([]);
-                setSession(null);
-                setEvents([]);
-                setError(null);
-              }}
-              type="button"
-              title={repository.name}
-            >
-              <Icon name="repo" />
-              <span>
-                {repository.name}
-                {repository.github_commit ? (
-                  <small className="snapshot-revision">
-                    Snapshot {repository.github_commit.slice(0, 7)}
-                  </small>
-                ) : null}
-              </span>
-            </button>
-          ))}
         </div>
-        <div className="section-heading">
-          <h2>Sessions</h2>
+        <div className="section-heading sidebar-section-heading">
+          <h2>
+            <button
+              type="button"
+              className="section-toggle"
+              aria-expanded={sessionsExpanded}
+              aria-controls="session-choices"
+              onClick={() => setSessionsExpanded((value) => !value)}
+            >
+              <Icon name="chevron" />
+              <span>Sessions</span>
+              <span className="count">{sessions.length}</span>
+            </button>
+          </h2>
           <button
             className="icon-button"
             aria-label="Start read-only session"
@@ -310,7 +351,13 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             <Icon name="plus" />
           </button>
         </div>
-        <div className="selection-list" role="group" aria-label="Sessions">
+        <div
+          id="session-choices"
+          hidden={!sessionsExpanded}
+          className="selection-list"
+          role="group"
+          aria-label="Sessions"
+        >
           {sessions.map((item) => (
             <button
               aria-pressed={item.id === session?.id}
@@ -697,6 +744,8 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             setEvents([]);
             setError(null);
             setShowRepositoryPicker(false);
+            setRepositoriesExpanded(true);
+            closeDrawer();
             setAttempt((current) => current + 1);
           }}
         />

@@ -786,7 +786,7 @@ code {
   background: var(--panel);
   z-index: 1;
 }
-.pane-drawer .panel-heading {
+.pane-drawer .panel-heading:not(.sidebar-section-heading) {
   display: none;
 }
 .pane-drawer .repo-summary {
@@ -1331,4 +1331,43 @@ code {
 .repo-summary dt,
 .repo-summary dd {
   font-size: 12px;
+}
+
+.sidebar-section-heading h2 {
+  min-width: 0;
+  flex: 1;
+}
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.section-toggle .icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 160ms ease-out;
+}
+.section-toggle[aria-expanded='true'] .icon {
+  transform: rotate(90deg);
+}
+.section-toggle:hover {
+  color: var(--accent);
+}
+.disclosure-body[hidden],
+.selection-list[hidden] {
+  display: none;
+}
+@media (min-width: 1101px) {
+  .repository-context .add-repository {
+    display: none;
+  }
 }
