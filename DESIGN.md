@@ -161,3 +161,5 @@ Repositories and Sessions have independent chevron disclosures with current coun
 Repository rows include their three-dot action control inside the shared selection background. The Remove menu item uses a smaller 14px icon and opens a confirmation naming the repository and its associated sessions. Cancel receives initial focus; Cancel and Escape return focus to the menu trigger without sending a mutation. Failed removal stays in the dialog for retry. The menu supports keyboard opening, Escape dismissal and focus return, with Remove as its current action. Removal updates counts and clears a removed active selection; an inline Undo keeps this list operation reversible. Snapshots and saved sessions are retained.
 
 The removal notice uses a gray surface and a small top-right dismiss action. Dismissing it returns keyboard focus to the repository heading and leaves repository visibility unchanged.
+
+Session rows share the repository actions styling. Rename opens a prefilled name field. Remove names the session and focuses Cancel by default. Confirming removal updates the session count and selects a remaining session when needed.

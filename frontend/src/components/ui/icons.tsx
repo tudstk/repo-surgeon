@@ -10,6 +10,7 @@ export function Icon({
     | 'arrow'
     | 'plus'
     | 'more'
+    | 'edit'
     | 'close'
     | 'check'
     | 'error'
@@ -26,6 +27,7 @@ export function Icon({
     activity: 'M3 12h4l3-7 4 14 3-7h4',
     shield: 'M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Zm-4 9 3 3 5-6',
     arrow: 'M5 12h14m-6-6 6 6-6 6',
+    edit: 'm16 3 5 5-12 12-6 1 1-6L16 3Zm-3 3 5 5',
     more: 'M5 12h.01M12 12h.01M19 12h.01',
     plus: 'M12 5v14M5 12h14',
     close: 'm6 6 12 12M6 18 18 6',

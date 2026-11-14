@@ -3,36 +3,44 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Icon } from './icons';
 
-export function RepositoryActions({
+export function RowActions({
   name,
   disabled,
   onRemove,
+  onRename,
 }: {
   name: string;
   disabled: boolean;
   onRemove: () => void;
+  onRename?: () => void;
 }) {
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const id = useId();
+  const focusLast = useRef(false);
   const close = () => {
     setPosition(null);
     trigger.current?.focus();
   };
-  const open = () => {
+  const open = (last = false) => {
+    focusLast.current = last;
     const rect = trigger.current?.getBoundingClientRect();
     if (!rect) return;
     setPosition({
       left: Math.max(8, Math.min(rect.right - 144, window.innerWidth - 152)),
-      top: rect.bottom + 64 > window.innerHeight ? rect.top - 60 : rect.bottom + 4,
+      top:
+        rect.bottom + (onRename ? 108 : 64) > window.innerHeight
+          ? rect.top - (onRename ? 104 : 60)
+          : rect.bottom + 4,
     });
   };
 
   useEffect(() => {
     if (!position) return;
-    menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    const items = menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+    items?.[focusLast.current ? items.length - 1 : 0]?.focus();
     const outside = (event: PointerEvent) => {
       if (event.target instanceof Node && !root.current?.contains(event.target)) setPosition(null);
     };
@@ -60,7 +68,7 @@ export function RepositoryActions({
         type="button"
         className="icon-button repository-actions-trigger"
         aria-label={`Actions for ${name}`}
-        title="Repository actions"
+        title="Actions"
         aria-haspopup="menu"
         aria-expanded={position !== null}
         aria-controls={position ? id : undefined}
@@ -69,7 +77,7 @@ export function RepositoryActions({
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
             event.preventDefault();
-            open();
+            open(event.key === 'ArrowUp');
           }
         }}
       >
@@ -86,7 +94,17 @@ export function RepositoryActions({
           onKeyDown={(event) => {
             if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
               event.preventDefault();
-              menu.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+              const items = Array.from(
+                menu.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? [],
+              );
+              const index = items.indexOf(document.activeElement as HTMLButtonElement);
+              const next =
+                event.key === 'Home'
+                  ? 0
+                  : event.key === 'End'
+                    ? items.length - 1
+                    : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+              items[next]?.focus();
             } else if (event.key === 'Escape') {
               event.preventDefault();
               event.stopPropagation();
@@ -94,6 +112,21 @@ export function RepositoryActions({
             } else if (event.key === 'Tab') close();
           }}
         >
+          {onRename ? (
+            <button
+              type="button"
+              role="menuitem"
+              tabIndex={-1}
+              disabled={disabled}
+              onClick={() => {
+                close();
+                onRename();
+              }}
+            >
+              <Icon name="edit" />
+              Rename
+            </button>
+          ) : null}
           <button
             type="button"
             role="menuitem"

@@ -24,7 +24,7 @@ describe('workspace API', () => {
     );
     vi.stubGlobal('fetch', fetchMock);
 
-    await createProductSession('repository-1', 'Read-only review', 'csrf-token');
+    await createProductSession('repository-1', 'csrf-token');
 
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/v1/sessions',

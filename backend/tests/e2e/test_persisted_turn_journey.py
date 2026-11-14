@@ -394,6 +394,25 @@ async def test_foreign_and_unknown_ids_have_indistinguishable_not_found_response
             assert foreign.status_code == unknown.status_code == 404
             assert foreign.json() == unknown.json()
 
+        for method, suffix, payload in [
+            ("PATCH", "", {"title": "Renamed"}),
+            ("POST", "/archive", {}),
+        ]:
+            foreign_mutation = await client.request(
+                method,
+                f"/api/v1/sessions/{other_session_id}{suffix}",
+                headers=_auth_headers(fixture, csrf=True),
+                json=payload,
+            )
+            unknown_mutation = await client.request(
+                method,
+                f"/api/v1/sessions/{uuid4()}{suffix}",
+                headers=_auth_headers(fixture, csrf=True),
+                json=payload,
+            )
+            assert foreign_mutation.status_code == unknown_mutation.status_code == 404
+            assert foreign_mutation.json() == unknown_mutation.json()
+
         foreign_turn = await client.post(
             f"/api/v1/sessions/{other_session_id}/turns",
             headers=_auth_headers(fixture, csrf=True),
@@ -406,3 +425,66 @@ async def test_foreign_and_unknown_ids_have_indistinguishable_not_found_response
         )
         assert foreign_turn.status_code == unknown_turn.status_code == 404
         assert foreign_turn.json() == unknown_turn.json()
+
+
+@pytest.mark.anyio
+async def test_session_names_rename_and_removal_persist(
+    authenticated_app: AuthenticatedApp,
+) -> None:
+    fixture = authenticated_app
+    async with fixture.app.state.session_factory() as database:
+        repository = await database.get(RepositoryRecord, fixture.repository_id)
+        assert repository is not None
+        repository.github_full_name = "owner/project"
+        await database.commit()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=fixture.app),
+        base_url="https://surgeon.example",
+        headers=_auth_headers(fixture, csrf=True),
+    ) as client:
+        body = {"repository_id": str(fixture.repository_id)}
+        first = await client.post("/api/v1/sessions", json=body)
+        assert first.status_code == 201
+        second = await client.post("/api/v1/sessions", json=body)
+        assert first.json()["title"] == "project read-only review"
+        assert second.json()["title"] == "project read-only review-1"
+        path = f"/api/v1/sessions/{first.json()['id']}"
+        assert (await client.patch(path, json={"title": "  "})).status_code == 422
+        assert (await client.patch(path, json={"title": second.json()["title"]})).status_code == 409
+        for endpoint, method, payload in [
+            (path, "PATCH", {"title": "Renamed"}),
+            (path + "/archive", "POST", {}),
+        ]:
+            assert (
+                await client.request(
+                    method, endpoint, json=payload, headers={"X-CSRF-Token": "wrong"}
+                )
+            ).status_code == 403
+        renamed = await client.patch(path, json={"title": "  Investigate tests  "})
+        assert renamed.status_code == 200
+        assert renamed.json()["title"] == "Investigate tests"
+        assert (await client.get(path)).json()["title"] == "Investigate tests"
+        completed = await client.post(path + "/turns", json={"message": "List files"})
+        assert completed.status_code == 201
+        async with fixture.app.state.session_factory() as database:
+            run = await database.get(AgentRunRecord, UUID(completed.json()["run_id"]))
+            assert run is not None
+            run.status = "running"
+            await database.commit()
+        assert (await client.post(path + "/archive")).status_code == 409
+        async with fixture.app.state.session_factory() as database:
+            run = await database.get(AgentRunRecord, UUID(completed.json()["run_id"]))
+            assert run is not None
+            run.status = "completed"
+            await database.commit()
+        assert (await client.post(path + "/archive")).status_code == 204
+        listed = (await client.get("/api/v1/sessions", params=body)).json()
+        assert [item["id"] for item in listed] == [second.json()["id"]]
+        assert (await client.get(path)).status_code == 404
+        assert (
+            await client.post(path + "/turns", json={"message": "Inspect files"})
+        ).status_code == 404
+    async with fixture.app.state.session_factory() as database:
+        retained = await database.get(ConversationSessionRecord, UUID(first.json()["id"]))
+        assert retained is not None and retained.status == "archived"
+        assert await database.get(AgentRunRecord, UUID(completed.json()["run_id"])) is not None
