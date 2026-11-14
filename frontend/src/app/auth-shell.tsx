@@ -14,6 +14,7 @@ import {
 import Workspace from './workspace';
 import { Avatar } from '@/components/ui/avatar';
 import { AppHeader, Brand, Icon, ReadOnlyBadge } from '@/components/ui/shell';
+import { CircuitField } from '@/components/ui/circuit-field';
 
 function GitHubMark() {
   return (
@@ -23,10 +24,20 @@ function GitHubMark() {
   );
 }
 
-function LoadingShell({ children }: { children: React.ReactNode }) {
+function LoadingShell({
+  children,
+  textured = false,
+}: {
+  children: React.ReactNode;
+  textured?: boolean;
+}) {
   return (
-    <main className="identity-shell">
-      <section className="identity-card identity-loading-card" aria-label="Authentication status">
+    <main className={`identity-shell ${textured ? 'identity-textured' : ''}`}>
+      {textured ? <CircuitField vignette /> : null}
+      <section
+        className={`identity-card identity-loading-card ${textured ? 'identity-panel' : ''}`}
+        aria-label="Authentication status"
+      >
         <Brand />
         {children}
       </section>
@@ -53,7 +64,7 @@ export function LoginScreen() {
   const signedOut = searchParams.get('signed_out') === '1';
   if (checkingSession) {
     return (
-      <LoadingShell>
+      <LoadingShell textured>
         <p aria-live="polite" className="identity-status">
           Checking your session…
         </p>
@@ -62,8 +73,9 @@ export function LoginScreen() {
   }
 
   return (
-    <main className="identity-shell">
-      <section className="identity-card" aria-labelledby="login-title">
+    <main className="identity-shell identity-textured">
+      <CircuitField vignette />
+      <section className="identity-card identity-panel" aria-labelledby="login-title">
         <Brand />
         <div className="identity-copy">
           <h1 id="login-title">Sign in to Repo Surgeon</h1>

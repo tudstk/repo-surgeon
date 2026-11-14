@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-06T09:49:12.966573+00:00",
+  "generatedAt": "2026-11-06T16:49:20.116670+00:00",
   "title": "Design System: Repo Surgeon",
   "extensions": {
     "motion": [
@@ -8,6 +8,16 @@
         "name": "state-transition",
         "value": "160ms ease-out",
         "purpose": "Color and border feedback; disabled for reduced motion."
+      },
+      {
+        "name": "circuit-pulse",
+        "value": "950-1450ms linear; 350-1000ms quiet",
+        "purpose": "One random visible route and one three-layer pulse at a time. Pause, reduced-motion, visibility and unmount cancel it."
+      },
+      {
+        "name": "circuit-pointer",
+        "value": "350ms linear; 180ms throttle; two slots",
+        "purpose": "Mouse movement energizes the nearest fixed route. Shares pause, visibility and reduced-motion cancellation with the ambient pulse."
       }
     ],
     "breakpoints": [
@@ -22,9 +32,34 @@
       {
         "name": "phone",
         "value": "600px"
+      },
+      {
+        "name": "landing-stack",
+        "value": "800px"
       }
     ],
-    "shadows": []
+    "shadows": [],
+    "colorMeta": {
+      "landing-signal": {
+        "role": "accent",
+        "displayName": "Coral scan",
+        "canonical": "#f47b68"
+      }
+    },
+    "typographyMeta": {
+      "landing-display": {
+        "displayName": "Landing display",
+        "purpose": "Locally hosted variable IBM Plex Sans, with readable 500-weight technical headings scoped to /landing."
+      }
+    },
+    "textures": [
+      {
+        "name": "circuit-field",
+        "strokeWidth": "1px",
+        "opacity": 0.13,
+        "scope": "Landing hero and sign-in only; sign-in adds a radial vignette."
+      }
+    ]
   },
   "components": [
     {
@@ -70,6 +105,14 @@
       "description": "Repository or session selection with a pressed state.",
       "html": "<button class=\"ds-row\" aria-pressed=\"true\">inspection-fixture</button>",
       "css": ".ds-row{width:100%;text-align:left;overflow-wrap:anywhere;padding:10px 8px;min-height:40px;border:1px solid var(--border,#343c45);border-radius:6px;font:14px/1.5 sans-serif;color:var(--accent,#64d8c5);background:var(--selected,#19352f)}.ds-row:hover{background:var(--hover,#242a30)}.ds-row:focus-visible{outline:2px solid var(--accent,#64d8c5);outline-offset:3px}"
+    },
+    {
+      "name": "Landing action",
+      "kind": "button",
+      "refersTo": "landing-action",
+      "description": "The real Open workspace action from the public landing preview.",
+      "html": "<a class=\"ds-landing-action\" href=\"/\">Open workspace <svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" aria-hidden=\"true\"><path d=\"M5 12h14m-6-6 6 6-6 6\"/></svg></a>",
+      "css": ".ds-landing-action{display:inline-flex;align-items:center;gap:32px;min-height:48px;padding:12px 20px;border:1px solid var(--accent,#64d8c5);border-radius:4px;background:var(--accent,#64d8c5);color:var(--accent-ink,#092c27);font:600 14px/1.6 sans-serif;text-decoration:none}.ds-landing-action:hover{background:var(--canvas,#101214);color:var(--accent,#64d8c5)}.ds-landing-action:focus-visible{outline:2px solid var(--accent,#64d8c5);outline-offset:3px}.ds-landing-action:active{transform:translateY(1px)}@media(prefers-reduced-motion:reduce){.ds-landing-action:active{transform:none}}"
     }
   ],
   "narrative": {
