@@ -1403,9 +1403,35 @@ code {
   flex-shrink: 0;
 }
 .repository-undo {
-  padding: 12px 8px;
+  position: relative;
+  margin: 12px;
+  padding: 12px 40px 12px 12px;
+  border-radius: var(--radius);
+  background: var(--hover);
   font-size: 12px;
   overflow-wrap: anywhere;
+}
+.dismiss-removal-notice {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 8px;
+}
+.dismiss-removal-notice .icon {
+  width: 12px;
+  height: 12px;
+  flex-basis: 12px;
+}
+@media (pointer: coarse) {
+  .repository-undo {
+    padding-right: 48px;
+  }
+  .dismiss-removal-notice {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 .repository-undo p {
   margin-bottom: 8px;

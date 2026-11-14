@@ -684,6 +684,7 @@ for (const width of [1440, 390]) {
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: width === 1440 ? 'dark' : 'light' });
     await fixture(page);
     let hidden = false;
     let failRemoval = true;
@@ -753,6 +754,11 @@ for (const width of [1440, 390]) {
     await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
     await confirmation.getByRole('button', { name: 'Remove repository', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Repositories 0' })).toBeVisible();
+    await capture(page, testInfo, `repository-removal-notice-${width}`);
+    await page.getByRole('button', { name: 'Dismiss removal notice' }).click();
+    await expect(page.getByRole('button', { name: 'Undo removal' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Repositories 0' })).toBeFocused();
+    expect(hidden).toBe(true);
     await page.reload();
     if (width === 390)
       await page.getByRole('button', { name: 'Repositories', exact: true }).click();

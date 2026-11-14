@@ -65,6 +65,7 @@ function eventMessage(event: RunEvent) {
 export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrfToken: string }) {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const visibilityPending = useRef(false);
+  const repositoryToggle = useRef<HTMLButtonElement>(null);
   const [removalTarget, setRemovalTarget] = useState<OwnedRepository | null>(null);
   const [removedRepository, setRemovedRepository] = useState<OwnedRepository | null>(null);
   const [repositoryActionError, setRepositoryActionError] = useState<string | null>(null);
@@ -300,6 +301,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         <h2>
           <button
             type="button"
+            ref={repositoryToggle}
             className="section-toggle"
             aria-expanded={repositoriesExpanded}
             aria-controls="repository-choices"
@@ -389,6 +391,19 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         ) : null}
         {removedRepository ? (
           <div className="repository-undo">
+            <button
+              type="button"
+              className="icon-button dismiss-removal-notice"
+              aria-label="Dismiss removal notice"
+              title="Dismiss removal notice"
+              disabled={removingId !== null}
+              onClick={() => {
+                setRemovedRepository(null);
+                repositoryToggle.current?.focus();
+              }}
+            >
+              <Icon name="close" />
+            </button>
             <p role="status">
               Removed {removedRepository.name} from the list. Saved sessions are kept.
             </p>

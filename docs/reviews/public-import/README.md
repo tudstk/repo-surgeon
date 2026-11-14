@@ -5,3 +5,5 @@ Captured with Playwright against the local frontend using synthetic API fixtures
 `actions-1440.png` and `actions-390.png` show the repository actions menu on desktop and mobile. Remove hides the entry while retaining its snapshot and saved sessions; Undo restores it.
 
 `confirmation-1440.png` and `confirmation-390.png` show the removal confirmation with the repository name and associated sessions. Cancel and Escape preserve the entry; a failed mutation stays open for retry. The actions captures include the menu control inside the selected row.
+
+`removal-notice-1440.png` (dark) and `removal-notice-390.png` (light) show the gray Undo notice with its dismiss control.
