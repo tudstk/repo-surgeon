@@ -42,6 +42,7 @@ async function fixture(page: Page, state: 'saved' | 'empty' | 'failed' | 'ready'
     route.fulfill({
       json: {
         language: 'Python',
+        languages: { Python: 75, TypeScript: 25 },
         language_confidence: 'high',
         file_count: 12,
         approximate_lines: 420,
@@ -586,3 +587,45 @@ test('public import selects its snapshot, recovers after failure and survives re
   await expect(page.getByRole('button', { name: 'Start read-only session' })).toBeEnabled();
   expect(calls).toBe(2);
 });
+
+test('owner prefix searches before a full repository name is entered', async ({ page }) => {
+  await fixture(page, 'empty');
+  const queries: string[] = [];
+  await page.route('**/api/v1/repositories/github/search?*', (route) => {
+    queries.push(new URL(route.request().url()).searchParams.get('q') ?? '');
+    return route.fulfill({ json: [{ full_name: 'tudstk/repo-surgeon', owner_avatar_url: null }] });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Add repository' }).click();
+  await page.getByRole('searchbox').fill('tudstk/');
+  await expect(page.getByRole('button', { name: 'Import tudstk/repo-surgeon' })).toBeVisible();
+  expect(queries).toContain('tudstk/');
+  await page.getByRole('searchbox').fill('tudstk/repo');
+  await expect.poll(() => queries.includes('tudstk/repo')).toBe(true);
+});
+
+for (const width of [1440, 390]) {
+  test(`language summary shows icons and source-byte shares at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await fixture(page);
+    await page.goto('/');
+    if (width === 390)
+      await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    const summary = page.getByRole('region', { name: 'Repository summary' });
+    await expect(summary.getByText('75.0%')).toBeVisible();
+    await expect(summary.getByText('25.0%')).toBeVisible();
+    await expect(summary.getByText('Partial scan', { exact: true })).toHaveCount(0);
+    await expect(summary.locator('img')).toHaveCount(2);
+    await expect
+      .poll(() =>
+        summary
+          .locator('img')
+          .first()
+          .evaluate((img: HTMLImageElement) => img.naturalWidth),
+      )
+      .toBeGreaterThan(0);
+    await capture(page, testInfo, `language-summary-${width}`);
+  });
+}

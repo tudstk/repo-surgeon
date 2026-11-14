@@ -12,7 +12,7 @@ import {
 } from '@/lib/workspace-api';
 import styles from './github-repository-picker.module.css';
 
-const queryPattern = /^(?:[a-z0-9._-]+(?: +[a-z0-9._-]+)*|[a-z0-9-]+\/[a-z0-9._-]+)$/i;
+const queryPattern = /^(?:[a-z0-9._-]+(?: +[a-z0-9._-]+)*|[a-z0-9-]+\/[a-z0-9._-]*)$/i;
 
 type SearchResult = {
   query: string;
@@ -89,10 +89,12 @@ export function GitHubRepositoryPicker({
     try {
       const repository = await importGitHubRepository(fullName, csrfToken);
       if (mounted.current) onImported(repository);
-    } catch {
+    } catch (error: unknown) {
       if (mounted.current) {
         setImportError(
-          'Import failed. The repository may be unavailable, too large, or contain unsupported links. Try another repository or retry.',
+          error instanceof WorkspaceRequestError && error.detail
+            ? error.detail
+            : 'Import failed: the server could not be reached. Check your connection and retry.',
         );
       }
     } finally {
@@ -119,6 +121,13 @@ export function GitHubRepositoryPicker({
       className={styles.dialog}
       aria-labelledby={`${id}-title`}
       aria-describedby={`${id}-intro`}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && !pending.current) {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }
+      }}
       onCancel={(event) => {
         event.preventDefault();
         if (!pending.current) onClose();

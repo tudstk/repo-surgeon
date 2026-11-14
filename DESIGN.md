@@ -153,3 +153,5 @@ Transitions use 160ms ease-out for color and borders. Reduced-motion preference 
 - Don't add inert tabs or fictional telemetry.
 - Don't equate persistence with successful execution.
 - Don't hide repository context to fit the desktop header.
+
+Repository summaries use compact 12px metadata, local language logos and source-byte percentages. Scan limitations remain in the quiet footer rather than a prominent status badge. The repository picker supports owner prefixes and partial names, shows specific import failures, and closes on Escape even when the search input contains text.

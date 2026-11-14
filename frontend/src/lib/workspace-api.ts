@@ -5,6 +5,7 @@ export type OwnedRepository = {
 };
 
 export type RepositorySummary = {
+  languages?: Record<string, number>;
   language: string | null;
   language_confidence: 'high' | 'medium' | 'low' | 'unknown';
   file_count: number;
@@ -52,6 +53,7 @@ export class WorkspaceRequestError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    readonly detail?: string,
   ) {
     super(`Workspace request failed with ${status}: ${code}`);
   }
@@ -64,8 +66,12 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { code?: string };
-    throw new WorkspaceRequestError(response.status, body.code ?? 'workspace_request_failed');
+    const body = (await response.json().catch(() => ({}))) as { code?: string; detail?: string };
+    throw new WorkspaceRequestError(
+      response.status,
+      body.code ?? 'workspace_request_failed',
+      typeof body.detail === 'string' ? body.detail : undefined,
+    );
   }
   return (await response.json()) as T;
 }
@@ -138,7 +144,7 @@ export async function getPersistedRunEvents(
     signal,
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { code?: string };
+    const body = (await response.json().catch(() => ({}))) as { code?: string; detail?: string };
     throw new WorkspaceRequestError(response.status, body.code ?? 'event_stream_failed');
   }
   const payload = await response.text();

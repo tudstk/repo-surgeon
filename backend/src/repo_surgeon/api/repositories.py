@@ -69,6 +69,7 @@ class RepositorySearchRequest(SearchCodeArguments):
 class RepositorySummaryResponse(BaseModel):
     """Repository-derived metadata for the workspace summary card."""
 
+    languages: dict[str, float] = Field(default_factory=dict)
     language: str | None
     language_confidence: Literal["high", "medium", "low", "unknown"]
     file_count: int
@@ -83,6 +84,7 @@ class RepositorySummaryResponse(BaseModel):
     @classmethod
     def from_summary(cls, summary: RepositorySummary) -> RepositorySummaryResponse:
         return cls(
+            languages=summary.languages,
             language=summary.language,
             language_confidence=summary.language_confidence,
             file_count=summary.file_count,

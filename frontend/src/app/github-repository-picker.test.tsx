@@ -103,9 +103,20 @@ it('keeps failed imports recoverable, sends CSRF, and prevents duplicate submiss
     expect(screen.getByRole('searchbox')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Close repository search' })).toBeDisabled();
     await act(async () =>
-      finishImport?.(Response.json({ code: 'github_import_failed' }, { status: 422 })),
+      finishImport?.(
+        Response.json(
+          {
+            code: 'github_import_failed',
+            detail:
+              'Expanded source is 125,829,120 bytes; the limit is 104,857,600 bytes (100 MiB).',
+          },
+          { status: 422 },
+        ),
+      ),
     );
-    expect(await screen.findByRole('alert')).toHaveTextContent('Import failed');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Expanded source is 125,829,120 bytes',
+    );
     expect(result).toBeEnabled();
     expect(onImported).not.toHaveBeenCalled();
     fireEvent.click(result);

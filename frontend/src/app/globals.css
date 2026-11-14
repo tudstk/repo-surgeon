@@ -1301,3 +1301,34 @@ code {
   font-size: 12px;
   font-weight: 400;
 }
+
+.repo-summary {
+  font-size: 12px;
+}
+.repo-summary .section-heading h2 {
+  font-size: 12px;
+}
+.language-list {
+  display: grid;
+  gap: 6px;
+}
+.language-share {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.language-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+}
+.language-share > span:last-child {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.repo-summary dt,
+.repo-summary dd {
+  font-size: 12px;
+}

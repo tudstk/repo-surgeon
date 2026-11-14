@@ -78,7 +78,7 @@ async def test_search_projects_only_safe_public_results(
     request = requests[0]
     assert request.url.host == "api.github.com"
     assert request.url.path == "/search/repositories"
-    assert request.url.params["q"] == "repo:pallets/flask is:public fork:true"
+    assert request.url.params["q"] == 'user:pallets "flask" in:name is:public fork:true'
     assert request.url.params["per_page"] == "12"
     assert "Authorization" not in request.headers
 
@@ -123,3 +123,17 @@ async def test_search_requires_a_session_in_public_mode() -> None:
         response = await client.get(_ROUTE, params={"q": "flask"})
         assert response.status_code == 401
         assert response.json()["code"] == "authentication_required"
+
+
+@pytest.mark.anyio
+async def test_owner_prefixes_become_scoped_name_search(
+    search_api: tuple[FastAPI, list[httpx.Request]],
+) -> None:
+    app, requests = search_api
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1"
+    ) as client:
+        assert (await client.get(_ROUTE, params={"q": "tudstk/"})).status_code == 200
+        assert (await client.get(_ROUTE, params={"q": "tudstk/repo"})).status_code == 200
+    assert requests[0].url.params["q"] == "user:tudstk is:public fork:true"
+    assert requests[1].url.params["q"] == 'user:tudstk "repo" in:name is:public fork:true'

@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { AppHeader, Icon } from '@/components/ui/shell';
 import type { SafeProfile } from '@/lib/auth-api';
 import { Drawer } from '@/components/ui/drawer';
@@ -21,6 +22,23 @@ import {
   type RunEvent,
   WorkspaceRequestError,
 } from '@/lib/workspace-api';
+
+const languageIcons: Record<string, string> = {
+  Python: 'python',
+  TypeScript: 'typescript',
+  JavaScript: 'javascript',
+  Go: 'go',
+  Rust: 'rust',
+  Java: 'java',
+  CSS: 'css3',
+  HTML: 'html5',
+  Shell: 'bash',
+  Ruby: 'ruby',
+  PHP: 'php',
+  C: 'c',
+  'C++': 'cplusplus',
+  'C#': 'csharp',
+};
 
 function formatLines(lines: number | null) {
   return lines === null
@@ -325,14 +343,34 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       <section className="repo-summary" aria-labelledby="repo-summary-title">
         <div className="section-heading">
           <h2 id="repo-summary-title">Repository summary</h2>
-          {summary?.truncated ? <span className="status-badge warning">Partial scan</span> : null}
         </div>
         {summary ? (
           <>
             <dl>
               <div>
-                <dt>Language</dt>
-                <dd>{summary.language ?? 'Not detected'}</dd>
+                <dt>Languages</dt>
+                <dd className="language-list">
+                  {Object.entries(summary.languages ?? {}).length
+                    ? Object.entries(summary.languages ?? {}).map(([name, percent]) => (
+                        <span className="language-share" key={name}>
+                          {languageIcons[name] ? (
+                            <Image
+                              className="language-icon"
+                              src={`/languages/${languageIcons[name]}.svg`}
+                              alt=""
+                              width={22}
+                              height={22}
+                              unoptimized
+                            />
+                          ) : (
+                            <Icon name="repo" />
+                          )}
+                          <span>{name}</span>
+                          <span>{percent.toFixed(1)}%</span>
+                        </span>
+                      ))
+                    : (summary.language ?? 'Not detected')}
+                </dd>
               </div>
               <div>
                 <dt>Confidence</dt>
@@ -356,7 +394,8 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             ) : null}
             <p className="summary-note">
               Test detection is not a test result.
-              {summary.truncated ? ' Partial scan: counts cover only inspected files.' : ''}
+              {' Language shares use detected source-file bytes.'}
+              {summary.truncated ? ' Some files or lines may be omitted by scan limits.' : ''}
             </p>
             {summary.detected_at ? (
               <p className="summary-note">

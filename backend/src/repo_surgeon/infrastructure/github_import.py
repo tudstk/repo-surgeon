@@ -3,6 +3,7 @@
 import asyncio
 import fcntl
 import io
+import os
 import re
 import shutil
 import stat
@@ -41,8 +42,15 @@ def extract_snapshot(archive: bytes, destination: Path) -> None:
     with zipfile.ZipFile(io.BytesIO(archive)) as source:
         entries = source.infolist()
         if not entries or len(entries) > MAX_FILES:
-            raise GitHubImportError("Repository exceeds the file limit.")
-        total = 0
+            raise GitHubImportError(
+                f"Archive contains {len(entries):,} entries; the limit is {MAX_FILES:,}."
+            )
+        total = sum(entry.file_size for entry in entries)
+        if total > MAX_SOURCE_BYTES:
+            raise GitHubImportError(
+                f"Expanded source is {total:,} bytes; "
+                f"the source size limit is {MAX_SOURCE_BYTES:,} bytes (100 MiB)."
+            )
         roots: set[str] = set()
         paths: set[str] = set()
         for entry in entries:
@@ -66,9 +74,7 @@ def extract_snapshot(archive: bytes, destination: Path) -> None:
             if key in paths:
                 raise GitHubImportError("Repository contains conflicting file names.")
             paths.add(key)
-            total += entry.file_size
-            if total > MAX_SOURCE_BYTES:
-                raise GitHubImportError("Repository exceeds the source size limit.")
+
         if len(roots) != 1:
             raise GitHubImportError("Repository archive has multiple roots.")
         written = 0
@@ -87,7 +93,10 @@ def extract_snapshot(archive: bytes, destination: Path) -> None:
                 while chunk := input_file.read(64 * 1024):
                     written += len(chunk)
                     if written > MAX_SOURCE_BYTES:
-                        raise GitHubImportError("Repository exceeds the source size limit.")
+                        raise GitHubImportError(
+                            f"Source size limit exceeded ({MAX_SOURCE_BYTES:,} bytes); "
+                            f"at least {written:,} bytes were measured."
+                        )
                     output.write(chunk)
 
 
@@ -146,10 +155,20 @@ class GitHubImporter:
                     "GET", f"https://codeload.github.com/{name}/zip/{commit}"
                 ) as response:
                     response.raise_for_status()
+                    length = response.headers.get("content-length", "")
+                    if length.isdigit() and int(length) > MAX_ARCHIVE_BYTES:
+                        raise GitHubImportError(
+                            f"Archive download is {int(length):,} bytes; "
+                            f"the limit is {MAX_ARCHIVE_BYTES:,} bytes (25 MiB)."
+                        )
                     async for chunk in response.aiter_bytes(64 * 1024):
                         payload.extend(chunk)
                         if len(payload) > MAX_ARCHIVE_BYTES:
-                            raise GitHubImportError("Repository archive exceeds 25 MiB.")
+                            raise GitHubImportError(
+                                f"Download exceeds the 25 MiB limit ({MAX_ARCHIVE_BYTES:,} bytes). "
+                                f"At least {len(payload):,} bytes were received; "
+                                "the full archive size is unknown because the download was stopped."
+                            )
                 # The deterministic destination makes retries and concurrent imports converge.
                 publication = asyncio.create_task(
                     asyncio.to_thread(
@@ -165,16 +184,32 @@ class GitHubImporter:
                     raise
         except GitHubImportError:
             raise
-        except (
-            httpx.HTTPError,
-            TimeoutError,
-            ValueError,
-            TypeError,
-            OSError,
-            zipfile.BadZipFile,
-            zlib.error,
-        ):
-            raise GitHubImportError("Import failed. Check the repository and try again.") from None
+        except httpx.HTTPStatusError as error:
+            status = error.response.status_code
+            messages = {
+                404: "GitHub could not find this public repository (HTTP 404).",
+                403: "GitHub denied this request (HTTP 403).",
+                429: "GitHub's request limit has been reached. Retry after the limit resets.",
+                409: "This repository has no commits to import.",
+            }
+            raise GitHubImportError(
+                messages.get(status, f"GitHub returned HTTP {status}. Retry later.")
+            ) from None
+        except httpx.TimeoutException, TimeoutError:
+            raise GitHubImportError("GitHub import timed out. Retry the import.") from None
+        except httpx.RequestError:
+            raise GitHubImportError(
+                "The server could not connect to GitHub. Retry when the connection is available."
+            ) from None
+        except OSError as error:
+            reason = os.strerror(error.errno) if error.errno else "filesystem error"
+            raise GitHubImportError(
+                f"Snapshot storage failed: {reason}. Contact the service operator."
+            ) from None
+        except zipfile.BadZipFile, zlib.error:
+            raise GitHubImportError("GitHub returned an invalid source archive.") from None
+        except ValueError, TypeError:
+            raise GitHubImportError("GitHub returned invalid repository metadata.") from None
 
     def _publish(
         self, archive: bytes, user_id: UUID, repository_id: int, name: str, commit: str

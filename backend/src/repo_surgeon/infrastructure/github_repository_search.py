@@ -6,7 +6,7 @@ from re import fullmatch
 import httpx
 
 # Search text is data. Only the application can supply GitHub search qualifiers.
-SEARCH_PATTERN = r"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*|[A-Za-z0-9-]+/[A-Za-z0-9._-]+)$"
+SEARCH_PATTERN = r"^(?:[A-Za-z0-9._-]+(?: +[A-Za-z0-9._-]+)*|[A-Za-z0-9-]+/[A-Za-z0-9._-]*)$"
 _NAME_PATTERN = r"[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}"
 _LIMIT = 12
 
@@ -58,7 +58,11 @@ class GitHubRepositorySearch:
 
     async def search(self, query: str) -> list[PublicGitHubRepository]:
         """Search by name or resolve an exact owner/repository match."""
-        match = f"repo:{query}" if "/" in query else f'"{query}" in:name'
+        if "/" in query:
+            owner, name = query.split("/", 1)
+            match = f"user:{owner}" + (f' "{name}" in:name' if name else "")
+        else:
+            match = f'"{query}" in:name'
         try:
             response = await self._client.get(
                 "https://api.github.com/search/repositories",
