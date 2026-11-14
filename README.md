@@ -12,7 +12,7 @@ No model API key is required.
 
 ### Workspace interface
 
-A public landing-page preview is available at `/landing`; the working workspace remains at `/`. The shared brand returns to the landing page. The hero and sign-in screen share a faint circuit texture with pausable accent pulses; reduced-motion preference keeps it static.
+A public landing-page preview is available at `/landing`; the working workspace remains at `/`. The shared brand returns to the landing page. The hero and sign-in screen share a faint circuit texture with two introductory accent pulses and mouse-triggered pulses. Reduced-motion preference keeps it static.
 The landing page uses locally hosted type and actual UI captures with synthetic demo data. It makes no model calls and loads no private workspace records.
 
 The workspace’s **Add repository** dialog searches public GitHub repositories by name or `owner/repository`, with owner avatars. Select a result to import its default branch at a pinned commit as a read-only source snapshot. Search and download use credential-free GitHub endpoints and may be rate-limited. Private repositories are not supported.

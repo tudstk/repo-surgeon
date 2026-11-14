@@ -35,45 +35,8 @@
 .vignette > svg {
   mask-image: none;
 }
-.motionControl {
-  position: absolute;
-  right: var(--circuit-control-inset, 24px);
-  bottom: 16px;
-  z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 36px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--canvas);
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 20px;
-  pointer-events: auto;
-}
-.motionControl:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-}
-.motionControl > svg {
-  width: 14px;
-  height: 14px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.5;
-  stroke-linejoin: round;
-}
-@media (max-width: 600px) {
-  .motionControl {
-    right: 20px;
-    min-height: 44px;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
-  .pulse,
-  .motionControl {
+  .pulse {
     display: none;
   }
 }

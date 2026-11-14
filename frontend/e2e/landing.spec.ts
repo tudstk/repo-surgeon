@@ -83,7 +83,7 @@ test('landing artwork respects reduced motion and keyboard navigation', async ({
   await expect(field.getByRole('button')).toHaveCount(0);
 });
 
-test('background pulses move, can be paused, and stop offscreen or for reduced motion', async ({
+test('background pulses move without a control and stop offscreen or for reduced motion', async ({
   page,
 }, testInfo) => {
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'no-preference' });
@@ -125,13 +125,7 @@ test('background pulses move, can be paused, and stop offscreen or for reduced m
       timeout: 1600,
     })
     .toBe(3);
-  await page.getByRole('button', { name: 'Pause background motion' }).click();
-  await expect(field).toHaveAttribute('data-motion', 'paused');
-  await expect
-    .poll(() => pulse.evaluate((node) => node.getAnimations({ subtree: true }).length))
-    .toBe(0);
-  await page.getByRole('button', { name: 'Resume background motion' }).click();
-  await expect(field).toHaveAttribute('data-motion', 'playing');
+  await expect(field.getByRole('button')).toHaveCount(0);
   await page.getByRole('heading', { name: 'The current boundary.' }).scrollIntoViewIfNeeded();
   await expect(field).toHaveAttribute('data-motion', 'idle');
   await expect
@@ -143,7 +137,7 @@ test('background pulses move, can be paused, and stop offscreen or for reduced m
   await expect(field.getByRole('button')).toHaveCount(0);
 });
 
-test('pointer movement sends bounded circuit pulses and respects pause and reduced motion', async ({
+test('pointer movement sends bounded circuit pulses and respects reduced motion', async ({
   page,
 }, testInfo) => {
   await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'no-preference' });
@@ -163,24 +157,15 @@ test('pointer movement sends bounded circuit pulses and respects pause and reduc
     style: 'nextjs-portal { visibility: hidden !important; }',
   });
   await testInfo.attach('hero-cursor-pulses', { path: screenshot, contentType: 'image/png' });
-  await page.getByRole('button', { name: 'Pause background motion' }).click();
-  await expect
-    .poll(() =>
-      field
-        .locator('svg')
-        .first()
-        .evaluate((node) => node.getAnimations({ subtree: true }).length),
-    )
-    .toBe(0);
-  await page.mouse.move(600, 300, { steps: 3 });
-  expect(
-    await cursorPulses.evaluateAll(
-      (groups) => groups.flatMap((node) => node.getAnimations({ subtree: true })).length,
-    ),
-  ).toBe(0);
-  await page.getByRole('button', { name: 'Resume background motion' }).click();
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await expect(field).toHaveAttribute('data-motion', 'reduced');
+  await expect
+    .poll(() =>
+      cursorPulses.evaluateAll(
+        (groups) => groups.flatMap((node) => node.getAnimations({ subtree: true })).length,
+      ),
+    )
+    .toBe(0);
   await page.mouse.move(300, 250, { steps: 3 });
   expect(
     await cursorPulses.evaluateAll(
