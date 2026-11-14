@@ -24,13 +24,13 @@ export function CircuitField({ vignette = false }: { vignette?: boolean }) {
   const pulseRef = useRef<SVGGElement>(null);
   const cursorRefs = useRef<(SVGGElement | null)[]>([]);
   const lastTrack = useRef(-1);
-  const [paused, setPaused] = useState(false);
+  const remainingAmbientPulses = useRef(2);
   const [environment, setEnvironment] = useState({
     reduced: true,
     visible: false,
     foreground: false,
   });
-  const playing = !paused && !environment.reduced && environment.visible && environment.foreground;
+  const playing = !environment.reduced && environment.visible && environment.foreground;
 
   useEffect(() => {
     const field = fieldRef.current;
@@ -63,7 +63,7 @@ export function CircuitField({ vignette = false }: { vignette?: boolean }) {
 
   useEffect(() => {
     const group = pulseRef.current;
-    if (!playing || !group) return;
+    if (!playing || !group || remainingAmbientPulses.current === 0) return;
     const paths = [...group.querySelectorAll('path')];
     if (paths.some((path) => typeof path.animate !== 'function')) return;
     let timer: ReturnType<typeof setTimeout>;
@@ -72,6 +72,7 @@ export function CircuitField({ vignette = false }: { vignette?: boolean }) {
 
     const fire = () => {
       if (disposed) return;
+      remainingAmbientPulses.current -= 1;
       // Pick a visible route without immediately repeating it. The SVG crops on phones.
       const bounds = fieldRef.current?.getBoundingClientRect();
       const visibleTracks = [...(tracksRef.current?.querySelectorAll('path') ?? [])].flatMap(
@@ -116,7 +117,9 @@ export function CircuitField({ vignette = false }: { vignette?: boolean }) {
       });
       timer = setTimeout(() => {
         animations.forEach((animation) => animation.cancel());
-        timer = setTimeout(fire, 350 + Math.random() * 650);
+        if (remainingAmbientPulses.current > 0) {
+          timer = setTimeout(fire, 350 + Math.random() * 650);
+        }
       }, duration);
     };
     timer = setTimeout(fire, 350 + Math.random() * 300);
@@ -196,9 +199,7 @@ export function CircuitField({ vignette = false }: { vignette?: boolean }) {
       ref={fieldRef}
       className={`${styles.field} ${vignette ? styles.vignette : ''}`}
       data-visual="circuit-field"
-      data-motion={
-        environment.reduced ? 'reduced' : paused ? 'paused' : playing ? 'playing' : 'idle'
-      }
+      data-motion={environment.reduced ? 'reduced' : playing ? 'playing' : 'idle'}
     >
       <svg viewBox="0 0 1440 640" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
         <g ref={tracksRef} className={styles.tracks}>
@@ -238,20 +239,6 @@ export function CircuitField({ vignette = false }: { vignette?: boolean }) {
           ))}
         </g>
       </svg>
-      {!environment.reduced ? (
-        <button
-          type="button"
-          className={styles.motionControl}
-          aria-label={paused ? 'Resume background motion' : 'Pause background motion'}
-          aria-pressed={paused}
-          onClick={() => setPaused((current) => !current)}
-        >
-          <svg viewBox="0 0 16 16" aria-hidden="true">
-            <path d={paused ? 'm5 3 7 5-7 5Z' : 'M5 3v10M11 3v10'} />
-          </svg>
-          {paused ? 'Resume motion' : 'Pause motion'}
-        </button>
-      ) : null}
     </div>
   );
 }

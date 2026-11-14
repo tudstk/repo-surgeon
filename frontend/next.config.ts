@@ -2,6 +2,8 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Allow the bounded import deadline and filesystem cleanup to complete.
+  experimental: { proxyTimeout: 90_000 },
   async rewrites() {
     return [
       {

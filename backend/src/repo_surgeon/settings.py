@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     oauth_transaction_ttl_seconds: int = Field(default=600, ge=60, le=900)
     cookie_secure: bool = False
     local_repository_access: bool = True
+    repository_storage: Path = Path.home() / ".local/share/repo-surgeon/repositories"
     database_url: str = (
         "postgresql+asyncpg://repo_surgeon:repo_surgeon_local_only@127.0.0.1:5432/repo_surgeon"
     )

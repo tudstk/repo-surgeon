@@ -16,4 +16,6 @@ These records capture decisions that guide future implementation. They are not e
 | [0010](0010-github-authentication-and-tenancy-foundation.md) | FastAPI-owned GitHub identity and explicit tenant boundary | Milestones 4.5A-4.5C |
 | [0011](0011-persisted-agent-turns.md) | Tenant-scoped persisted read-only agent turns | Milestone 5 Stage 0 |
 
+| [0012](0012-public-github-snapshots.md) | Bounded public GitHub source snapshots | Public repository import |
+
 The master build plan remains authoritative. Update an ADR through a new decision when evidence changes a foundational choice.

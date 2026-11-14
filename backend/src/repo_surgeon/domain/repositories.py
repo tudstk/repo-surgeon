@@ -12,6 +12,7 @@ class RepositorySource(StrEnum):
     """The provenance of a registered repository."""
 
     LOCAL = "local"
+    GITHUB = "github"
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,3 +26,5 @@ class Repository:
     root_device: int | None = None
     root_inode: int | None = None
     owner_user_id: UUID = LOCAL_DEVELOPMENT_USER_ID
+    github_full_name: str | None = None
+    github_commit: str | None = None

@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     ForeignKey,
     LargeBinary,
@@ -12,6 +13,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    false,
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -103,6 +105,9 @@ class RepositoryRecord(Base):
         Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     source: Mapped[str] = mapped_column(String(16), nullable=False)
+    hidden: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=false())
+    github_full_name: Mapped[str | None] = mapped_column(String(140), nullable=True)
+    github_commit: Mapped[str | None] = mapped_column(String(40), nullable=True)
     canonical_root: Mapped[str] = mapped_column(String(4096), nullable=False)
     root_device: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     root_inode: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

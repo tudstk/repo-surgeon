@@ -202,7 +202,7 @@ describe('authenticated workspace', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Owned repositories could not be loaded.',
     );
-    expect(screen.getByText('Select an assigned repository.')).toBeInTheDocument();
+    expect(screen.getByText('Select a repository.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     await waitFor(() => expect(screen.getByText('Start a read-only session')).toBeInTheDocument());

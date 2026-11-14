@@ -1,9 +1,11 @@
 export type OwnedRepository = {
   id: string;
   name: string;
+  github_commit?: string;
 };
 
 export type RepositorySummary = {
+  languages?: Record<string, number>;
   language: string | null;
   language_confidence: 'high' | 'medium' | 'low' | 'unknown';
   file_count: number;
@@ -51,6 +53,7 @@ export class WorkspaceRequestError extends Error {
   constructor(
     readonly status: number,
     readonly code: string,
+    readonly detail?: string,
   ) {
     super(`Workspace request failed with ${status}: ${code}`);
   }
@@ -63,8 +66,12 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { code?: string };
-    throw new WorkspaceRequestError(response.status, body.code ?? 'workspace_request_failed');
+    const body = (await response.json().catch(() => ({}))) as { code?: string; detail?: string };
+    throw new WorkspaceRequestError(
+      response.status,
+      body.code ?? 'workspace_request_failed',
+      typeof body.detail === 'string' ? body.detail : undefined,
+    );
   }
   return (await response.json()) as T;
 }
@@ -82,6 +89,18 @@ function mutationInit(csrfToken: string, body: object): RequestInit {
 
 export function listOwnedRepositories(signal?: AbortSignal) {
   return requestJson<OwnedRepository[]>('/api/v1/repositories', { signal });
+}
+
+export type PublicGitHubRepository = {
+  full_name: string;
+  owner_avatar_url: string | null;
+};
+
+export function searchPublicGitHubRepositories(query: string, signal?: AbortSignal) {
+  const params = new URLSearchParams({ q: query });
+  return requestJson<PublicGitHubRepository[]>(`/api/v1/repositories/github/search?${params}`, {
+    signal,
+  });
 }
 
 export function getRepositorySummary(repositoryId: string, signal?: AbortSignal) {
@@ -125,7 +144,7 @@ export async function getPersistedRunEvents(
     signal,
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { code?: string };
+    const body = (await response.json().catch(() => ({}))) as { code?: string; detail?: string };
     throw new WorkspaceRequestError(response.status, body.code ?? 'event_stream_failed');
   }
   const payload = await response.text();
@@ -133,4 +152,25 @@ export async function getPersistedRunEvents(
     .split('\n')
     .filter((line) => line.startsWith('data: '))
     .map((line) => JSON.parse(line.slice(6)) as RunEvent);
+}
+
+export function importGitHubRepository(fullName: string, csrfToken: string) {
+  return requestJson<OwnedRepository>(
+    '/api/v1/repositories/github/import',
+    mutationInit(csrfToken, { full_name: fullName }),
+  );
+}
+
+export async function setRepositoryHidden(
+  repositoryId: string,
+  hidden: boolean,
+  csrfToken: string,
+) {
+  const response = await fetch(`/api/v1/repositories/${repositoryId}/visibility`, {
+    credentials: 'include',
+    cache: 'no-store',
+    ...mutationInit(csrfToken, { hidden }),
+  });
+  if (!response.ok)
+    throw new WorkspaceRequestError(response.status, 'repository_visibility_failed');
 }

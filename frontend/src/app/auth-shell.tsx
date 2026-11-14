@@ -102,8 +102,8 @@ export function LoginScreen() {
         <div className="identity-scope">
           <ReadOnlyBadge />
           <p>
-            Sign-in does not import your GitHub repositories. This release shows repositories
-            already assigned to your account.
+            Sign-in identifies your account. Use Add repository in the workspace to import a public
+            GitHub source snapshot. Private repositories are not supported yet.
           </p>
         </div>
       </section>
@@ -263,7 +263,11 @@ export function ProfileScreen({ view = 'profile' }: { view?: 'profile' | 'settin
       <section className="profile-card" aria-labelledby="profile-title">
         <h2 className="account-heading">Your account</h2>
         <div className="profile-identity">
-          <Avatar user={user} className="profile-avatar" />
+          <Avatar
+            name={user.display_name || user.github_login}
+            url={user.github_avatar_url}
+            className="profile-avatar"
+          />
           <div>
             <h1 id="profile-title">{user.display_name}</h1>
             {user.github_profile_url ? (
@@ -282,12 +286,12 @@ export function ProfileScreen({ view = 'profile' }: { view?: 'profile' | 'settin
           </div>
           <div>
             <span>Workspace access</span>
-            <strong>Assigned repositories, read-only</strong>
+            <strong>Repository snapshots, read-only</strong>
           </div>
         </div>
         <p className="profile-scope">
-          GitHub sign-in identifies your account. Connecting or importing a GitHub repository is not
-          available yet.
+          GitHub sign-in identifies your account. Import public source snapshots from the workspace.
+          Private repositories are not supported yet.
         </p>
         {logoutError ? (
           <div className="identity-alert" role="alert">

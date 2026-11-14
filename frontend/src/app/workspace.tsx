@@ -1,12 +1,16 @@
 'use client';
 
+import Image from 'next/image';
 import { AppHeader, Icon } from '@/components/ui/shell';
 import type { SafeProfile } from '@/lib/auth-api';
 import { Drawer } from '@/components/ui/drawer';
+import { RepositoryActions } from '@/components/ui/repository-actions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { GitHubRepositoryPicker } from './github-repository-picker';
 
 import {
   createProductSession,
+  setRepositoryHidden,
   createReadOnlyTurn,
   getPersistedRunEvents,
   getProductSession,
@@ -20,6 +24,23 @@ import {
   type RunEvent,
   WorkspaceRequestError,
 } from '@/lib/workspace-api';
+
+const languageIcons: Record<string, string> = {
+  Python: 'python',
+  TypeScript: 'typescript',
+  JavaScript: 'javascript',
+  Go: 'go',
+  Rust: 'rust',
+  Java: 'java',
+  CSS: 'css3',
+  HTML: 'html5',
+  Shell: 'bash',
+  Ruby: 'ruby',
+  PHP: 'php',
+  C: 'c',
+  'C++': 'cplusplus',
+  'C#': 'csharp',
+};
 
 function formatLines(lines: number | null) {
   return lines === null
@@ -41,8 +62,15 @@ function eventMessage(event: RunEvent) {
 }
 
 export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrfToken: string }) {
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const visibilityPending = useRef(false);
+  const [removedRepository, setRemovedRepository] = useState<OwnedRepository | null>(null);
+  const [repositoryActionError, setRepositoryActionError] = useState<string | null>(null);
+  const [repositoriesExpanded, setRepositoriesExpanded] = useState(true);
+  const [sessionsExpanded, setSessionsExpanded] = useState(true);
   const [drawer, setDrawer] = useState<'repositories' | 'events' | null>(null);
   const closeDrawer = useCallback(() => setDrawer(null), []);
+  const [showRepositoryPicker, setShowRepositoryPicker] = useState(false);
   const [repositories, setRepositories] = useState<OwnedRepository[]>([]);
   const [selectedRepositoryId, setSelectedRepositoryId] = useState<string | null>(null);
   const [summary, setSummary] = useState<RepositorySummary | null>(null);
@@ -99,6 +127,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     const controller = new AbortController();
     listOwnedRepositories(controller.signal)
       .then((owned) => {
+        if (controller.signal.aborted) return;
         const currentSelection = selectedRepositoryIdRef.current;
         const nextSelection =
           currentSelection && owned.some((repository) => repository.id === currentSelection)
@@ -175,6 +204,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   }, [attempt, clearPrivateWorkspace, restoreSession, selectedRepositoryId]);
 
   const handleStartSession = async () => {
+    setSessionsExpanded(true);
     if (!selectedRepository || !summary || submitting) return;
     const generation = workspaceRequestGeneration.current;
     setPendingAction('session');
@@ -228,50 +258,154 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     }
   };
 
+  const changeRepositoryVisibility = async (repository: OwnedRepository, hidden: boolean) => {
+    if (visibilityPending.current) return;
+    visibilityPending.current = true;
+    setRemovingId(repository.id);
+    setRepositoryActionError(null);
+    try {
+      await setRepositoryHidden(repository.id, hidden, csrfToken);
+      setRemovedRepository(hidden ? repository : null);
+      if (hidden) {
+        setRepositories((current) => current.filter((item) => item.id !== repository.id));
+        if (selectedRepositoryIdRef.current === repository.id) {
+          workspaceRequestGeneration.current += 1;
+          selectedRepositoryIdRef.current = null;
+          setSelectedRepositoryId(null);
+          setSummary(null);
+          setSessions([]);
+          setSession(null);
+          setEvents([]);
+        }
+      }
+      setAttempt((value) => value + 1);
+    } catch {
+      setRepositoryActionError(
+        hidden
+          ? 'Could not remove this repository. Please retry.'
+          : 'Could not restore this repository. Please retry.',
+      );
+    } finally {
+      visibilityPending.current = false;
+      setRemovingId(null);
+    }
+  };
+
   const repositoryPane = (
     <>
-      <div className="panel-heading">
-        <h2>Repositories</h2>
-        <span className="count">{repositories.length}</span>
+      <div className="panel-heading sidebar-section-heading">
+        <h2>
+          <button
+            type="button"
+            className="section-toggle"
+            aria-expanded={repositoriesExpanded}
+            aria-controls="repository-choices"
+            onClick={() => setRepositoriesExpanded((value) => !value)}
+          >
+            <Icon name="chevron" />
+            <span>Repositories</span>
+            <span className="count">{repositories.length}</span>
+          </button>
+        </h2>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Add repository"
+          title="Add repository"
+          aria-haspopup="dialog"
+          onClick={(event) => {
+            event.currentTarget.focus();
+            setShowRepositoryPicker(true);
+          }}
+        >
+          <Icon name="plus" />
+        </button>
       </div>
       <div className="repo-content">
-        {loading ? (
-          <div className="loading-state" role="status">
-            <span className="skeleton" />
-            <span className="skeleton short" />
-            Loading repositories…
+        <div id="repository-choices" className="disclosure-body" hidden={!repositoriesExpanded}>
+          {loading ? (
+            <div className="loading-state" role="status">
+              <span className="skeleton" />
+              <span className="skeleton short" />
+              Loading repositories…
+            </div>
+          ) : null}
+          {!loading && !error && repositories.length === 0 ? (
+            <p className="empty-state">No repositories added yet.</p>
+          ) : null}
+          <div className="selection-list" role="group" aria-label="Repositories">
+            {repositories.map((repository) => (
+              <div className="repository-selection" key={repository.id}>
+                <button
+                  aria-pressed={repository.id === selectedRepositoryId}
+                  className="selection-row"
+                  onClick={() => {
+                    if (repository.id === selectedRepositoryId) return;
+                    workspaceRequestGeneration.current += 1;
+                    selectedRepositoryIdRef.current = repository.id;
+                    setSelectedRepositoryId(repository.id);
+                    setSummary(null);
+                    setSessions([]);
+                    setSession(null);
+                    setEvents([]);
+                    setError(null);
+                  }}
+                  type="button"
+                  title={repository.name}
+                >
+                  <Icon name="repo" />
+                  <span>
+                    {repository.name}
+                    {repository.github_commit ? (
+                      <small className="snapshot-revision">
+                        Snapshot {repository.github_commit.slice(0, 7)}
+                      </small>
+                    ) : null}
+                  </span>
+                </button>
+                <RepositoryActions
+                  name={repository.name}
+                  disabled={submitting || removingId !== null}
+                  onRemove={() => void changeRepositoryVisibility(repository, true)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+        {repositoryActionError ? (
+          <p role="alert" className="summary-note">
+            {repositoryActionError}
+          </p>
+        ) : null}
+        {removedRepository ? (
+          <div className="repository-undo">
+            <p role="status">
+              Removed {removedRepository.name} from the list. Saved sessions are kept.
+            </p>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={removingId !== null}
+              onClick={() => void changeRepositoryVisibility(removedRepository, false)}
+            >
+              Undo removal
+            </button>
           </div>
         ) : null}
-        {!loading && !error && repositories.length === 0 ? (
-          <p className="empty-state">No repositories assigned yet.</p>
-        ) : null}
-        <div className="selection-list" role="group" aria-label="Repositories">
-          {repositories.map((repository) => (
+        <div className="section-heading sidebar-section-heading">
+          <h2>
             <button
-              aria-pressed={repository.id === selectedRepositoryId}
-              className="selection-row"
-              key={repository.id}
-              onClick={() => {
-                if (repository.id === selectedRepositoryId) return;
-                workspaceRequestGeneration.current += 1;
-                selectedRepositoryIdRef.current = repository.id;
-                setSelectedRepositoryId(repository.id);
-                setSummary(null);
-                setSessions([]);
-                setSession(null);
-                setEvents([]);
-                setError(null);
-              }}
               type="button"
-              title={repository.name}
+              className="section-toggle"
+              aria-expanded={sessionsExpanded}
+              aria-controls="session-choices"
+              onClick={() => setSessionsExpanded((value) => !value)}
             >
-              <Icon name="repo" />
-              <span>{repository.name}</span>
+              <Icon name="chevron" />
+              <span>Sessions</span>
+              <span className="count">{sessions.length}</span>
             </button>
-          ))}
-        </div>
-        <div className="section-heading">
-          <h2>Sessions</h2>
+          </h2>
           <button
             className="icon-button"
             aria-label="Start read-only session"
@@ -282,7 +416,13 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             <Icon name="plus" />
           </button>
         </div>
-        <div className="selection-list" role="group" aria-label="Sessions">
+        <div
+          id="session-choices"
+          hidden={!sessionsExpanded}
+          className="selection-list"
+          role="group"
+          aria-label="Sessions"
+        >
           {sessions.map((item) => (
             <button
               aria-pressed={item.id === session?.id}
@@ -315,14 +455,34 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       <section className="repo-summary" aria-labelledby="repo-summary-title">
         <div className="section-heading">
           <h2 id="repo-summary-title">Repository summary</h2>
-          {summary?.truncated ? <span className="status-badge warning">Partial scan</span> : null}
         </div>
         {summary ? (
           <>
             <dl>
               <div>
-                <dt>Language</dt>
-                <dd>{summary.language ?? 'Not detected'}</dd>
+                <dt>Languages</dt>
+                <dd className="language-list">
+                  {Object.entries(summary.languages ?? {}).length
+                    ? Object.entries(summary.languages ?? {}).map(([name, percent]) => (
+                        <span className="language-share" key={name}>
+                          {languageIcons[name] ? (
+                            <Image
+                              className="language-icon"
+                              src={`/languages/${languageIcons[name]}.svg`}
+                              alt=""
+                              width={22}
+                              height={22}
+                              unoptimized
+                            />
+                          ) : (
+                            <Icon name="repo" />
+                          )}
+                          <span>{name}</span>
+                          <span>{percent.toFixed(1)}%</span>
+                        </span>
+                      ))
+                    : (summary.language ?? 'Not detected')}
+                </dd>
               </div>
               <div>
                 <dt>Confidence</dt>
@@ -346,7 +506,8 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             ) : null}
             <p className="summary-note">
               Test detection is not a test result.
-              {summary.truncated ? ' Partial scan: counts cover only inspected files.' : ''}
+              {' Language shares use detected source-file bytes.'}
+              {summary.truncated ? ' Some files or lines may be omitted by scan limits.' : ''}
             </p>
             {summary.detected_at ? (
               <p className="summary-note">
@@ -358,7 +519,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             ) : null}
           </>
         ) : (
-          <p className="empty-state">Select an assigned repository.</p>
+          <p className="empty-state">Select a repository.</p>
         )}
       </section>
     </>
@@ -430,7 +591,23 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       <div className="repository-context">
         <Icon name="repo" />
         <span title={selectedRepository?.name}>{selectedRepository?.name ?? 'Your workspace'}</span>
-        <span className="context-caption">Repository files stay unchanged</span>
+        <span className="context-caption">
+          {selectedRepository?.github_commit
+            ? `Snapshot ${selectedRepository.github_commit.slice(0, 7)} · Read-only`
+            : 'Repository files stay unchanged'}
+        </span>
+        <button
+          className="secondary-button add-repository"
+          type="button"
+          aria-haspopup="dialog"
+          onClick={(event) => {
+            event.currentTarget.focus();
+            setShowRepositoryPicker(true);
+          }}
+        >
+          <Icon name="plus" />
+          Add repository
+        </button>
       </div>
       <div className="mobile-pane-controls">
         <button type="button" aria-haspopup="dialog" onClick={() => setDrawer('repositories')}>
@@ -500,7 +677,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                 <p>
                   {selectedRepository
                     ? 'Keep an inspection and its saved activity together in a session.'
-                    : 'This release shows repositories already assigned to your account. Connecting or importing a GitHub repository is not available yet.'}
+                    : 'Use Add repository to import a public GitHub source snapshot.'}
                 </p>
                 {selectedRepository ? (
                   <button
@@ -613,6 +790,30 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         >
           {drawer === 'repositories' ? repositoryPane : eventPane}
         </Drawer>
+      ) : null}
+      {showRepositoryPicker ? (
+        <GitHubRepositoryPicker
+          csrfToken={csrfToken}
+          onClose={() => setShowRepositoryPicker(false)}
+          onImported={(repository) => {
+            workspaceRequestGeneration.current += 1;
+            selectedRepositoryIdRef.current = repository.id;
+            setRepositories((current) => [
+              ...current.filter((entry) => entry.id !== repository.id),
+              repository,
+            ]);
+            setSelectedRepositoryId(repository.id);
+            setSummary(null);
+            setSessions([]);
+            setSession(null);
+            setEvents([]);
+            setError(null);
+            setShowRepositoryPicker(false);
+            setRepositoriesExpanded(true);
+            closeDrawer();
+            setAttempt((current) => current + 1);
+          }}
+        />
       ) : null}
     </main>
   );

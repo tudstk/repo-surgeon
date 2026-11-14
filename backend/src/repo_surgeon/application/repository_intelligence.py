@@ -7,7 +7,7 @@ import os
 import re
 import tomllib
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path, PurePath
 from typing import Literal
@@ -67,6 +67,7 @@ class RepositorySummary:
     test_detection: Literal["detected", "ambiguous", "not_found", "unsupported"]
     detected_at: datetime
     truncated: bool
+    languages: dict[str, float] = field(default_factory=dict)
 
 
 # Metadata detection applies independent bounded heuristics in one pass.
@@ -101,11 +102,30 @@ def detect_repository_summary(
     )
     entries = tuple(entry for entry in listing.entries if not _is_ignored(entry.path))
     language_scores: defaultdict[str, int] = defaultdict(int)
+    language_bytes: defaultdict[str, int] = defaultdict(int)
     text_by_path: dict[str, str] = {}
     approximate_lines = 0
     truncated = listing.truncated
 
     for entry in entries:
+        suffix = PurePath(entry.path).suffix.lower()
+        detected = {
+            ".ts": "TypeScript",
+            ".tsx": "TypeScript",
+            ".js": "JavaScript",
+            ".jsx": "JavaScript",
+            ".mjs": "JavaScript",
+            ".cjs": "JavaScript",
+            ".css": "CSS",
+            ".html": "HTML",
+            ".sh": "Shell",
+            ".rb": "Ruby",
+            ".php": "PHP",
+            ".c": "C",
+            ".cpp": "C++",
+        }.get(suffix) or _language_for_file(entry)
+        if detected:
+            language_bytes[detected] += entry.size_bytes
         try:
             read = files.read_file(entry.path)
         except RepositoryFileError as error:
@@ -135,6 +155,11 @@ def detect_repository_summary(
     framework, command, detection = _detect_tests(readable_entries, text_by_path)
     readable_file_count = len(readable_entries)
     return RepositorySummary(
+        languages={
+            name: round(size * 100 / sum(language_bytes.values()), 1)
+            for name, size in sorted(language_bytes.items(), key=lambda item: (-item[1], item[0]))
+            if size
+        },
         language=language,
         language_confidence=confidence,
         file_count=readable_file_count,

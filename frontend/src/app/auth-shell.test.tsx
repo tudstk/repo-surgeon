@@ -56,7 +56,7 @@ describe('identity journey', () => {
     );
     expect(screen.getByText(/only your public profile identity/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Sign-in does not import your GitHub repositories/i),
+      screen.getByText(/Use Add repository in the workspace to import a public/i),
     ).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
       '/api/v1/auth/session',
@@ -136,7 +136,7 @@ describe('identity journey', () => {
       .getAllByRole('link', { name: /@ada/i })
       .find((link) => link.getAttribute('href') === 'https://github.com/ada');
     expect(githubProfileLink).toHaveAttribute('href', 'https://github.com/ada');
-    expect(screen.getByText('Assigned repositories, read-only')).toBeInTheDocument();
+    expect(screen.getByText('Repository snapshots, read-only')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Continue to workspace' })).toHaveAttribute(
       'href',
       '/',

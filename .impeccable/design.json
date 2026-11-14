@@ -12,12 +12,12 @@
       {
         "name": "circuit-pulse",
         "value": "950-1450ms linear; 350-1000ms quiet",
-        "purpose": "One random visible route and one three-layer pulse at a time. Pause, reduced-motion, visibility and unmount cancel it."
+        "purpose": "Two introductory three-layer pulses on random visible routes. Reduced motion, visibility and unmount cancel them."
       },
       {
         "name": "circuit-pointer",
         "value": "350ms linear; 180ms throttle; two slots",
-        "purpose": "Mouse movement energizes the nearest fixed route. Shares pause, visibility and reduced-motion cancellation with the ambient pulse."
+        "purpose": "Mouse movement energizes the nearest fixed route. Shares visibility and reduced-motion cancellation with the ambient pulse."
       }
     ],
     "breakpoints": [

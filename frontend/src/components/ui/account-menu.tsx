@@ -66,7 +66,11 @@ export function AccountMenu({
           } else if (event.key === 'Escape' && open) close();
         }}
       >
-        <Avatar user={user} className="account-avatar" />
+        <Avatar
+          name={user.display_name || user.github_login}
+          url={user.github_avatar_url}
+          className="account-avatar"
+        />
       </button>
       {!open ? (
         <span role="tooltip" id={`${id}-tooltip`} className="account-tooltip">

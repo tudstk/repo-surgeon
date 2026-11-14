@@ -233,3 +233,10 @@ def test_non_object_package_manifest_is_unsupported(tmp_path: Path) -> None:
     assert result.test_detection == "unsupported"
     assert result.test_framework is None
     assert result.test_command is None
+
+
+def test_language_percentages_use_source_bytes_without_manifest_weight(tmp_path: Path) -> None:
+    (tmp_path / "main.py").write_bytes(b"x" * 75)
+    (tmp_path / "app.ts").write_bytes(b"x" * 25)
+    summary = detect_repository_summary(tmp_path)
+    assert summary.languages == {"Python": 75.0, "TypeScript": 25.0}

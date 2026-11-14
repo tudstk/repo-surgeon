@@ -118,8 +118,8 @@ export default function LandingPage() {
             <li>
               <h3>Select a repository</h3>
               <p>
-                Sign in with GitHub and choose a repository already assigned to your account. Start
-                a session in a bounded, read-only workspace.
+                Sign in with GitHub and import a public repository snapshot. Start a session in a
+                bounded, read-only workspace.
               </p>
             </li>
             <li>
@@ -156,7 +156,7 @@ export default function LandingPage() {
                 <Icon name="plus" />
               </summary>
               <p>
-                Sign in with GitHub, select an assigned repository and create a read-only session.
+                Sign in with GitHub, import a public source snapshot and create a read-only session.
                 Run a bounded demo inspection, then revisit its latest exchange and saved events.
               </p>
             </details>
@@ -176,8 +176,8 @@ export default function LandingPage() {
                 <Icon name="plus" />
               </summary>
               <p>
-                No. GitHub sign-in identifies your account. This release shows repositories already
-                assigned to it; connecting or importing a GitHub repository is not available yet.
+                No. Sign-in identifies your account. Use Add repository in the workspace to search
+                and import public source snapshots. Private repositories are not supported yet.
               </p>
             </details>
             <details>

@@ -42,6 +42,7 @@ async function fixture(page: Page, state: 'saved' | 'empty' | 'failed' | 'ready'
     route.fulfill({
       json: {
         language: 'Python',
+        languages: { Python: 75, TypeScript: 25 },
         language_confidence: 'high',
         file_count: 12,
         approximate_lines: 420,
@@ -132,7 +133,11 @@ for (const viewport of [
       const dialog = page.getByRole('dialog', { name: 'Repositories and sessions' });
       await expect(dialog).toBeVisible();
       await capture(page, testInfo, 'repositories-drawer');
-      await page.getByRole('button', { name: repository.name }).focus();
+      await page.getByRole('button', { name: repository.name, exact: true }).focus();
+      await page.keyboard.press('Shift+Tab');
+      await expect(dialog.getByRole('button', { name: 'Add repository' })).toBeFocused();
+      await page.keyboard.press('Shift+Tab');
+      await expect(dialog.getByRole('button', { name: 'Repositories 1' })).toBeFocused();
       await page.keyboard.press('Shift+Tab');
       await expect(
         page.getByRole('button', { name: 'Close Repositories and sessions' }),
@@ -151,14 +156,14 @@ for (const viewport of [
   });
 }
 
-test('empty accounts explain missing import and disable inspection', async ({ page }) => {
+test('empty accounts explain public import and disable inspection', async ({ page }) => {
   await fixture(page, 'empty');
   await page.goto('/');
   await expect(
     page.getByRole('heading', { name: 'No repositories in this workspace yet' }),
   ).toBeVisible();
   await expect(
-    page.getByText(/Connecting or importing a GitHub repository is not available yet/),
+    page.getByText(/Use Add repository to import a public GitHub source snapshot/),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
   await expect(page.getByRole('button', { name: /connect|import/i })).toHaveCount(0);
@@ -499,3 +504,226 @@ test('a broken GitHub picture falls back to an initial without losing account na
   await page.keyboard.press('Enter');
   await expect(page.getByRole('menuitem', { name: 'Profile' })).toBeFocused();
 });
+
+for (const width of [1440, 390]) {
+  test(`public GitHub discovery opens a focused modal at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await fixture(page, 'empty');
+    const avatar = 'https://avatars.githubusercontent.com/u/16748505?s=64';
+    await page.route(avatar, (route) =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><rect width="28" height="28" fill="#116a5b"/></svg>',
+      }),
+    );
+    await page.route('**/api/v1/repositories/github/search?*', (route) => {
+      const query = new URL(route.request().url()).searchParams.get('q');
+      expect(query).toBe('pallets/flask');
+      return route.fulfill({ json: [{ full_name: 'pallets/flask', owner_avatar_url: avatar }] });
+    });
+
+    await page.goto('/');
+    const trigger = page.getByRole('button', { name: 'Add repository' });
+    await trigger.click();
+    const dialog = page.getByRole('dialog', { name: 'Add a repository' });
+    const search = dialog.getByRole('searchbox', { name: 'Search GitHub' });
+    await expect(search).toBeFocused();
+    await expect(dialog).toBeInViewport();
+    expect(
+      await dialog.evaluate((node) => getComputedStyle(node, '::backdrop').backdropFilter),
+    ).toBe('blur(5px)');
+    await search.fill('pallets/flask');
+    const suggestion = dialog.getByRole('button', { name: /pallets\/flask/ });
+    await expect(suggestion).toBeEnabled();
+    await expect(suggestion.locator('img')).toHaveAttribute('src', avatar);
+    await capture(page, testInfo, `github-repository-picker-${width}`);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+}
+
+test('public import selects its snapshot, recovers after failure and survives reload', async ({
+  page,
+}, testInfo) => {
+  await fixture(page, 'empty');
+  const imported = { id: 'imported-1', name: 'pallets/flask', github_commit: 'a'.repeat(40) };
+  let saved = false;
+  let calls = 0;
+  await page.route('**/api/v1/repositories', (route) =>
+    route.fulfill({ json: saved ? [imported] : [] }),
+  );
+  await page.route('**/api/v1/sessions?*', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/repositories/github/search?*', (route) =>
+    route.fulfill({ json: [{ full_name: imported.name, owner_avatar_url: null }] }),
+  );
+  await page.route('**/api/v1/repositories/github/import', (route) => {
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
+    expect(route.request().postDataJSON()).toEqual({ full_name: imported.name });
+    calls += 1;
+    saved = calls > 1;
+    return route.fulfill({
+      status: saved ? 200 : 422,
+      json: saved ? imported : { code: 'github_import_failed' },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Add repository' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add a repository' });
+  await dialog.getByRole('searchbox').fill('pallets/flask');
+  await dialog.getByRole('button', { name: 'Import pallets/flask' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('Import failed');
+  await capture(page, testInfo, 'public-import-retry');
+  await dialog.getByRole('button', { name: 'Import pallets/flask' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: /pallets\/flask Snapshot aaaaaaa/ }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Start read-only session' })).toBeEnabled();
+  await capture(page, testInfo, 'public-import-selected');
+  await page.reload();
+  await expect(
+    page.getByRole('button', { name: /pallets\/flask Snapshot aaaaaaa/ }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Start read-only session' })).toBeEnabled();
+  expect(calls).toBe(2);
+});
+
+test('owner prefix searches before a full repository name is entered', async ({ page }) => {
+  await fixture(page, 'empty');
+  const queries: string[] = [];
+  await page.route('**/api/v1/repositories/github/search?*', (route) => {
+    queries.push(new URL(route.request().url()).searchParams.get('q') ?? '');
+    return route.fulfill({ json: [{ full_name: 'tudstk/repo-surgeon', owner_avatar_url: null }] });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Add repository' }).click();
+  await page.getByRole('searchbox').fill('tudstk/');
+  await expect(page.getByRole('button', { name: 'Import tudstk/repo-surgeon' })).toBeVisible();
+  expect(queries).toContain('tudstk/');
+  await page.getByRole('searchbox').fill('tudstk/repo');
+  await expect.poll(() => queries.includes('tudstk/repo')).toBe(true);
+});
+
+for (const width of [1440, 390]) {
+  test(`language summary shows icons and source-byte shares at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await fixture(page);
+    await page.goto('/');
+    if (width === 390)
+      await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    const summary = page.getByRole('region', { name: 'Repository summary' });
+    await expect(summary.getByText('75.0%')).toBeVisible();
+    await expect(summary.getByText('25.0%')).toBeVisible();
+    await expect(summary.getByText('Partial scan', { exact: true })).toHaveCount(0);
+    await expect(summary.locator('img')).toHaveCount(2);
+    await expect
+      .poll(() =>
+        summary
+          .locator('img')
+          .first()
+          .evaluate((img: HTMLImageElement) => img.naturalWidth),
+      )
+      .toBeGreaterThan(0);
+    await capture(page, testInfo, `language-summary-${width}`);
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`sidebar sections collapse independently and keep counts and add actions at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+    await fixture(page);
+    await page.goto('/');
+    if (width === 390)
+      await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    const pane =
+      width === 390
+        ? page.getByRole('dialog', { name: 'Repositories and sessions' })
+        : page.getByRole('complementary', { name: 'Repositories and sessions' });
+    const repos = pane.getByRole('button', { name: 'Repositories 1' });
+    const sessions = pane.getByRole('button', { name: 'Sessions 1' });
+    await expect(sessions).toHaveAttribute('aria-expanded', 'true');
+    await repos.click();
+    await expect(repos).toHaveAttribute('aria-expanded', 'false');
+    await expect(pane.getByRole('button', { name: repository.name, exact: true })).toBeHidden();
+    await expect(pane.getByRole('button', { name: session.title, exact: true })).toBeVisible();
+    await sessions.focus();
+    await page.keyboard.press('Enter');
+    await expect(sessions).toHaveAttribute('aria-expanded', 'false');
+    await expect(pane.getByRole('button', { name: session.title, exact: true })).toBeHidden();
+    const add = pane.getByRole('button', { name: 'Add repository' });
+    await add.click();
+    await expect(page.getByRole('dialog', { name: 'Add a repository' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(add).toBeFocused();
+    await capture(page, testInfo, `sidebar-collapsed-${width}`);
+    await repos.click();
+    await sessions.click();
+    await expect(pane.getByRole('button', { name: repository.name, exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(pane.getByRole('button', { name: session.title, exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await capture(page, testInfo, `sidebar-expanded-${width}`);
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`repository removal and undo update the saved list at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await fixture(page);
+    let hidden = false;
+    await page.route('**/api/v1/repositories', (route) =>
+      route.fulfill({ json: hidden ? [] : [repository] }),
+    );
+    await page.route('**/api/v1/repositories/repository-1/visibility', (route) => {
+      expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
+      hidden = route.request().postDataJSON().hidden;
+      return route.fulfill({ status: 204 });
+    });
+    await page.goto('/');
+    if (width === 390)
+      await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    const actions = page.getByRole('button', { name: `Actions for ${repository.name}` });
+    await actions.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('menuitem', { name: 'Remove', exact: true })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(actions).toBeFocused();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await actions.click();
+    await page.getByRole('button', { name: 'Repositories 1' }).click();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Repositories 1' }).click();
+    await actions.click();
+    await capture(page, testInfo, `repository-actions-menu-${width}`);
+    await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Repositories 0' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sessions 0' })).toBeVisible();
+    await expect(page.getByRole('button', { name: repository.name, exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Undo removal' }).click();
+    await expect(page.getByRole('button', { name: 'Repositories 1' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sessions 1' })).toBeVisible();
+    await capture(page, testInfo, `repository-remove-action-${width}`);
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Repositories 0' })).toBeVisible();
+    await page.reload();
+    if (width === 390)
+      await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Repositories 0' })).toBeVisible();
+  });
+}
