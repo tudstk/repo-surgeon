@@ -17,6 +17,7 @@ from repo_surgeon.api.problems import ApiProblem, ProblemDetail
 from repo_surgeon.api.repositories import router as repositories_router
 from repo_surgeon.api.workspace_repositories import router as workspace_repositories_router
 from repo_surgeon.infrastructure.database import create_engine, create_session_factory
+from repo_surgeon.infrastructure.github_import import GitHubImporter
 from repo_surgeon.infrastructure.github_oauth import HttpxGitHubOAuthClient
 from repo_surgeon.infrastructure.github_repository_search import GitHubRepositorySearch
 from repo_surgeon.settings import Settings, get_settings
@@ -29,12 +30,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     github_oauth_client = HttpxGitHubOAuthClient(configured_settings)
     github_repository_search = GitHubRepositorySearch()
+    github_importer = GitHubImporter(configured_settings.repository_storage)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
         await github_oauth_client.aclose()
         await github_repository_search.aclose()
+        await github_importer.aclose()
         await engine.dispose()
 
     app = FastAPI(title=configured_settings.app_name, version="0.1.0", lifespan=lifespan)
@@ -107,6 +110,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_factory = create_session_factory(engine)
     app.state.github_oauth_client = github_oauth_client
     app.state.github_repository_search = github_repository_search
+    app.state.github_importer = github_importer
     app.include_router(health_router)
     app.include_router(authentication_router)
     app.include_router(repositories_router)

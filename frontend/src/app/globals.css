@@ -1293,3 +1293,11 @@ code {
 .finding a {
   color: var(--accent);
 }
+
+.snapshot-revision {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}

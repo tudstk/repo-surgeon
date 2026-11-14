@@ -103,6 +103,8 @@ class RepositoryRecord(Base):
         Uuid, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     source: Mapped[str] = mapped_column(String(16), nullable=False)
+    github_full_name: Mapped[str | None] = mapped_column(String(140), nullable=True)
+    github_commit: Mapped[str | None] = mapped_column(String(40), nullable=True)
     canonical_root: Mapped[str] = mapped_column(String(4096), nullable=False)
     root_device: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     root_inode: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

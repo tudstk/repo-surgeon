@@ -5,6 +5,8 @@ import { Avatar } from '@/components/ui/avatar';
 import { Icon } from '@/components/ui/icons';
 import {
   searchPublicGitHubRepositories,
+  importGitHubRepository,
+  type OwnedRepository,
   type PublicGitHubRepository,
   WorkspaceRequestError,
 } from '@/lib/workspace-api';
@@ -19,24 +21,38 @@ type SearchResult = {
   error?: string;
 };
 
-export function GitHubRepositoryPicker({ onClose }: { onClose: () => void }) {
+export function GitHubRepositoryPicker({
+  onClose,
+  onImported,
+  csrfToken,
+}: {
+  onClose: () => void;
+  onImported: (repository: OwnedRepository) => void;
+  csrfToken: string;
+}) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const id = useId();
   const [input, setInput] = useState('');
+  const [importing, setImporting] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const pending = useRef(false);
+  const mounted = useRef(true);
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<SearchResult>();
   const query = input.trim();
-  const valid = query.length >= 3 && queryPattern.test(query);
+  const valid = queryPattern.test(query);
   const current = valid && result?.query === query && result.attempt === attempt ? result : null;
 
   useEffect(() => {
+    mounted.current = true;
     const dialog = dialogRef.current;
     if (!dialog) return;
     const trigger = document.activeElement as HTMLElement | null;
     dialog.showModal();
     searchRef.current?.focus();
     return () => {
+      mounted.current = false;
       dialog.close();
       trigger?.focus();
     };
@@ -65,8 +81,28 @@ export function GitHubRepositoryPicker({ onClose }: { onClose: () => void }) {
     };
   }, [attempt, query, valid]);
 
-  let status = 'Enter at least three characters.';
-  if (query.length >= 3 && !valid) status = 'Search by repository name or owner/repository.';
+  async function importRepository(fullName: string) {
+    if (pending.current) return;
+    pending.current = true;
+    setImporting(fullName);
+    setImportError(null);
+    try {
+      const repository = await importGitHubRepository(fullName, csrfToken);
+      if (mounted.current) onImported(repository);
+    } catch {
+      if (mounted.current) {
+        setImportError(
+          'Import failed. The repository may be unavailable, too large, or contain unsupported links. Try another repository or retry.',
+        );
+      }
+    } finally {
+      pending.current = false;
+      if (mounted.current) setImporting(null);
+    }
+  }
+
+  let status = 'Enter a repository name to search.';
+  if (query && !valid) status = 'Search by repository name or owner/repository.';
   if (valid && !current) status = 'Searching GitHub…';
   if (current) {
     const count = current.repositories.length;
@@ -85,13 +121,13 @@ export function GitHubRepositoryPicker({ onClose }: { onClose: () => void }) {
       aria-describedby={`${id}-intro`}
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        if (!pending.current) onClose();
       }}
     >
       <div className={styles.panel}>
         <header className={styles.header}>
           <div>
-            <h2 id={`${id}-title`}>Find a GitHub repository</h2>
+            <h2 id={`${id}-title`}>Add a repository</h2>
             <p id={`${id}-intro`}>Search public repositories by name or owner/repository.</p>
           </div>
           <button
@@ -99,6 +135,7 @@ export function GitHubRepositoryPicker({ onClose }: { onClose: () => void }) {
             type="button"
             aria-label="Close repository search"
             onClick={onClose}
+            disabled={!!importing}
           >
             <Icon name="close" />
           </button>
@@ -109,7 +146,8 @@ export function GitHubRepositoryPicker({ onClose }: { onClose: () => void }) {
             ref={searchRef}
             id={`${id}-search`}
             type="search"
-            maxLength={100}
+            maxLength={140}
+            disabled={!!importing}
             autoComplete="off"
             spellCheck={false}
             placeholder="e.g. pallets/flask"
@@ -141,19 +179,25 @@ export function GitHubRepositoryPicker({ onClose }: { onClose: () => void }) {
             <ul aria-label="Public GitHub repositories">
               {current.repositories.map(({ full_name, owner_avatar_url }) => (
                 <li key={full_name}>
-                  <a href={`https://github.com/${full_name}`} target="_blank" rel="noreferrer">
+                  <button
+                    type="button"
+                    disabled={!!importing}
+                    onClick={() => void importRepository(full_name)}
+                    aria-label={`Import ${full_name}`}
+                  >
                     <Avatar className={styles.avatar} name={full_name} url={owner_avatar_url} />
                     <span>{full_name}</span>
-                    <Icon name="arrow" />
-                    <span className="sr-only"> (opens GitHub in a new tab)</span>
-                  </a>
+                    <Icon name="plus" />
+                  </button>
                 </li>
               ))}
             </ul>
           ) : null}
         </div>
+        {importing ? <p role="status">Importing {importing}…</p> : null}
+        {importError ? <p role="alert">{importError}</p> : null}
         <p className={styles.footer}>
-          Repository import and private access are still in development.
+          Import the current source snapshot for read-only inspection. Public repositories only.
         </p>
       </div>
     </dialog>

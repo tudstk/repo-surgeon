@@ -1,6 +1,7 @@
 export type OwnedRepository = {
   id: string;
   name: string;
+  github_commit?: string;
 };
 
 export type RepositorySummary = {
@@ -145,4 +146,11 @@ export async function getPersistedRunEvents(
     .split('\n')
     .filter((line) => line.startsWith('data: '))
     .map((line) => JSON.parse(line.slice(6)) as RunEvent);
+}
+
+export function importGitHubRepository(fullName: string, csrfToken: string) {
+  return requestJson<OwnedRepository>(
+    '/api/v1/repositories/github/import',
+    mutationInit(csrfToken, { full_name: fullName }),
+  );
 }

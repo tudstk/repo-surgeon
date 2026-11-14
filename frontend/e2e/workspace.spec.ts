@@ -151,14 +151,14 @@ for (const viewport of [
   });
 }
 
-test('empty accounts explain missing import and disable inspection', async ({ page }) => {
+test('empty accounts explain public import and disable inspection', async ({ page }) => {
   await fixture(page, 'empty');
   await page.goto('/');
   await expect(
     page.getByRole('heading', { name: 'No repositories in this workspace yet' }),
   ).toBeVisible();
   await expect(
-    page.getByText(/Connecting or importing a GitHub repository is not available yet/),
+    page.getByText(/Use Add repository to import a public GitHub source snapshot/),
   ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
   await expect(page.getByRole('button', { name: /connect|import/i })).toHaveCount(0);
@@ -522,7 +522,7 @@ for (const width of [1440, 390]) {
     await page.goto('/');
     const trigger = page.getByRole('button', { name: 'Add repository' });
     await trigger.click();
-    const dialog = page.getByRole('dialog', { name: 'Find a GitHub repository' });
+    const dialog = page.getByRole('dialog', { name: 'Add a repository' });
     const search = dialog.getByRole('searchbox', { name: 'Search GitHub' });
     await expect(search).toBeFocused();
     await expect(dialog).toBeInViewport();
@@ -530,8 +530,8 @@ for (const width of [1440, 390]) {
       await dialog.evaluate((node) => getComputedStyle(node, '::backdrop').backdropFilter),
     ).toBe('blur(5px)');
     await search.fill('pallets/flask');
-    const suggestion = dialog.getByRole('link', { name: /pallets\/flask/ });
-    await expect(suggestion).toHaveAttribute('href', 'https://github.com/pallets/flask');
+    const suggestion = dialog.getByRole('button', { name: /pallets\/flask/ });
+    await expect(suggestion).toBeEnabled();
     await expect(suggestion.locator('img')).toHaveAttribute('src', avatar);
     await capture(page, testInfo, `github-repository-picker-${width}`);
     await page.keyboard.press('Escape');
@@ -539,3 +539,50 @@ for (const width of [1440, 390]) {
     await expect(trigger).toBeFocused();
   });
 }
+
+test('public import selects its snapshot, recovers after failure and survives reload', async ({
+  page,
+}, testInfo) => {
+  await fixture(page, 'empty');
+  const imported = { id: 'imported-1', name: 'pallets/flask', github_commit: 'a'.repeat(40) };
+  let saved = false;
+  let calls = 0;
+  await page.route('**/api/v1/repositories', (route) =>
+    route.fulfill({ json: saved ? [imported] : [] }),
+  );
+  await page.route('**/api/v1/sessions?*', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/v1/repositories/github/search?*', (route) =>
+    route.fulfill({ json: [{ full_name: imported.name, owner_avatar_url: null }] }),
+  );
+  await page.route('**/api/v1/repositories/github/import', (route) => {
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
+    expect(route.request().postDataJSON()).toEqual({ full_name: imported.name });
+    calls += 1;
+    saved = calls > 1;
+    return route.fulfill({
+      status: saved ? 200 : 422,
+      json: saved ? imported : { code: 'github_import_failed' },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Add repository' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add a repository' });
+  await dialog.getByRole('searchbox').fill('pallets/flask');
+  await dialog.getByRole('button', { name: 'Import pallets/flask' }).click();
+  await expect(dialog.getByRole('alert')).toContainText('Import failed');
+  await capture(page, testInfo, 'public-import-retry');
+  await dialog.getByRole('button', { name: 'Import pallets/flask' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: /pallets\/flask Snapshot aaaaaaa/ }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Start read-only session' })).toBeEnabled();
+  await capture(page, testInfo, 'public-import-selected');
+  await page.reload();
+  await expect(
+    page.getByRole('button', { name: /pallets\/flask Snapshot aaaaaaa/ }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Start read-only session' })).toBeEnabled();
+  expect(calls).toBe(2);
+});

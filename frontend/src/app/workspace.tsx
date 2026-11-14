@@ -101,6 +101,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     const controller = new AbortController();
     listOwnedRepositories(controller.signal)
       .then((owned) => {
+        if (controller.signal.aborted) return;
         const currentSelection = selectedRepositoryIdRef.current;
         const nextSelection =
           currentSelection && owned.some((repository) => repository.id === currentSelection)
@@ -245,7 +246,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           </div>
         ) : null}
         {!loading && !error && repositories.length === 0 ? (
-          <p className="empty-state">No repositories assigned yet.</p>
+          <p className="empty-state">No repositories added yet.</p>
         ) : null}
         <div className="selection-list" role="group" aria-label="Repositories">
           {repositories.map((repository) => (
@@ -268,7 +269,14 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
               title={repository.name}
             >
               <Icon name="repo" />
-              <span>{repository.name}</span>
+              <span>
+                {repository.name}
+                {repository.github_commit ? (
+                  <small className="snapshot-revision">
+                    Snapshot {repository.github_commit.slice(0, 7)}
+                  </small>
+                ) : null}
+              </span>
             </button>
           ))}
         </div>
@@ -360,7 +368,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             ) : null}
           </>
         ) : (
-          <p className="empty-state">Select an assigned repository.</p>
+          <p className="empty-state">Select a repository.</p>
         )}
       </section>
     </>
@@ -432,7 +440,11 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       <div className="repository-context">
         <Icon name="repo" />
         <span title={selectedRepository?.name}>{selectedRepository?.name ?? 'Your workspace'}</span>
-        <span className="context-caption">Repository files stay unchanged</span>
+        <span className="context-caption">
+          {selectedRepository?.github_commit
+            ? `Snapshot ${selectedRepository.github_commit.slice(0, 7)} · Read-only`
+            : 'Repository files stay unchanged'}
+        </span>
         <button
           className="secondary-button add-repository"
           type="button"
@@ -514,7 +526,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                 <p>
                   {selectedRepository
                     ? 'Keep an inspection and its saved activity together in a session.'
-                    : 'This release shows repositories already assigned to your account. Connecting or importing a GitHub repository is not available yet.'}
+                    : 'Use Add repository to import a public GitHub source snapshot.'}
                 </p>
                 {selectedRepository ? (
                   <button
@@ -629,7 +641,26 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         </Drawer>
       ) : null}
       {showRepositoryPicker ? (
-        <GitHubRepositoryPicker onClose={() => setShowRepositoryPicker(false)} />
+        <GitHubRepositoryPicker
+          csrfToken={csrfToken}
+          onClose={() => setShowRepositoryPicker(false)}
+          onImported={(repository) => {
+            workspaceRequestGeneration.current += 1;
+            selectedRepositoryIdRef.current = repository.id;
+            setRepositories((current) => [
+              ...current.filter((entry) => entry.id !== repository.id),
+              repository,
+            ]);
+            setSelectedRepositoryId(repository.id);
+            setSummary(null);
+            setSessions([]);
+            setSession(null);
+            setEvents([]);
+            setError(null);
+            setShowRepositoryPicker(false);
+            setAttempt((current) => current + 1);
+          }}
+        />
       ) : null}
     </main>
   );

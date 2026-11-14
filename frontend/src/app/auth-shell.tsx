@@ -102,8 +102,8 @@ export function LoginScreen() {
         <div className="identity-scope">
           <ReadOnlyBadge />
           <p>
-            Sign-in does not import your GitHub repositories. This release shows repositories
-            already assigned to your account.
+            Sign-in identifies your account. Use Add repository in the workspace to import a public
+            GitHub source snapshot. Private repositories are not supported yet.
           </p>
         </div>
       </section>
@@ -286,12 +286,12 @@ export function ProfileScreen({ view = 'profile' }: { view?: 'profile' | 'settin
           </div>
           <div>
             <span>Workspace access</span>
-            <strong>Assigned repositories, read-only</strong>
+            <strong>Repository snapshots, read-only</strong>
           </div>
         </div>
         <p className="profile-scope">
-          GitHub sign-in identifies your account. Connecting or importing a GitHub repository is not
-          available yet.
+          GitHub sign-in identifies your account. Import public source snapshots from the workspace.
+          Private repositories are not supported yet.
         </p>
         {logoutError ? (
           <div className="identity-alert" role="alert">

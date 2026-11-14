@@ -20,12 +20,12 @@ The current authenticated release offers read-only inspection demonstrations and
 ## Capabilities and Constraints
 
 GitHub sign-in identifies the user through their public profile; it does not import repositories.
-The workspace inspects repositories assigned to the account. The Add repository dialog can search public GitHub repositories and open their GitHub pages.
+The workspace inspects repositories owned by the account. The Add repository dialog searches public GitHub repositories, shows owner/repository labels and avatars, and imports a pinned source snapshot for read-only inspection. Same-commit retries reuse the snapshot; a later upstream commit creates a separate snapshot. Private access, refresh and deletion controls are not implemented.
 The deterministic demo provider lists files and returns a fixed completion message, not tailored answers.
 Sessions, turns and normalized events are saved; repository files are not modified and no Git commit is created.
 Only the latest exchange is displayed when restoring a session.
 The GitHub avatar menu links to Profile and an authenticated informational Settings page; appearance/provider settings are not editable.
-Public GitHub import, proposals, sandbox execution, approval, application and a complete audit ledger are unavailable in this UI release.
+Private GitHub import, proposals, sandbox execution, approval, application and a complete audit ledger are unavailable in this UI release.
 Existing local operator read/search/investigation capabilities remain separate from the public authenticated workspace.
 No browser capability flag identifies deployment mode; never infer it from the hostname.
 

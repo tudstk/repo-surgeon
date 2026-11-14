@@ -68,7 +68,13 @@ async def test_search_projects_only_safe_public_results(
         invalid = await client.get(_ROUTE, params={"q": "flask is:private"})
         assert invalid.status_code == 422
 
-    assert len(requests) == 1
+        short_name = await client.get(_ROUTE, params={"q": "go"})
+        assert short_name.status_code == 200
+        long_name = await client.get(_ROUTE, params={"q": "a" * 39 + "/" + "b" * 100})
+        assert long_name.status_code == 200
+
+    assert len(requests) == 3
+    assert requests[1].url.params["q"] == '"go" in:name is:public fork:true'
     request = requests[0]
     assert request.url.host == "api.github.com"
     assert request.url.path == "/search/repositories"

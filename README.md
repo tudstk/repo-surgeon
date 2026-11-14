@@ -15,10 +15,10 @@ No model API key is required.
 A public landing-page preview is available at `/landing`; the working workspace remains at `/`. The shared brand returns to the landing page. The hero and sign-in screen share a faint circuit texture with pausable accent pulses; reduced-motion preference keeps it static.
 The landing page uses locally hosted type and actual UI captures with synthetic demo data. It makes no model calls and loads no private workspace records.
 
-The workspace’s **Add repository** dialog currently supports public discovery. Search by name or `owner/repository` and open suggestions on GitHub. The search uses GitHub’s unauthenticated public endpoint and may be rate-limited. Importing repositories and connecting private repositories remain in development.
+The workspace’s **Add repository** dialog searches public GitHub repositories by name or `owner/repository`, with owner avatars. Select a result to import its default branch at a pinned commit as a read-only source snapshot. Search and download use credential-free GitHub endpoints and may be rate-limited. Private repositories are not supported.
 
 GitHub sign-in identifies your account; it does not connect or import your GitHub repositories.
-The workspace shows repositories already assigned to your account.
+The workspace shows your imported snapshots and any local repositories already assigned to your account.
 Its demo provider lists files and returns a fixed completion message, rather than a tailored answer.
 Selecting a saved session restores its latest exchange and run events, not a complete transcript.
 “Persisted” means saved to session history; it does not mean a Git commit was created or a tool succeeded.
@@ -177,3 +177,17 @@ The workflow runs on pushes and pull requests. It uses `backend/uv.lock` and `fr
 The identity request path is `browser -> same-origin Next.js /api proxy -> Uvicorn ASGI server -> FastAPI authentication router -> application use case -> PostgreSQL`, with GitHub profile retrieval isolated behind the OAuth adapter. The workspace path adds owner-scoped repository lookup, product-session persistence, a bounded fake-provider turn, normalized run-event persistence, and resumable SSE. Read the [architecture baseline](docs/architecture/overview.md), [C# and Python concept map](docs/learning/glossary.md), and [Milestone retrospectives](docs/learning/milestone-retrospectives.md).
 
 Future work continues with Git context, test sandboxing, proposals, approvals, patch application, audits, and pull requests. The provider boundary and in-process MCP tools support only bounded read-only workflows; they are not connected to write or sandbox workflows.
+
+## Public repository imports
+
+Run the normal `uv run alembic upgrade head` migration before starting this version. Migration `20261114_0005` adds nullable snapshot provenance fields and preserves existing registrations and ownership.
+
+In the workspace, choose **Add repository**, search by repository name or exact `owner/repository`, then select a suggestion. After import, the snapshot is selected and ready for a read-only session. Its short commit identifier appears in the repository list. Reloading restores the saved registration. The deterministic demo provider still lists files and returns its fixed completion message.
+
+The backend checks public visibility without a GitHub token, resolves the default branch to a commit and downloads a bounded source ZIP into app-managed storage. Set `REPO_SURGEON_REPOSITORY_STORAGE` to a private, persistent directory owned by the backend process; its default is `~/.local/share/repo-surgeon/repositories`. Back up this directory together with the database. Multiple workers must share the same filesystem. The Next.js API proxy allows 90 seconds for import responses; any outer proxy needs a compatible timeout. The browser never supplies a filesystem path.
+
+Imports allow at most 25 MiB downloaded ZIP data, 100 MiB expanded source, 10,000 archive entries, 64 path components and 1,024 characters per archive path. Symlinks, special files, Git internals, encrypted archives and conflicting names are rejected. There are two concurrent imports per process, with a 60-second queue/network deadline; bounded extraction finishes cleanup before a timed-out operation releases its slot. Same-account, same-commit retries reuse the saved snapshot. Importing a newer commit creates another snapshot and leaves existing sessions intact.
+
+This is a source snapshot, not a Git checkout: history, automatic refresh, deletion controls, private repositories and Git write actions are unavailable. Submodule contents are not fetched, and Git LFS content depends on GitHub's archive settings. GitHub's unauthenticated rate limits apply. The service has per-import bounds, but no cumulative tenant storage quota or automatic retention policy yet; deployments must monitor storage. If persistence fails after publication, a complete unregistered snapshot can remain and a retry reuses it. Never delete registered snapshot directories while sessions still refer to them.
+
+Deterministic coverage lives in `backend/tests/test_github_import.py`, `frontend/src/app/github-repository-picker.test.tsx` and `frontend/e2e/workspace.spec.ts`. These checks use fixtures and make no paid model calls.

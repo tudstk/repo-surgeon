@@ -6,14 +6,23 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from repo_surgeon.api.dependencies import CurrentPrincipal, DatabaseSession
+from repo_surgeon.api.dependencies import CurrentPrincipal, DatabaseSession, MutationPrincipal
 from repo_surgeon.api.problems import ProblemDetail, problem
 from repo_surgeon.api.repositories import RepositorySummaryResponse
-from repo_surgeon.application.repositories import GetRepository, ListRepositories
+from repo_surgeon.application.repositories import (
+    GetRepository,
+    ListRepositories,
+    RepositoryRegistrationError,
+)
 from repo_surgeon.application.repository_files import RepositoryFileError
 from repo_surgeon.application.repository_intelligence import detect_repository_summary
+from repo_surgeon.infrastructure.github_import import (
+    FULL_NAME_PATTERN,
+    GitHubImporter,
+    GitHubImportError,
+)
 from repo_surgeon.infrastructure.github_repository_search import (
     SEARCH_PATTERN,
     GitHubRepositorySearch,
@@ -30,6 +39,7 @@ class WorkspaceRepositoryResponse(BaseModel):
 
     id: UUID
     name: str
+    github_commit: str | None = None
 
 
 def _not_found() -> Exception:
@@ -41,7 +51,7 @@ def _not_found() -> Exception:
     )
 
 
-@router.get("", response_model=list[WorkspaceRepositoryResponse])
+@router.get("", response_model=list[WorkspaceRepositoryResponse], response_model_exclude_none=True)
 async def list_owned_repositories(
     response: Response,
     principal: CurrentPrincipal,
@@ -53,7 +63,11 @@ async def list_owned_repositories(
         SqlAlchemyRepositoryStore(database, principal.user_id)
     ).execute()
     return [
-        WorkspaceRepositoryResponse(id=repository.id, name=Path(repository.canonical_root).name)
+        WorkspaceRepositoryResponse(
+            id=repository.id,
+            name=repository.github_full_name or Path(repository.canonical_root).name,
+            github_commit=repository.github_commit,
+        )
         for repository in repositories
     ]
 
@@ -66,7 +80,7 @@ async def search_public_github_repositories(
     request: Request,
     response: Response,
     _principal: CurrentPrincipal,
-    q: Annotated[str, Query(min_length=3, max_length=100, pattern=SEARCH_PATTERN)],
+    q: Annotated[str, Query(min_length=1, max_length=140, pattern=SEARCH_PATTERN)],
 ) -> list[PublicGitHubRepository]:
     """Return public suggestions for a signed-in workspace user."""
     response.headers["Cache-Control"] = "no-store"
@@ -87,6 +101,48 @@ async def search_public_github_repositories(
             status=502,
             detail="GitHub could not return repository suggestions.",
         ) from error
+
+
+class ImportGitHubRequest(BaseModel):
+    full_name: str = Field(min_length=3, max_length=140, pattern=FULL_NAME_PATTERN)
+
+
+@router.post(
+    "/github/import", response_model=WorkspaceRepositoryResponse, response_model_exclude_none=True
+)
+async def import_github_repository(
+    body: ImportGitHubRequest,
+    request: Request,
+    response: Response,
+    principal: MutationPrincipal,
+    database: DatabaseSession,
+) -> WorkspaceRepositoryResponse:
+    """Import a public snapshot and grant its capability only to the current tenant."""
+    response.headers["Cache-Control"] = "no-store"
+    importer: GitHubImporter = request.app.state.github_importer
+    try:
+        snapshot = await importer.import_public(body.full_name, principal.user_id)
+    except GitHubImportError as error:
+        raise problem(
+            code="github_import_failed",
+            title="Repository import failed",
+            status=422,
+            detail=str(error),
+        ) from error
+    try:
+        repository = await SqlAlchemyRepositoryStore(database, principal.user_id).add_github(
+            snapshot.root, snapshot.full_name, snapshot.commit
+        )
+    except RepositoryRegistrationError as error:
+        raise problem(
+            code="repository_unavailable",
+            title="Repository unavailable",
+            status=409,
+            detail="The saved snapshot directory has changed. Contact the service operator.",
+        ) from error
+    return WorkspaceRepositoryResponse(
+        id=repository.id, name=snapshot.full_name, github_commit=snapshot.commit
+    )
 
 
 @router.get(

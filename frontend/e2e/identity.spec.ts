@@ -41,7 +41,9 @@ test('logged-out login starts the same-origin OAuth endpoint without loading rep
     'href',
     '/api/v1/auth/github/start',
   );
-  await expect(page.getByText(/Sign-in does not import your GitHub repositories/)).toBeVisible();
+  await expect(
+    page.getByText(/Use Add repository in the workspace to import a public/),
+  ).toBeVisible();
   await expect(page.getByText('payments-api')).toHaveCount(0);
 });
 
@@ -64,7 +66,7 @@ test('callback resolves a mocked session into the safe profile and logs out with
   await page.goto('/auth/callback');
   await expect(page).toHaveURL('/profile');
   await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
-  await expect(page.getByText('Assigned repositories, read-only')).toBeVisible();
+  await expect(page.getByText('Repository snapshots, read-only')).toBeVisible();
 
   await page.getByRole('link', { name: 'Continue to workspace' }).click();
   await expect(page).toHaveURL('/');

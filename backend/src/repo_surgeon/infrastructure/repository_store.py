@@ -29,6 +29,8 @@ def _to_domain(record: RepositoryRecord) -> Repository:
         root_device=record.root_device,
         root_inode=record.root_inode,
         owner_user_id=record.owner_user_id,
+        github_full_name=record.github_full_name,
+        github_commit=record.github_commit,
     )
 
 
@@ -41,11 +43,13 @@ class SqlAlchemyRepositoryStore:
         self._session = session
         self._owner_user_id = owner_user_id
 
-    async def get_by_canonical_root(self, canonical_root: str) -> Repository | None:
+    async def get_by_canonical_root(
+        self, canonical_root: str, source: RepositorySource = RepositorySource.LOCAL
+    ) -> Repository | None:
         """Find a repository by canonical root."""
         statement = select(RepositoryRecord).where(
             RepositoryRecord.owner_user_id == self._owner_user_id,
-            RepositoryRecord.source == RepositorySource.LOCAL.value,
+            RepositoryRecord.source == source.value,
             RepositoryRecord.canonical_root == canonical_root,
         )
         record = (await self._session.execute(statement)).scalar_one_or_none()
@@ -53,9 +57,26 @@ class SqlAlchemyRepositoryStore:
 
     async def add_local(self, root: ResolvedLocalRepositoryRoot) -> Repository:
         """Store a local repository and make duplicate registration idempotent."""
+        return await self._add(root, RepositorySource.LOCAL)
+
+    async def add_github(
+        self, root: ResolvedLocalRepositoryRoot, full_name: str, commit: str
+    ) -> Repository:
+        """Persist one tenant's immutable GitHub source snapshot."""
+        return await self._add(root, RepositorySource.GITHUB, full_name, commit)
+
+    async def _add(
+        self,
+        root: ResolvedLocalRepositoryRoot,
+        source: RepositorySource,
+        full_name: str | None = None,
+        commit: str | None = None,
+    ) -> Repository:
         record = RepositoryRecord(
             owner_user_id=self._owner_user_id,
-            source=RepositorySource.LOCAL.value,
+            source=source.value,
+            github_full_name=full_name,
+            github_commit=commit,
             canonical_root=root.canonical_root,
             root_device=root.root_device,
             root_inode=root.root_inode,
@@ -65,7 +86,7 @@ class SqlAlchemyRepositoryStore:
             await self._session.commit()
         except IntegrityError:
             await self._session.rollback()
-            existing = await self.get_by_canonical_root(root.canonical_root)
+            existing = await self.get_by_canonical_root(root.canonical_root, source)
             if existing is not None:
                 if (existing.root_device, existing.root_inode) != (
                     root.root_device,

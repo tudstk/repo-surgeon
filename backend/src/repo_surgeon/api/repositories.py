@@ -50,7 +50,7 @@ class RepositoryResponse(BaseModel):
     """Public representation of a registered repository."""
 
     id: UUID
-    source: Literal["local"]
+    source: Literal["local", "github"]
     canonical_root: str
     created_at: datetime
 
