@@ -111,7 +111,19 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
             assert turn.json()["status"] == "completed"
             restored = await client.get(f"/api/v1/sessions/{session_id}")
             assert restored.json()["turns"][0]["run_id"] == turn.json()["run_id"]
-    assert len(requests) == 6
+            visibility = f"/api/v1/repositories/{repository['id']}/visibility"
+            assert (await client.post(visibility, json={"hidden": True})).status_code == 204
+            assert (await client.get("/api/v1/repositories")).json() == []
+            assert (await client.get(f"/api/v1/sessions/{session_id}")).status_code == 200
+            reimported = await client.post(
+                "/api/v1/repositories/github/import", json={"full_name": "owner/project"}
+            )
+            assert reimported.json() == repository
+            assert (await client.get("/api/v1/repositories")).json() == [repository]
+            assert (await client.post(visibility, json={"hidden": True})).status_code == 204
+            assert (await client.post(visibility, json={"hidden": False})).status_code == 204
+            assert (await client.get("/api/v1/repositories")).json() == [repository]
+    assert len(requests) == 9
     assert not list(settings.repository_storage.rglob(".import-*"))
 
 
@@ -224,11 +236,22 @@ async def test_public_import_requires_csrf_and_isolates_accounts(tmp_path: Path)
             first = await client.post(endpoint, json=body)
             assert first.status_code == 200, first.text
             first_id = first.json()["id"]
+            forbidden = await client.post(
+                f"/api/v1/repositories/{first_id}/visibility",
+                json={"hidden": True},
+                headers={"X-CSRF-Token": "wrong"},
+            )
+            assert forbidden.status_code == 403
             assert "canonical_root" not in first.text
             token, csrf = credentials[1]
             client.cookies.set("__Host-repo_surgeon_session", token)
             client.headers["X-CSRF-Token"] = csrf
             assert (await client.get("/api/v1/repositories")).json() == []
+            assert (
+                await client.post(
+                    f"/api/v1/repositories/{first_id}/visibility", json={"hidden": True}
+                )
+            ).status_code == 404
             assert (await client.get(f"/api/v1/repositories/{first_id}/summary")).status_code == 404
             second = await client.post(endpoint, json=body)
             assert second.status_code == 200, second.text

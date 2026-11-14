@@ -184,3 +184,22 @@ async def get_owned_repository_summary(
             detail="The owned repository could not be inspected.",
         ) from error
     return RepositorySummaryResponse.from_summary(summary)
+
+
+class RepositoryVisibilityRequest(BaseModel):
+    hidden: bool
+
+
+@router.post("/{repository_id}/visibility", status_code=204)
+async def set_repository_visibility(
+    repository_id: UUID,
+    body: RepositoryVisibilityRequest,
+    principal: MutationPrincipal,
+    database: DatabaseSession,
+) -> Response:
+    """Remove from or restore to the owner's list; keep stored data intact."""
+    if not await SqlAlchemyRepositoryStore(database, principal.user_id).set_hidden(
+        repository_id, body.hidden
+    ):
+        raise _not_found()
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})

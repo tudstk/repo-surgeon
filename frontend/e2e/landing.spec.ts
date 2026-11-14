@@ -56,11 +56,11 @@ for (const viewport of [
       }),
     ).toBeVisible();
     await expect(
-      page.getByText('GitHub sign-in identifies your account.', { exact: false }),
+      page.getByText('No. Sign-in identifies your account.', { exact: false }),
     ).not.toBeVisible();
     await page.getByText('Does GitHub sign-in import repositories?', { exact: true }).click();
     await expect(
-      page.getByText('GitHub sign-in identifies your account.', { exact: false }),
+      page.getByText('No. Sign-in identifies your account.', { exact: false }),
     ).toBeVisible();
   });
 }

@@ -4,11 +4,13 @@ import Image from 'next/image';
 import { AppHeader, Icon } from '@/components/ui/shell';
 import type { SafeProfile } from '@/lib/auth-api';
 import { Drawer } from '@/components/ui/drawer';
+import { RepositoryActions } from '@/components/ui/repository-actions';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GitHubRepositoryPicker } from './github-repository-picker';
 
 import {
   createProductSession,
+  setRepositoryHidden,
   createReadOnlyTurn,
   getPersistedRunEvents,
   getProductSession,
@@ -60,6 +62,10 @@ function eventMessage(event: RunEvent) {
 }
 
 export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrfToken: string }) {
+  const [removingId, setRemovingId] = useState<string | null>(null);
+  const visibilityPending = useRef(false);
+  const [removedRepository, setRemovedRepository] = useState<OwnedRepository | null>(null);
+  const [repositoryActionError, setRepositoryActionError] = useState<string | null>(null);
   const [repositoriesExpanded, setRepositoriesExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
   const [drawer, setDrawer] = useState<'repositories' | 'events' | null>(null);
@@ -252,6 +258,39 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     }
   };
 
+  const changeRepositoryVisibility = async (repository: OwnedRepository, hidden: boolean) => {
+    if (visibilityPending.current) return;
+    visibilityPending.current = true;
+    setRemovingId(repository.id);
+    setRepositoryActionError(null);
+    try {
+      await setRepositoryHidden(repository.id, hidden, csrfToken);
+      setRemovedRepository(hidden ? repository : null);
+      if (hidden) {
+        setRepositories((current) => current.filter((item) => item.id !== repository.id));
+        if (selectedRepositoryIdRef.current === repository.id) {
+          workspaceRequestGeneration.current += 1;
+          selectedRepositoryIdRef.current = null;
+          setSelectedRepositoryId(null);
+          setSummary(null);
+          setSessions([]);
+          setSession(null);
+          setEvents([]);
+        }
+      }
+      setAttempt((value) => value + 1);
+    } catch {
+      setRepositoryActionError(
+        hidden
+          ? 'Could not remove this repository. Please retry.'
+          : 'Could not restore this repository. Please retry.',
+      );
+    } finally {
+      visibilityPending.current = false;
+      setRemovingId(null);
+    }
+  };
+
   const repositoryPane = (
     <>
       <div className="panel-heading sidebar-section-heading">
@@ -296,37 +335,63 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           ) : null}
           <div className="selection-list" role="group" aria-label="Repositories">
             {repositories.map((repository) => (
-              <button
-                aria-pressed={repository.id === selectedRepositoryId}
-                className="selection-row"
-                key={repository.id}
-                onClick={() => {
-                  if (repository.id === selectedRepositoryId) return;
-                  workspaceRequestGeneration.current += 1;
-                  selectedRepositoryIdRef.current = repository.id;
-                  setSelectedRepositoryId(repository.id);
-                  setSummary(null);
-                  setSessions([]);
-                  setSession(null);
-                  setEvents([]);
-                  setError(null);
-                }}
-                type="button"
-                title={repository.name}
-              >
-                <Icon name="repo" />
-                <span>
-                  {repository.name}
-                  {repository.github_commit ? (
-                    <small className="snapshot-revision">
-                      Snapshot {repository.github_commit.slice(0, 7)}
-                    </small>
-                  ) : null}
-                </span>
-              </button>
+              <div className="repository-selection" key={repository.id}>
+                <button
+                  aria-pressed={repository.id === selectedRepositoryId}
+                  className="selection-row"
+                  onClick={() => {
+                    if (repository.id === selectedRepositoryId) return;
+                    workspaceRequestGeneration.current += 1;
+                    selectedRepositoryIdRef.current = repository.id;
+                    setSelectedRepositoryId(repository.id);
+                    setSummary(null);
+                    setSessions([]);
+                    setSession(null);
+                    setEvents([]);
+                    setError(null);
+                  }}
+                  type="button"
+                  title={repository.name}
+                >
+                  <Icon name="repo" />
+                  <span>
+                    {repository.name}
+                    {repository.github_commit ? (
+                      <small className="snapshot-revision">
+                        Snapshot {repository.github_commit.slice(0, 7)}
+                      </small>
+                    ) : null}
+                  </span>
+                </button>
+                <RepositoryActions
+                  name={repository.name}
+                  disabled={submitting || removingId !== null}
+                  onRemove={() => void changeRepositoryVisibility(repository, true)}
+                />
+              </div>
             ))}
           </div>
         </div>
+        {repositoryActionError ? (
+          <p role="alert" className="summary-note">
+            {repositoryActionError}
+          </p>
+        ) : null}
+        {removedRepository ? (
+          <div className="repository-undo">
+            <p role="status">
+              Removed {removedRepository.name} from the list. Saved sessions are kept.
+            </p>
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={removingId !== null}
+              onClick={() => void changeRepositoryVisibility(removedRepository, false)}
+            >
+              Undo removal
+            </button>
+          </div>
+        ) : null}
         <div className="section-heading sidebar-section-heading">
           <h2>
             <button

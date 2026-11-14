@@ -98,6 +98,7 @@ class SqlAlchemyRepositoryStore:
                             "The registered repository path now identifies a different directory."
                         ),
                     ) from None
+                await self.set_hidden(existing.id, False)
                 return existing
             raise
         await self._session.refresh(record)
@@ -125,11 +126,21 @@ class SqlAlchemyRepositoryStore:
             record = None
         return _to_domain(record) if record is not None else None
 
+    async def set_hidden(self, repository_id: UUID, hidden: bool) -> bool:
+        """Change list visibility without deleting snapshots or sessions."""
+        record = await self._session.get(RepositoryRecord, repository_id)
+        if record is None or record.owner_user_id != self._owner_user_id:
+            return False
+        record.hidden = hidden
+        await self._session.commit()
+        return True
+
     async def list_all(self) -> tuple[Repository, ...]:
         """Return registered repositories in creation order."""
         statement = (
             select(RepositoryRecord)
             .order_by(RepositoryRecord.created_at, RepositoryRecord.id)
+            .where(RepositoryRecord.hidden.is_(False))
             .where(RepositoryRecord.owner_user_id == self._owner_user_id)
         )
         records = (await self._session.execute(statement)).scalars().all()

@@ -160,3 +160,17 @@ export function importGitHubRepository(fullName: string, csrfToken: string) {
     mutationInit(csrfToken, { full_name: fullName }),
   );
 }
+
+export async function setRepositoryHidden(
+  repositoryId: string,
+  hidden: boolean,
+  csrfToken: string,
+) {
+  const response = await fetch(`/api/v1/repositories/${repositoryId}/visibility`, {
+    credentials: 'include',
+    cache: 'no-store',
+    ...mutationInit(csrfToken, { hidden }),
+  });
+  if (!response.ok)
+    throw new WorkspaceRequestError(response.status, 'repository_visibility_failed');
+}

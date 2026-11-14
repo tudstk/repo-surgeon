@@ -23,3 +23,7 @@ This initial importer rejects symlink-containing repositories. Submodule sources
 - [GitHub source archive behavior](https://docs.github.com/en/repositories/working-with-files/using-files/downloading-source-code-archives)
 - [GitHub commit listing and default branch behavior](https://docs.github.com/en/rest/commits/commits)
 - `backend/tests/test_github_import.py` covers HTTP authorization, ownership, retry, usable summaries and hostile archives without external network access.
+
+## Workspace visibility
+
+An owner-scoped, CSRF-protected visibility mutation hides a registration from the workspace list without deleting its snapshot or session history. The database visibility flag defaults to visible for existing registrations. Undo restores visibility; reimporting the identical public commit restores the existing registration after its filesystem identity is verified. This is list management, not disk reclamation or GitHub deletion.

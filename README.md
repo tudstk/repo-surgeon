@@ -180,7 +180,7 @@ Future work continues with Git context, test sandboxing, proposals, approvals, p
 
 ## Public repository imports
 
-Run the normal `uv run alembic upgrade head` migration before starting this version. Migration `20261114_0005` adds nullable snapshot provenance fields and preserves existing registrations and ownership.
+Run the normal `uv run alembic upgrade head` migration before starting this version. Migration `20261114_0005` adds nullable snapshot provenance fields and preserves existing registrations and ownership. Migration `20261114_0006` adds persistent workspace visibility; existing repositories remain visible.
 
 In the workspace, choose **Add repository**, search by repository name or exact `owner/repository`, then select a suggestion. After import, the snapshot is selected and ready for a read-only session. Its short commit identifier appears in the repository list. Reloading restores the saved registration. The deterministic demo provider still lists files and returns its fixed completion message.
 
@@ -188,10 +188,12 @@ The backend checks public visibility without a GitHub token, resolves the defaul
 
 Imports allow at most 25 MiB downloaded ZIP data, 100 MiB expanded source, 10,000 archive entries, 64 path components and 1,024 characters per archive path. Symlinks, special files, Git internals, encrypted archives and conflicting names are rejected. There are two concurrent imports per process, with a 60-second queue/network deadline; bounded extraction finishes cleanup before a timed-out operation releases its slot. Same-account, same-commit retries reuse the saved snapshot. Importing a newer commit creates another snapshot and leaves existing sessions intact.
 
-This is a source snapshot, not a Git checkout: history, automatic refresh, deletion controls, private repositories and Git write actions are unavailable. Submodule contents are not fetched, and Git LFS content depends on GitHub's archive settings. GitHub's unauthenticated rate limits apply. The service has per-import bounds, but no cumulative tenant storage quota or automatic retention policy yet; deployments must monitor storage. If persistence fails after publication, a complete unregistered snapshot can remain and a retry reuses it. Never delete registered snapshot directories while sessions still refer to them.
+This is a source snapshot, not a Git checkout: history, automatic refresh, permanent deletion, private repositories and Git write actions are unavailable. Submodule contents are not fetched, and Git LFS content depends on GitHub's archive settings. GitHub's unauthenticated rate limits apply. The service has per-import bounds, but no cumulative tenant storage quota or automatic retention policy yet; deployments must monitor storage. If persistence fails after publication, a complete unregistered snapshot can remain and a retry reuses it. Never delete registered snapshot directories while sessions still refer to them.
 
 Deterministic coverage lives in `backend/tests/test_github_import.py`, `frontend/src/app/github-repository-picker.test.tsx` and `frontend/e2e/workspace.spec.ts`. These checks use fixtures and make no paid model calls.
 
 Repository search accepts an owner prefix such as `tudstk/` and a partial repository name such as `tudstk/repo`. Import errors show the specific server-reported cause. Size errors distinguish the compressed download limit (25 MiB) from the expanded source limit (100 MiB); when the download must stop before its total is known, the message reports measured bytes as a lower bound.
 
 Language percentages use detected source-file bytes from the confined, bounded file listing, excluding ignored directories. They are independent of the weighted primary-language confidence heuristic and do not claim GitHub Linguist parity. Local Devicon assets provide language logos without browser requests to third parties.
+
+Each repository has a three-dot actions menu. **Remove** hides it from your workspace list; it does not delete source snapshots, saved sessions or anything on GitHub. **Undo removal** restores the last removed entry. Importing the same public repository commit again also restores its entry. Visibility changes are owner-scoped and require the same CSRF protection as other workspace mutations.

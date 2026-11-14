@@ -133,7 +133,7 @@ for (const viewport of [
       const dialog = page.getByRole('dialog', { name: 'Repositories and sessions' });
       await expect(dialog).toBeVisible();
       await capture(page, testInfo, 'repositories-drawer');
-      await page.getByRole('button', { name: repository.name }).focus();
+      await page.getByRole('button', { name: repository.name, exact: true }).focus();
       await page.keyboard.press('Shift+Tab');
       await expect(dialog.getByRole('button', { name: 'Add repository' })).toBeFocused();
       await page.keyboard.press('Shift+Tab');
@@ -676,5 +676,54 @@ for (const width of [1440, 390]) {
       'true',
     );
     await capture(page, testInfo, `sidebar-expanded-${width}`);
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`repository removal and undo update the saved list at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await fixture(page);
+    let hidden = false;
+    await page.route('**/api/v1/repositories', (route) =>
+      route.fulfill({ json: hidden ? [] : [repository] }),
+    );
+    await page.route('**/api/v1/repositories/repository-1/visibility', (route) => {
+      expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
+      hidden = route.request().postDataJSON().hidden;
+      return route.fulfill({ status: 204 });
+    });
+    await page.goto('/');
+    if (width === 390)
+      await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    const actions = page.getByRole('button', { name: `Actions for ${repository.name}` });
+    await actions.focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('menuitem', { name: 'Remove', exact: true })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(actions).toBeFocused();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await actions.click();
+    await page.getByRole('button', { name: 'Repositories 1' }).click();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Repositories 1' }).click();
+    await actions.click();
+    await capture(page, testInfo, `repository-actions-menu-${width}`);
+    await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Repositories 0' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sessions 0' })).toBeVisible();
+    await expect(page.getByRole('button', { name: repository.name, exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Undo removal' }).click();
+    await expect(page.getByRole('button', { name: 'Repositories 1' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sessions 1' })).toBeVisible();
+    await capture(page, testInfo, `repository-remove-action-${width}`);
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Repositories 0' })).toBeVisible();
+    await page.reload();
+    if (width === 390)
+      await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Repositories 0' })).toBeVisible();
   });
 }
