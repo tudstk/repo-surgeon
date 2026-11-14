@@ -5,6 +5,7 @@ import { AppHeader, Icon } from '@/components/ui/shell';
 import type { SafeProfile } from '@/lib/auth-api';
 import { Drawer } from '@/components/ui/drawer';
 import { RepositoryActions } from '@/components/ui/repository-actions';
+import { RepositoryRemovalDialog } from '@/components/ui/repository-removal-dialog';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GitHubRepositoryPicker } from './github-repository-picker';
 
@@ -64,6 +65,7 @@ function eventMessage(event: RunEvent) {
 export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrfToken: string }) {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const visibilityPending = useRef(false);
+  const [removalTarget, setRemovalTarget] = useState<OwnedRepository | null>(null);
   const [removedRepository, setRemovedRepository] = useState<OwnedRepository | null>(null);
   const [repositoryActionError, setRepositoryActionError] = useState<string | null>(null);
   const [repositoriesExpanded, setRepositoriesExpanded] = useState(true);
@@ -266,6 +268,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     try {
       await setRepositoryHidden(repository.id, hidden, csrfToken);
       setRemovedRepository(hidden ? repository : null);
+      setRemovalTarget(null);
       if (hidden) {
         setRepositories((current) => current.filter((item) => item.id !== repository.id));
         if (selectedRepositoryIdRef.current === repository.id) {
@@ -335,7 +338,11 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           ) : null}
           <div className="selection-list" role="group" aria-label="Repositories">
             {repositories.map((repository) => (
-              <div className="repository-selection" key={repository.id}>
+              <div
+                className="repository-selection"
+                data-selected={repository.id === selectedRepositoryId}
+                key={repository.id}
+              >
                 <button
                   aria-pressed={repository.id === selectedRepositoryId}
                   className="selection-row"
@@ -366,13 +373,16 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                 <RepositoryActions
                   name={repository.name}
                   disabled={submitting || removingId !== null}
-                  onRemove={() => void changeRepositoryVisibility(repository, true)}
+                  onRemove={() => {
+                    setRepositoryActionError(null);
+                    setRemovalTarget(repository);
+                  }}
                 />
               </div>
             ))}
           </div>
         </div>
-        {repositoryActionError ? (
+        {repositoryActionError && !removalTarget ? (
           <p role="alert" className="summary-note">
             {repositoryActionError}
           </p>
@@ -790,6 +800,19 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         >
           {drawer === 'repositories' ? repositoryPane : eventPane}
         </Drawer>
+      ) : null}
+      {removalTarget ? (
+        <RepositoryRemovalDialog
+          name={removalTarget.name}
+          pending={removingId !== null}
+          error={repositoryActionError}
+          onCancel={() => {
+            if (visibilityPending.current) return;
+            setRemovalTarget(null);
+            setRepositoryActionError(null);
+          }}
+          onConfirm={() => void changeRepositoryVisibility(removalTarget, true)}
+        />
       ) : null}
       {showRepositoryPicker ? (
         <GitHubRepositoryPicker

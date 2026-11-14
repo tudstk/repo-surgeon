@@ -686,11 +686,16 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await fixture(page);
     let hidden = false;
+    let failRemoval = true;
     await page.route('**/api/v1/repositories', (route) =>
       route.fulfill({ json: hidden ? [] : [repository] }),
     );
     await page.route('**/api/v1/repositories/repository-1/visibility', (route) => {
       expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
+      if (failRemoval && route.request().postDataJSON().hidden) {
+        failRemoval = false;
+        return route.fulfill({ status: 503, json: { detail: 'Unavailable' } });
+      }
       hidden = route.request().postDataJSON().hidden;
       return route.fulfill({ status: 204 });
     });
@@ -698,6 +703,8 @@ for (const width of [1440, 390]) {
     if (width === 390)
       await page.getByRole('button', { name: 'Repositories', exact: true }).click();
     const actions = page.getByRole('button', { name: `Actions for ${repository.name}` });
+    const row = page.locator('.repository-selection').filter({ has: actions });
+    await expect(row).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await actions.focus();
     await page.keyboard.press('ArrowDown');
     await expect(page.getByRole('menuitem', { name: 'Remove', exact: true })).toBeFocused();
@@ -711,6 +718,30 @@ for (const width of [1440, 390]) {
     await actions.click();
     await capture(page, testInfo, `repository-actions-menu-${width}`);
     await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+    const confirmation = page.getByRole('dialog', { name: 'Remove repository?' });
+    await expect(confirmation).toContainText(repository.name);
+    await expect(confirmation).toContainText('associated sessions');
+    await expect(confirmation.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    expect(hidden).toBe(false);
+    await capture(page, testInfo, `repository-removal-confirmation-${width}`);
+    await page.keyboard.press('Escape');
+    await expect(confirmation).toHaveCount(0);
+    await expect(actions).toBeFocused();
+    expect(hidden).toBe(false);
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+    await confirmation.getByRole('button', { name: 'Cancel' }).click();
+    await expect(actions).toBeFocused();
+    expect(hidden).toBe(false);
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+    await confirmation.getByRole('button', { name: 'Remove repository', exact: true }).click();
+    await expect(confirmation.getByRole('alert')).toHaveText(
+      'Could not remove this repository. Please retry.',
+    );
+    expect(hidden).toBe(false);
+    await confirmation.getByRole('button', { name: 'Remove repository', exact: true }).click();
+    await expect(confirmation).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Repositories 0' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sessions 0' })).toBeVisible();
     await expect(page.getByRole('button', { name: repository.name, exact: true })).toHaveCount(0);
@@ -720,6 +751,7 @@ for (const width of [1440, 390]) {
     await capture(page, testInfo, `repository-remove-action-${width}`);
     await actions.click();
     await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+    await confirmation.getByRole('button', { name: 'Remove repository', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Repositories 0' })).toBeVisible();
     await page.reload();
     if (width === 390)
