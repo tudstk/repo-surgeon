@@ -535,6 +535,11 @@ code {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.session-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .selection-row .icon {
   margin-top: 1px;
 }
@@ -1386,14 +1391,6 @@ code {
 }
 .finding a {
   color: var(--accent);
-}
-
-.snapshot-revision {
-  display: block;
-  margin-top: 2px;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 400;
 }
 
 .repo-summary {

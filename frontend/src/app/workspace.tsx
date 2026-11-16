@@ -502,14 +502,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                   title={repository.name}
                 >
                   <Icon name="repo" />
-                  <span>
-                    {repository.name}
-                    {repository.github_commit ? (
-                      <small className="snapshot-revision">
-                        Snapshot {repository.github_commit.slice(0, 7)}
-                      </small>
-                    ) : null}
-                  </span>
+                  <span>{repository.name}</span>
                 </button>
                 <RowActions
                   name={repository.name}
@@ -612,7 +605,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                 type="button"
               >
                 <Icon name="activity" />
-                <span>{sessionDisplayName(item.title)}</span>
+                <span className="session-title">{sessionDisplayName(item.title)}</span>
               </button>
               <RowActions
                 name={`session ${sessionDisplayName(item.title)}`}

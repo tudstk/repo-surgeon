@@ -608,15 +608,13 @@ test('public import selects its snapshot, recovers after failure and survives re
   await capture(page, testInfo, 'public-import-retry');
   await dialog.getByRole('button', { name: 'Import pallets/flask' }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(
-    page.getByRole('button', { name: /pallets\/flask Snapshot aaaaaaa/ }),
-  ).toHaveAttribute('aria-pressed', 'true');
+  const importedRow = page.getByRole('button', { name: imported.name, exact: true });
+  await expect(importedRow).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByText('Snapshot aaaaaaa · Read-only')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start read-only session' })).toBeEnabled();
   await capture(page, testInfo, 'public-import-selected');
   await page.reload();
-  await expect(
-    page.getByRole('button', { name: /pallets\/flask Snapshot aaaaaaa/ }),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(importedRow).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Start read-only session' })).toBeEnabled();
   expect(calls).toBe(2);
 });
@@ -807,6 +805,7 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
     await fixture(page);
+    const createdTitle = 'inspection-fixture read-only review of the imported source and tests-1';
     let saved = [{ ...session, title: 'sample/inspection-fixture read-only review' }];
     let renameFailure = true;
     await page.route('**/api/v1/sessions?*', (route) => route.fulfill({ json: saved }));
@@ -815,7 +814,7 @@ for (const width of [1440, 390]) {
       const created = {
         ...session,
         id: 'session-2',
-        title: 'inspection-fixture read-only review-1',
+        title: createdTitle,
       };
       saved = [created, ...saved];
       return route.fulfill({ status: 201, json: created });
@@ -862,8 +861,15 @@ for (const width of [1440, 390]) {
       page.getByRole('button', { name: 'sample/inspection-fixture read-only review', exact: true }),
     ).toHaveCount(0);
     await page.getByRole('button', { name: 'Start read-only session' }).click();
+    const createdRow = page.getByRole('button', { name: createdTitle, exact: true });
+    const label = createdRow.getByText(createdTitle, { exact: true });
+    await expect(createdRow).toHaveAttribute('title', createdTitle);
+    await expect(label).toHaveCSS('white-space', 'nowrap');
+    await expect(label).toHaveCSS('text-overflow', 'ellipsis');
+    expect(await label.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    await capture(page, testInfo, `session-titles-${width}`);
     const actions = page.getByRole('button', {
-      name: 'Actions for session inspection-fixture read-only review-1',
+      name: `Actions for session ${createdTitle}`,
     });
     await actions.click();
     await expect(page.getByRole('menuitem', { name: 'Rename' })).toBeFocused();
@@ -1171,11 +1177,11 @@ for (const width of [1440, 390]) {
     if (width === 390)
       await page.getByRole('button', { name: 'Repositories', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Repositories 1' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Snapshot bbbbbbb/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await expect(page.getByRole('button', { name: /Snapshot aaaaaaa/ })).toHaveCount(0);
+    const repositoryRows = page.getByRole('group', { name: 'Repositories', exact: true });
+    await expect(
+      repositoryRows.getByRole('button', { name: repository.name, exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await expect(repositoryRows).not.toContainText('Snapshot');
     await expect(page.getByRole('button', { name: session.title, exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',
