@@ -792,24 +792,44 @@ for (const width of [1440, 390]) {
             ];
       return route.fulfill({ json: { entries, next_offset: null, scan_limit_reached: false } });
     });
+    let failNext = true;
     await page.route('**/api/v1/repositories/*/file?*', (route) => {
-      const path = new URL(route.request().url()).searchParams.get('path');
-      return path === 'src/logo.png'
-        ? route.fulfill({ status: 415, json: { detail: 'The requested file is binary.' } })
-        : route.fulfill({
-            json: {
-              path,
-              start_line: 1,
-              end_line: 4,
-              has_more: false,
-              lines: [
-                'export function describeRepository(name: string) {',
-                '  const message = "Inspecting repository";',
-                '  return { name, message, readOnly: true };',
-                '}',
-              ],
-            },
-          });
+      const query = new URL(route.request().url()).searchParams;
+      const path = query.get('path');
+      if (path === 'src/logo.png') {
+        return route.fulfill({ status: 415, json: { detail: 'The requested file is binary.' } });
+      }
+      if (query.get('start_line') === '201') {
+        if (failNext) {
+          failNext = false;
+          return route.fulfill({ status: 503, json: { detail: 'Could not load more lines.' } });
+        }
+        return route.fulfill({
+          json: {
+            path,
+            start_line: 201,
+            end_line: 201,
+            has_more: false,
+            lines: ['export const lastLine = true;'],
+          },
+        });
+      }
+      expect(query.get('start_line')).toBe('1');
+      return route.fulfill({
+        json: {
+          path,
+          start_line: 1,
+          end_line: 200,
+          has_more: true,
+          lines: [
+            'export function describeRepository(name: string) {',
+            '  const message = "Inspecting repository";',
+            '  return { name, message, readOnly: true };',
+            '}',
+            ...Array.from({ length: 196 }, (_, index) => `// Example line ${index + 5}`),
+          ],
+        },
+      });
     });
     await page.goto('/');
     const mobile = width < 1101;
@@ -832,6 +852,28 @@ for (const width of [1440, 390]) {
     await expect(
       page.getByRole('region', { name: 'File contents' }).locator('.hljs-keyword').first(),
     ).toHaveText('export');
+    const contents = page.getByRole('region', { name: 'File contents' });
+    const viewMore = page.getByRole('button', { name: 'View more' });
+    if (!mobile) {
+      await expect(viewMore).toBeVisible();
+      await capture(page, testInfo, 'work-pane-view-more');
+    }
+    await contents.evaluate((element) => {
+      element.scrollTop = 200;
+    });
+    await viewMore.click();
+    await expect(page.getByRole('region', { name: 'Code preview' }).getByRole('alert')).toHaveText(
+      'Could not load more lines.',
+    );
+    await expect(contents).toContainText('Example line 200');
+    await viewMore.click();
+    await expect(contents).toContainText('lastLine');
+    await expect(contents).toContainText('describeRepository');
+    expect(await contents.evaluate((element) => element.scrollTop)).toBe(200);
+    await expect(viewMore).toHaveCount(0);
+    await contents.evaluate((element) => {
+      element.scrollTop = 0;
+    });
     await capture(page, testInfo, `repository-code-${width}`);
     await codeTab.focus();
     await page.keyboard.press('ArrowRight');
@@ -843,9 +885,45 @@ for (const width of [1440, 390]) {
       await page.getByRole('button', { name: 'Files', exact: true }).click();
       await expect(page.getByRole('button', { name: 'main.ts', exact: true })).toBeFocused();
     }
+    if (!mobile) {
+      const divider = page.getByRole('separator', { name: 'Resize Code and Activity' });
+      await divider.press('Home');
+      await expect(page.getByRole('button', { name: 'main.ts', exact: true })).toBeHidden();
+      await expect(contents).toContainText('lastLine');
+      await page.getByRole('button', { name: 'Files', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'main.ts', exact: true })).toBeFocused();
+    }
     await page.getByRole('button', { name: 'logo.png', exact: true }).click();
     await expect(page.getByRole('tabpanel', { name: 'Code' }).getByRole('alert')).toHaveText(
       'The requested file is binary.',
     );
   });
 }
+
+test('the work pane resizes with the pointer and keyboard within 20–50% of the viewport', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await fixture(page);
+  await page.goto('/');
+  const divider = page.getByRole('separator', { name: 'Resize Code and Activity' });
+  const pane = page.getByRole('region', { name: 'Code and activity' });
+  const bounds = await divider.boundingBox();
+  if (!bounds) throw new Error('Resize handle is not visible');
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(0, bounds.y + bounds.height / 2);
+  await expect(divider).toHaveAttribute('aria-valuenow', '50');
+  expect((await pane.boundingBox())?.width).toBe(720);
+  await page.mouse.move(1439, bounds.y + bounds.height / 2);
+  await expect(divider).toHaveAttribute('aria-valuenow', '20');
+  expect((await pane.boundingBox())?.width).toBe(288);
+  await page.mouse.up();
+  await expect(page.getByRole('navigation', { name: 'Repository files' })).toBeVisible();
+  await divider.press('ArrowLeft');
+  await expect(divider).toHaveAttribute('aria-valuenow', '22');
+  await divider.press('End');
+  await expect(divider).toHaveAttribute('aria-valuenow', '50');
+  await divider.press('Home');
+  await expect(divider).toHaveAttribute('aria-valuenow', '20');
+});

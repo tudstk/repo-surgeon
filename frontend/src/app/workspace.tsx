@@ -27,6 +27,13 @@ import {
   WorkspaceRequestError,
 } from '@/lib/workspace-api';
 
+const minWorkWidth = 20;
+const maxWorkWidth = 50;
+
+function clampWorkWidth(width: number) {
+  return Math.min(maxWorkWidth, Math.max(minWorkWidth, width));
+}
+
 const languageIcons: Record<string, string> = {
   Python: 'python',
   TypeScript: 'typescript',
@@ -74,6 +81,9 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
   const [drawer, setDrawer] = useState<'repositories' | 'work' | null>(null);
   const [workTab, setWorkTab] = useState<'code' | 'activity'>('code');
+  const [workWidth, setWorkWidth] = useState(40);
+  const [resizingWork, setResizingWork] = useState(false);
+  const workDrag = useRef<{ pointerId: number; x: number; width: number } | null>(null);
   const workTabsId = useId();
   const closeDrawer = useCallback(() => setDrawer(null), []);
   const [showRepositoryPicker, setShowRepositoryPicker] = useState(false);
@@ -709,7 +719,11 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           Code &amp; activity
         </button>
       </div>
-      <div className="workspace-grid">
+      <div
+        className="workspace-grid"
+        style={{ '--work-width': `${workWidth}vw` } as React.CSSProperties}
+        data-resizing-work={resizingWork}
+      >
         <aside className="repo-panel" aria-label="Repositories and sessions">
           {drawer === 'repositories' ? null : repositoryPane}
         </aside>
@@ -869,7 +883,47 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             </div>
           </form>
         </section>
-        <section className="work-panel" aria-label="Code and activity">
+        <section className="work-panel" aria-label="Code and activity" id={`${workTabsId}-pane`}>
+          <div
+            className="work-resize"
+            role="separator"
+            aria-orientation="vertical"
+            tabIndex={0}
+            aria-label="Resize Code and Activity"
+            aria-controls={`${workTabsId}-pane`}
+            aria-valuemin={minWorkWidth}
+            aria-valuemax={maxWorkWidth}
+            aria-valuenow={Math.round(workWidth)}
+            aria-valuetext={`${Math.round(workWidth)}% of viewport`}
+            onPointerDown={(event) => {
+              if (event.button !== 0 || workDrag.current) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              event.currentTarget.focus({ preventScroll: true });
+              workDrag.current = { pointerId: event.pointerId, x: event.clientX, width: workWidth };
+              setResizingWork(true);
+            }}
+            onPointerMove={(event) => {
+              const drag = workDrag.current;
+              if (drag?.pointerId !== event.pointerId) return;
+              setWorkWidth(
+                clampWorkWidth(drag.width + ((drag.x - event.clientX) / window.innerWidth) * 100),
+              );
+            }}
+            onLostPointerCapture={(event) => {
+              if (workDrag.current?.pointerId !== event.pointerId) return;
+              workDrag.current = null;
+              setResizingWork(false);
+            }}
+            onKeyDown={(event) => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              setWorkWidth((width) => {
+                if (event.key === 'Home') return minWorkWidth;
+                if (event.key === 'End') return maxWorkWidth;
+                return clampWorkWidth(width + (event.key === 'ArrowLeft' ? 2 : -2));
+              });
+            }}
+          />
           {drawer === 'work' ? null : workPane}
         </section>
       </div>

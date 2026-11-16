@@ -176,59 +176,63 @@ function highlightedCode(path: string, text: string): ReactNode {
 function FilePreview({ repositoryId, path }: { repositoryId: string; path: string }) {
   const [start, setStart] = useState(1);
   const [attempt, setAttempt] = useState(0);
-  const [result, setResult] = useState<{
-    start: number;
-    file?: RepositoryFilePreview;
-    error?: string;
-  }>();
-  const current = result?.start === start ? result : undefined;
+  const [file, setFile] = useState<RepositoryFilePreview>();
+  const [error, setError] = useState<string>();
   const scroll = useRef<HTMLDivElement>(null);
+  const more = useRef<HTMLButtonElement>(null);
+  const loading = !error && (!file || (file.has_more && start > file.end_line));
+
   useEffect(() => {
     const controller = new AbortController();
     void getRepositoryFile(repositoryId, path, start, controller.signal).then(
-      (file) => {
-        if (!controller.signal.aborted) {
-          setResult({ start, file });
-          scroll.current?.scrollTo(0, 0);
+      (next) => {
+        if (controller.signal.aborted) return;
+        setFile((previous) =>
+          previous && start > 1
+            ? {
+                ...previous,
+                end_line: next.end_line,
+                has_more: next.has_more,
+                lines: [...previous.lines, ...next.lines],
+              }
+            : next,
+        );
+        if (!next.has_more && more.current === document.activeElement) {
+          scroll.current?.focus({ preventScroll: true });
         }
       },
       (cause: unknown) => {
-        if (!controller.signal.aborted)
-          setResult({ start, error: errorMessage(cause, 'Could not open this file.') });
+        if (!controller.signal.aborted) setError(errorMessage(cause, 'Could not open this file.'));
       },
     );
     return () => controller.abort();
   }, [attempt, path, repositoryId, start]);
-  const file = current?.file;
   const code = useMemo(
     () => (file ? highlightedCode(path, file.lines.join('\n')) : null),
     [file, path],
   );
+  const retry = () => {
+    setError(undefined);
+    setAttempt((value) => value + 1);
+  };
 
-  if (!current)
-    return (
+  if (!file) {
+    return error ? (
+      <div className="source-preview-message">
+        <p role="alert">{error}</p>
+        <button type="button" className="secondary-button" onClick={retry}>
+          Retry file
+        </button>
+      </div>
+    ) : (
       <p className="source-preview-message" role="status">
         Opening file…
       </p>
     );
-  if (current.error)
-    return (
-      <div className="source-preview-message">
-        <p role="alert">{current.error}</p>
-        <button
-          type="button"
-          className="secondary-button"
-          onClick={() => {
-            setResult(undefined);
-            setAttempt((value) => value + 1);
-          }}
-        >
-          Retry file
-        </button>
-      </div>
-    );
-  if (!file || file.lines.length === 0)
+  }
+  if (file.lines.length === 0) {
     return <p className="source-preview-message">This file has no previewable lines.</p>;
+  }
   return (
     <>
       <div
@@ -250,26 +254,21 @@ function FilePreview({ repositoryId, path }: { repositoryId: string; path: strin
           </code>
         </pre>
       </div>
-      {start > 1 || file.has_more ? (
-        <div className="source-code-pages">
+      {file.has_more ? (
+        <div className="source-code-more">
+          {error ? <p role="alert">{error}</p> : null}
           <button
+            ref={more}
             type="button"
             className="secondary-button"
-            disabled={start === 1}
-            onClick={() => setStart(Math.max(1, start - 200))}
+            aria-disabled={loading}
+            onClick={() => {
+              if (loading) return;
+              if (error) retry();
+              else setStart(file.end_line + 1);
+            }}
           >
-            Previous
-          </button>
-          <span>
-            Lines {file.start_line}–{file.end_line}
-          </span>
-          <button
-            type="button"
-            className="secondary-button"
-            disabled={!file.has_more}
-            onClick={() => setStart(file.end_line + 1)}
-          >
-            Next
+            {loading ? 'Loading lines…' : 'View more'}
           </button>
         </div>
       ) : null}
@@ -279,7 +278,8 @@ function FilePreview({ repositoryId, path }: { repositoryId: string; path: strin
 
 export function RepositoryCode({ repositoryId }: { repositoryId: string | undefined }) {
   const [path, setPath] = useState<string | null>(null);
-  const [mobilePreview, setMobilePreview] = useState(false);
+  const [compactPreview, setCompactPreview] = useState(false);
+  const browser = useRef<HTMLDivElement>(null);
   const previous = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const moveFocus = useRef<'preview' | 'tree' | null>(null);
@@ -288,12 +288,12 @@ export function RepositoryCode({ repositoryId }: { repositoryId: string | undefi
     if (moveFocus.current === 'preview') heading.current?.focus();
     if (moveFocus.current === 'tree') previous.current?.focus();
     moveFocus.current = null;
-  }, [mobilePreview, path]);
+  }, [compactPreview, path]);
 
   if (!repositoryId)
     return <p className="source-preview-message">Select a repository to browse its files.</p>;
   return (
-    <div className="source-browser" data-mobile-preview={mobilePreview}>
+    <div ref={browser} className="source-browser" data-compact-preview={compactPreview}>
       <nav className="source-tree" aria-label="Repository files">
         <h3>Files</h3>
         <DirectoryContents
@@ -302,9 +302,13 @@ export function RepositoryCode({ repositoryId }: { repositoryId: string | undefi
           selected={path}
           onSelect={(next, trigger) => {
             previous.current = trigger;
-            if (window.matchMedia('(max-width: 1100px)').matches) moveFocus.current = 'preview';
+            if (
+              window.matchMedia('(max-width: 1100px)').matches ||
+              (browser.current && browser.current.getBoundingClientRect().width <= 380)
+            )
+              moveFocus.current = 'preview';
             setPath(next);
-            setMobilePreview(true);
+            setCompactPreview(true);
           }}
         />
       </nav>
@@ -317,7 +321,7 @@ export function RepositoryCode({ repositoryId }: { repositoryId: string | undefi
                 className="secondary-button source-back"
                 onClick={() => {
                   moveFocus.current = 'tree';
-                  setMobilePreview(false);
+                  setCompactPreview(false);
                 }}
               >
                 Files
