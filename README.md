@@ -197,3 +197,7 @@ Repository search accepts an owner prefix such as `tudstk/` and a partial reposi
 Language percentages use detected source-file bytes from the confined, bounded file listing, excluding ignored directories. They are independent of the weighted primary-language confidence heuristic and do not claim GitHub Linguist parity. Local Devicon assets provide language logos without browser requests to third parties.
 
 Each repository has a three-dot actions menu. **Remove** opens a confirmation for the repository and its associated sessions. Confirming hides it from your workspace list; it does not delete source snapshots, saved sessions or anything on GitHub. **Undo removal** restores the last removed entry. Importing the same public repository commit again also restores its entry. Visibility changes are owner-scoped and require the same CSRF protection as other workspace mutations.
+
+The workspace opens the **Code** tab by default. Expand folders in **Files** and select a file to see its repository-relative path, line numbers, and syntax highlighting for supported languages. Use **Activity** for saved run events. On phones, open **Code & activity** and use **Files** to return to the tree.
+
+Folder listings are fetched on demand in pages of 100, with a scan cap of 10,000 entries per directory. Previews support UTF-8 and BOM-marked UTF-16/32 text up to 64 KiB, 200 lines at a time. Protected paths, binary files, and oversized files are excluded from previews.

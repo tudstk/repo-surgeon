@@ -6,7 +6,8 @@ import type { SafeProfile } from '@/lib/auth-api';
 import { Drawer } from '@/components/ui/drawer';
 import { RepositoryActions } from '@/components/ui/repository-actions';
 import { RepositoryRemovalDialog } from '@/components/ui/repository-removal-dialog';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { RepositoryCode } from './repository-code';
 import { GitHubRepositoryPicker } from './github-repository-picker';
 
 import {
@@ -71,7 +72,9 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   const [repositoryActionError, setRepositoryActionError] = useState<string | null>(null);
   const [repositoriesExpanded, setRepositoriesExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
-  const [drawer, setDrawer] = useState<'repositories' | 'events' | null>(null);
+  const [drawer, setDrawer] = useState<'repositories' | 'work' | null>(null);
+  const [workTab, setWorkTab] = useState<'code' | 'activity'>('code');
+  const workTabsId = useId();
   const closeDrawer = useCallback(() => setDrawer(null), []);
   const [showRepositoryPicker, setShowRepositoryPicker] = useState(false);
   const [repositories, setRepositories] = useState<OwnedRepository[]>([]);
@@ -610,6 +613,68 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     </>
   );
 
+  const workPane = (
+    <>
+      <div className="work-tabs" role="tablist" aria-label="Repository work panel">
+        {(['code', 'activity'] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            id={`${workTabsId}-${tab}`}
+            aria-controls={`${workTabsId}-${tab}-panel`}
+            aria-selected={workTab === tab}
+            tabIndex={workTab === tab ? 0 : -1}
+            onClick={() => setWorkTab(tab)}
+            onKeyDown={(event) => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const next =
+                event.key === 'Home'
+                  ? 'code'
+                  : event.key === 'End'
+                    ? 'activity'
+                    : tab === 'code'
+                      ? 'activity'
+                      : 'code';
+              setWorkTab(next);
+              document.getElementById(`${workTabsId}-${next}`)?.focus();
+            }}
+          >
+            <Icon name={tab} />
+            {tab === 'code' ? 'Code' : 'Activity'}
+            {tab === 'activity' && events.length ? (
+              <span className="count" aria-hidden="true">
+                {events.length}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+      <div
+        className="work-tab-panel"
+        role="tabpanel"
+        id={`${workTabsId}-code-panel`}
+        aria-labelledby={`${workTabsId}-code`}
+        hidden={workTab !== 'code'}
+      >
+        <RepositoryCode
+          key={`${selectedRepositoryId ?? ''}-${attempt}`}
+          repositoryId={selectedRepositoryId ?? undefined}
+        />
+      </div>
+      <div
+        className="work-tab-panel"
+        role="tabpanel"
+        id={`${workTabsId}-activity-panel`}
+        aria-labelledby={`${workTabsId}-activity`}
+        hidden={workTab !== 'activity'}
+      >
+        {eventPane}
+      </div>
+    </>
+  );
+
   return (
     <main className="workspace-shell">
       <AppHeader active="workspace" user={user} />
@@ -639,9 +704,9 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           <Icon name="repo" />
           Repositories
         </button>
-        <button type="button" aria-haspopup="dialog" onClick={() => setDrawer('events')}>
-          <Icon name="activity" />
-          Run events<span className="count">{events.length}</span>
+        <button type="button" aria-haspopup="dialog" onClick={() => setDrawer('work')}>
+          <Icon name="code" />
+          Code &amp; activity
         </button>
       </div>
       <div className="workspace-grid">
@@ -804,16 +869,16 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             </div>
           </form>
         </section>
-        <section className="work-panel" aria-label="Run events">
-          {drawer === 'events' ? null : eventPane}
+        <section className="work-panel" aria-label="Code and activity">
+          {drawer === 'work' ? null : workPane}
         </section>
       </div>
       {drawer ? (
         <Drawer
-          title={drawer === 'repositories' ? 'Repositories and sessions' : 'Run events'}
+          title={drawer === 'repositories' ? 'Repositories and sessions' : 'Code and activity'}
           onClose={closeDrawer}
         >
-          {drawer === 'repositories' ? repositoryPane : eventPane}
+          {drawer === 'repositories' ? repositoryPane : workPane}
         </Drawer>
       ) : null}
       {removalTarget ? (

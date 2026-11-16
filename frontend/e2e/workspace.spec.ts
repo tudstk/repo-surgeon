@@ -54,6 +54,9 @@ async function fixture(page: Page, state: 'saved' | 'empty' | 'failed' | 'ready'
       },
     }),
   );
+  await page.route('**/api/v1/repositories/*/tree?*', (route) =>
+    route.fulfill({ json: { entries: [], next_offset: null, scan_limit_reached: false } }),
+  );
   await page.route('**/api/v1/sessions?*', (route) => route.fulfill({ json: [session] }));
   await page.route('**/api/v1/sessions/session-1', (route) =>
     route.fulfill({
@@ -124,9 +127,9 @@ for (const viewport of [
       await expect(
         page.getByRole('complementary', { name: 'Repositories and sessions' }),
       ).toBeVisible();
-      await expect(page.getByRole('region', { name: 'Run events' })).toBeVisible();
-      const bounds = await page.getByRole('region', { name: 'Run events' }).boundingBox();
-      expect(bounds?.width).toBe(420);
+      await expect(page.getByRole('region', { name: 'Code and activity' })).toBeVisible();
+      const bounds = await page.getByRole('region', { name: 'Code and activity' }).boundingBox();
+      expect(bounds?.width).toBeGreaterThanOrEqual(viewport.width * 0.3);
     } else {
       const trigger = page.getByRole('button', { name: 'Repositories', exact: true });
       await trigger.click();
@@ -147,11 +150,12 @@ for (const viewport of [
       await page.keyboard.press('Escape');
       await expect(dialog).toHaveCount(0);
       await expect(trigger).toBeFocused();
-      await page.getByRole('button', { name: /Run events/ }).click();
-      await expect(page.getByRole('dialog', { name: 'Run events' })).toContainText('Persisted');
+      await page.getByRole('button', { name: 'Code & activity' }).click();
+      await page.getByRole('tab', { name: 'Activity' }).click();
+      await expect(page.getByRole('tabpanel', { name: 'Activity' })).toContainText('Persisted');
       await capture(page, testInfo, 'events-drawer');
       await page.keyboard.press('Escape');
-      await expect(page.getByRole('button', { name: /Run events/ })).toBeFocused();
+      await expect(page.getByRole('button', { name: 'Code & activity' })).toBeFocused();
     }
   });
 }
@@ -172,6 +176,7 @@ test('empty accounts explain public import and disable inspection', async ({ pag
 test('a failed tool remains failed even though its event is persisted', async ({ page }) => {
   await fixture(page, 'failed');
   await page.goto('/');
+  await page.getByRole('tab', { name: 'Activity' }).click();
   const event = page
     .getByRole('article')
     .filter({ has: page.locator('code', { hasText: 'tool.failed' }) });
@@ -763,5 +768,84 @@ for (const width of [1440, 390]) {
     if (width === 390)
       await page.getByRole('button', { name: 'Repositories', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Repositories 0' })).toBeVisible();
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`Code opens files from an expandable repository tree at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await fixture(page);
+    await page.route('**/api/v1/repositories/*/tree?*', (route) => {
+      const directory = new URL(route.request().url()).searchParams.get('directory');
+      const entries =
+        directory === '.'
+          ? [
+              { name: 'src', path: 'src', kind: 'directory' },
+              { name: 'README.md', path: 'README.md', kind: 'file' },
+            ]
+          : [
+              { name: 'main.ts', path: 'src/main.ts', kind: 'file' },
+              { name: 'logo.png', path: 'src/logo.png', kind: 'file' },
+            ];
+      return route.fulfill({ json: { entries, next_offset: null, scan_limit_reached: false } });
+    });
+    await page.route('**/api/v1/repositories/*/file?*', (route) => {
+      const path = new URL(route.request().url()).searchParams.get('path');
+      return path === 'src/logo.png'
+        ? route.fulfill({ status: 415, json: { detail: 'The requested file is binary.' } })
+        : route.fulfill({
+            json: {
+              path,
+              start_line: 1,
+              end_line: 4,
+              has_more: false,
+              lines: [
+                'export function describeRepository(name: string) {',
+                '  const message = "Inspecting repository";',
+                '  return { name, message, readOnly: true };',
+                '}',
+              ],
+            },
+          });
+    });
+    await page.goto('/');
+    const mobile = width < 1101;
+    if (mobile) await page.getByRole('button', { name: 'Code & activity' }).click();
+    const codeTab = page.getByRole('tab', { name: 'Code' });
+    await expect(codeTab).toHaveAttribute('aria-selected', 'true');
+    await page.getByRole('button', { name: 'src', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'src', exact: true })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    await page.getByRole('button', { name: 'main.ts', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'src/main.ts' })).toBeVisible();
+    if (!mobile) {
+      await expect(page.getByRole('button', { name: 'main.ts', exact: true })).toHaveAttribute(
+        'aria-current',
+        'true',
+      );
+    }
+    await expect(
+      page.getByRole('region', { name: 'File contents' }).locator('.hljs-keyword').first(),
+    ).toHaveText('export');
+    await capture(page, testInfo, `repository-code-${width}`);
+    await codeTab.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(page.getByRole('tab', { name: 'Activity' })).toBeFocused();
+    await expect(page.getByRole('tabpanel', { name: 'Activity' })).toContainText('run.completed');
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByRole('heading', { name: 'src/main.ts' })).toBeVisible();
+    if (mobile) {
+      await page.getByRole('button', { name: 'Files', exact: true }).click();
+      await expect(page.getByRole('button', { name: 'main.ts', exact: true })).toBeFocused();
+    }
+    await page.getByRole('button', { name: 'logo.png', exact: true }).click();
+    await expect(page.getByRole('tabpanel', { name: 'Code' }).getByRole('alert')).toHaveText(
+      'The requested file is binary.',
+    );
   });
 }

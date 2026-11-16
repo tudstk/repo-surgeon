@@ -1,5 +1,7 @@
 """Versioned owner-scoped repository discovery for the product workspace."""
 
+from __future__ import annotations
+
 import asyncio
 from pathlib import Path
 from typing import Annotated
@@ -16,8 +18,16 @@ from repo_surgeon.application.repositories import (
     ListRepositories,
     RepositoryRegistrationError,
 )
-from repo_surgeon.application.repository_files import RepositoryFileError
+from repo_surgeon.application.repository_files import (
+    BROWSER_SCAN_LIMIT,
+    MAX_FILE_BYTES,
+    ConfinedRepositoryFiles,
+    DirectoryPage,
+    FileRead,
+    RepositoryFileError,
+)
 from repo_surgeon.application.repository_intelligence import detect_repository_summary
+from repo_surgeon.domain.repositories import Repository
 from repo_surgeon.infrastructure.github_import import (
     FULL_NAME_PATTERN,
     GitHubImporter,
@@ -184,6 +194,94 @@ async def get_owned_repository_summary(
             detail="The owned repository could not be inspected.",
         ) from error
     return RepositorySummaryResponse.from_summary(summary)
+
+
+def _repository_browser(repository: Repository) -> ConfinedRepositoryFiles:
+    if repository.root_device is None or repository.root_inode is None:
+        raise RepositoryFileError("repository_unavailable", "The repository is unavailable.")
+    return ConfinedRepositoryFiles(
+        repository.canonical_root, (repository.root_device, repository.root_inode)
+    )
+
+
+def _browse_problem(error: RepositoryFileError) -> Exception:
+    status_code = {
+        "repository_unavailable": 503,
+        "file_not_found": 404,
+        "unsafe_path": 404,
+        "binary_file": 415,
+        "file_too_large": 413,
+    }.get(error.code, 400)
+    return problem(
+        code=error.code,
+        title="Repository preview unavailable",
+        status=status_code,
+        detail=error.detail,
+    )
+
+
+@router.get("/{repository_id}/tree")
+async def browse_owned_repository(
+    repository_id: UUID,
+    response: Response,
+    principal: CurrentPrincipal,
+    database: DatabaseSession,
+    directory: Annotated[str, Query(min_length=1, max_length=1024)] = ".",
+    offset: Annotated[int, Query(ge=0, le=BROWSER_SCAN_LIMIT)] = 0,
+) -> DirectoryPage:
+    response.headers["Cache-Control"] = "no-store"
+    repository = await SqlAlchemyRepositoryStore(database, principal.user_id).get(repository_id)
+    if repository is None:
+        raise _not_found()
+
+    def browse() -> DirectoryPage:
+        return _repository_browser(repository).browse_directory(directory, offset)
+
+    try:
+        return await asyncio.to_thread(browse)
+    except RepositoryFileError as error:
+        raise _browse_problem(error) from error
+
+
+class FilePreviewResponse(BaseModel):
+    path: str
+    start_line: int
+    end_line: int
+    lines: list[str]
+    has_more: bool
+
+    @classmethod
+    def from_read(cls, result: FileRead) -> FilePreviewResponse:
+        return cls(
+            path=result.path,
+            start_line=result.start_line,
+            end_line=result.end_line,
+            lines=[line.text for line in result.lines],
+            has_more=result.truncated,
+        )
+
+
+@router.get("/{repository_id}/file")
+async def preview_owned_repository_file(
+    repository_id: UUID,
+    response: Response,
+    principal: CurrentPrincipal,
+    database: DatabaseSession,
+    path: Annotated[str, Query(min_length=1, max_length=1024)],
+    start_line: Annotated[int, Query(ge=1, le=MAX_FILE_BYTES + 1)] = 1,
+) -> FilePreviewResponse:
+    response.headers["Cache-Control"] = "no-store"
+    repository = await SqlAlchemyRepositoryStore(database, principal.user_id).get(repository_id)
+    if repository is None:
+        raise _not_found()
+
+    def read() -> FileRead:
+        return _repository_browser(repository).read_file(path, start_line, allow_unicode_bom=True)
+
+    try:
+        return FilePreviewResponse.from_read(await asyncio.to_thread(read))
+    except RepositoryFileError as error:
+        raise _browse_problem(error) from error
 
 
 class RepositoryVisibilityRequest(BaseModel):

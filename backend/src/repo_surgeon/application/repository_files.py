@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import codecs
 import fnmatch
 import hashlib
 import os
 import stat
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Literal
@@ -14,6 +16,8 @@ MAX_FILE_COUNT = 200
 MAX_DIRECTORY_COUNT = 2_000
 MAX_FILE_BYTES = 64 * 1024
 MAX_LINE_COUNT = 200
+BROWSER_PAGE_SIZE = 100
+BROWSER_SCAN_LIMIT = 10_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +58,20 @@ class FileListing:
             "result_count": len(self.entries),
             "truncated": self.truncated,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class DirectoryEntry:
+    name: str
+    path: str
+    kind: Literal["directory", "file"]
+
+
+@dataclass(frozen=True, slots=True)
+class DirectoryPage:
+    entries: tuple[DirectoryEntry, ...]
+    next_offset: int | None
+    scan_limit_reached: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,6 +183,41 @@ class ConfinedRepositoryFiles:
                 entries.append(FileEntry(path=relative, entry_type="file", size_bytes=size))
         return FileListing(normalized_directory, tuple(entries), truncated=False)
 
+    def browse_directory(self, directory: str, offset: int) -> DirectoryPage:
+        """List one directory without following links or walking descendants."""
+        _, relative = self._resolve_requested_path(directory)
+        entries: list[DirectoryEntry] = []
+        scan_limit_reached = False
+        try:
+            with ExitStack() as descriptors:
+                descriptor = self._open_directory(Path(relative).parts, descriptors)
+                children = descriptors.enter_context(os.scandir(descriptor))
+                for index, child in enumerate(children):
+                    if index == BROWSER_SCAN_LIMIT:
+                        scan_limit_reached = True
+                        break
+                    path = (Path(relative) / child.name).as_posix()
+                    if len(path) > 1024:
+                        continue
+                    try:
+                        self._ensure_visible_relative(path)
+                        mode = child.stat(follow_symlinks=False).st_mode
+                    except RepositoryFileError, OSError:
+                        continue
+                    if stat.S_ISDIR(mode):
+                        entries.append(DirectoryEntry(child.name, path, "directory"))
+                    elif stat.S_ISREG(mode):
+                        entries.append(DirectoryEntry(child.name, path, "file"))
+        except OSError as error:
+            raise self._descriptor_error(error) from error
+        entries.sort(key=lambda entry: (entry.kind, entry.name.casefold(), entry.name))
+        end = offset + BROWSER_PAGE_SIZE
+        return DirectoryPage(
+            entries=tuple(entries[offset:end]),
+            next_offset=end if end < len(entries) else None,
+            scan_limit_reached=scan_limit_reached,
+        )
+
     def path_type(self, path: str) -> Literal["file", "directory"]:
         """Validate one visible path without walking its descendants."""
         candidate, relative = self._resolve_requested_path(path)
@@ -193,18 +246,33 @@ class ConfinedRepositoryFiles:
             return "file"
         raise RepositoryFileError("unsafe_path", "The requested path is not a regular file.")
 
-    def read_file(self, path: str, start_line: int = 1, end_line: int | None = None) -> FileRead:
+    def read_file(
+        self,
+        path: str,
+        start_line: int = 1,
+        end_line: int | None = None,
+        *,
+        allow_unicode_bom: bool = False,
+    ) -> FileRead:
         """Read from a root-anchored descriptor after canonical policy checks."""
         candidate, relative = self._resolve_requested_path(path)
         resolved, relative = self._resolve_file_candidate(candidate, relative)
         resolved_relative = resolved.relative_to(self._root)
         payload = self._read_descriptor_relative(resolved_relative)
-        if b"\x00" in payload:
-            raise RepositoryFileError("binary_file", "The requested file is binary.")
+        encoding = "utf-8"
+        if allow_unicode_bom:
+            if payload.startswith((codecs.BOM_UTF32_LE, codecs.BOM_UTF32_BE)):
+                encoding = "utf-32"
+            elif payload.startswith((codecs.BOM_UTF16_LE, codecs.BOM_UTF16_BE)):
+                encoding = "utf-16"
+            elif payload.startswith(codecs.BOM_UTF8):
+                encoding = "utf-8-sig"
         try:
-            text = payload.decode("utf-8")
+            text = payload.decode(encoding)
         except UnicodeDecodeError as error:
             raise RepositoryFileError("binary_file", "The requested file is binary.") from error
+        if "\x00" in text:
+            raise RepositoryFileError("binary_file", "The requested file is binary.")
 
         all_lines = text.splitlines()
         requested_end = end_line if end_line is not None else start_line + MAX_LINE_COUNT - 1
@@ -226,62 +294,57 @@ class ConfinedRepositoryFiles:
             content_sha256=hashlib.sha256(payload).hexdigest(),
         )
 
-    def _read_descriptor_relative(self, relative: Path) -> bytes:
-        """Open a pre-resolved child below the root without following any link.
+    def _open_directory(self, parts: tuple[str, ...], descriptors: ExitStack) -> int:
+        """Walk directory descriptors below the registered root without following links."""
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        descriptor = os.open(self._root, flags)
+        descriptors.callback(os.close, descriptor)
+        root_stat = os.fstat(descriptor)
+        if (root_stat.st_dev, root_stat.st_ino) != self._root_identity:
+            raise RepositoryFileError(
+                "repository_unavailable", "The registered repository changed."
+            )
+        for part in parts:
+            descriptor = os.open(part, flags, dir_fd=descriptor)
+            descriptors.callback(os.close, descriptor)
+        return descriptor
 
-        The initial resolve detects a symlink escape.  This descriptor walk then
-        closes the time-of-check/time-of-use window: each component is opened
-        beneath the original root descriptor with ``O_NOFOLLOW``, and the final
-        regular-file check happens after the descriptor is open.
-        """
-        directory_flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
-        root_fd = os.open(self._root, directory_flags)
-        descriptors = [root_fd]
+    @staticmethod
+    def _descriptor_error(error: OSError) -> RepositoryFileError:
+        if isinstance(error, FileNotFoundError):
+            return RepositoryFileError("file_not_found", "The requested path was not found.")
+        return RepositoryFileError("unsafe_path", "The requested path cannot be inspected safely.")
+
+    def _read_descriptor_relative(self, relative: Path) -> bytes:
+        """Open a resolved regular file beneath the registered root descriptor."""
         try:
-            root_stat = os.fstat(root_fd)
-            if (root_stat.st_dev, root_stat.st_ino) != self._root_identity:
-                raise RepositoryFileError(
-                    "repository_unavailable", "The registered repository changed."
-                )
-            parts = relative.parts
-            for component in parts[:-1]:
-                descriptors.append(os.open(component, directory_flags, dir_fd=descriptors[-1]))
-            file_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
-            file_fd = os.open(parts[-1], file_flags, dir_fd=descriptors[-1])
-            descriptors.append(file_fd)
-            opened = os.fstat(file_fd)
-            if not stat.S_ISREG(opened.st_mode):
-                raise RepositoryFileError(
-                    "unsafe_path", "The requested path is not a regular file."
-                )
-            if opened.st_size > MAX_FILE_BYTES:
-                raise RepositoryFileError(
-                    "file_too_large", "The requested file exceeds the read limit."
-                )
-            payload = b""
-            while len(payload) <= MAX_FILE_BYTES:
-                chunk = os.read(file_fd, min(8192, MAX_FILE_BYTES + 1 - len(payload)))
-                if not chunk:
-                    break
-                payload += chunk
-            if len(payload) > MAX_FILE_BYTES:
-                raise RepositoryFileError(
-                    "file_too_large", "The requested file exceeds the read limit."
-                )
-            return payload
-        except RepositoryFileError:
-            raise
-        except FileNotFoundError as error:
-            raise RepositoryFileError(
-                "file_not_found", "The requested file was not found."
-            ) from error
+            with ExitStack() as descriptors:
+                directory = self._open_directory(relative.parts[:-1], descriptors)
+                file_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+                file_fd = os.open(relative.name, file_flags, dir_fd=directory)
+                descriptors.callback(os.close, file_fd)
+                opened = os.fstat(file_fd)
+                if not stat.S_ISREG(opened.st_mode):
+                    raise RepositoryFileError(
+                        "unsafe_path", "The requested path is not a regular file."
+                    )
+                if opened.st_size > MAX_FILE_BYTES:
+                    raise RepositoryFileError(
+                        "file_too_large", "The requested file exceeds the 64 KiB read limit."
+                    )
+                payload = bytearray()
+                while len(payload) <= MAX_FILE_BYTES:
+                    chunk = os.read(file_fd, min(8192, MAX_FILE_BYTES + 1 - len(payload)))
+                    if not chunk:
+                        break
+                    payload.extend(chunk)
+                if len(payload) > MAX_FILE_BYTES:
+                    raise RepositoryFileError(
+                        "file_too_large", "The requested file exceeds the 64 KiB read limit."
+                    )
+                return bytes(payload)
         except OSError as error:
-            raise RepositoryFileError(
-                "unsafe_path", "The requested path cannot be inspected safely."
-            ) from error
-        finally:
-            for descriptor in reversed(descriptors):
-                os.close(descriptor)
+            raise self._descriptor_error(error) from error
 
     def _resolve_directory(self, directory: str) -> tuple[Path, str]:
         candidate, relative = self._resolve_requested_path(directory)
@@ -352,7 +415,7 @@ class ConfinedRepositoryFiles:
         filename = parts[-1] if parts else ""
         if ".git" in parts:
             raise RepositoryFileError("unsafe_path", "The requested path is not available.")
-        if filename.startswith(".env") or filename in {
+        if any(part.startswith(".env") for part in parts) or filename in {
             "id_rsa",
             "id_dsa",
             "id_ecdsa",

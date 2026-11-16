@@ -25,3 +25,7 @@ Confinement is a deterministic application service shared by file, search, and G
 ## Review trigger
 
 Revisit before allowing private clones, repository refresh, multiple tenants, or a new filesystem operation that needs an exception to the safety policy.
+
+## Workspace source browser
+
+Owner-scoped, no-store endpoints expose a bounded immediate directory page or text preview. Directory listings use root-anchored descriptors and exclude symlinks and protected paths. The existing confined file reader enforces the registered root identity, path policy, text encoding and byte limits. The browser receives relative paths and bounded line ranges, and renders source as escaped text and syntax spans.
