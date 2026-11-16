@@ -3,7 +3,7 @@
 from datetime import UTC
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -103,6 +103,35 @@ class SqlAlchemyRepositoryStore:
             raise
         await self._session.refresh(record)
         return _to_domain(record)
+
+    async def recover_github_device(
+        self, repository: Repository, verified: ResolvedLocalRepositoryRoot
+    ) -> bool:
+        """Update only the device binding of the verified, still-current snapshot."""
+        if (
+            repository.source != RepositorySource.GITHUB
+            or repository.canonical_root != verified.canonical_root
+            or repository.root_inode != verified.root_inode
+        ):
+            return False
+        result = await self._session.execute(
+            update(RepositoryRecord)
+            .where(
+                RepositoryRecord.id == repository.id,
+                RepositoryRecord.owner_user_id == self._owner_user_id,
+                RepositoryRecord.source == RepositorySource.GITHUB.value,
+                RepositoryRecord.canonical_root == verified.canonical_root,
+                RepositoryRecord.root_inode == verified.root_inode,
+                RepositoryRecord.root_device == repository.root_device,
+                RepositoryRecord.github_full_name == repository.github_full_name,
+                RepositoryRecord.github_commit == repository.github_commit,
+            )
+            .values(root_device=verified.root_device)
+            .returning(RepositoryRecord.id)
+        )
+        updated = result.scalar_one_or_none() is not None
+        await self._session.commit()
+        return updated
 
     async def bind_legacy_identity(
         self, repository_id: UUID, root: ResolvedLocalRepositoryRoot

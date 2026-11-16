@@ -73,6 +73,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
       typeof body.detail === 'string' ? body.detail : undefined,
     );
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -158,6 +159,13 @@ export function importGitHubRepository(fullName: string, csrfToken: string) {
   return requestJson<OwnedRepository>(
     '/api/v1/repositories/github/import',
     mutationInit(csrfToken, { full_name: fullName }),
+  );
+}
+
+export async function recoverRepositorySnapshot(repositoryId: string, csrfToken: string) {
+  await requestJson<void>(
+    `/api/v1/repositories/${repositoryId}/recover`,
+    mutationInit(csrfToken, {}),
   );
 }
 

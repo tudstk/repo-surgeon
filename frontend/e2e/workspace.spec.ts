@@ -357,6 +357,29 @@ test('an unavailable repository still lets the user select another assigned repo
   ).toHaveCount(0);
 });
 
+test('a stale GitHub snapshot can be recovered and reopens its saved session', async ({ page }) => {
+  await fixture(page);
+  let recovered = false;
+  await page.route('**/api/v1/repositories', (route) =>
+    route.fulfill({ json: [{ ...repository, github_commit: 'a'.repeat(40) }] }),
+  );
+  await page.route('**/api/v1/repositories/repository-1/summary', (route) =>
+    recovered
+      ? route.fallback()
+      : route.fulfill({ status: 503, json: { code: 'repository_unavailable' } }),
+  );
+  await page.route('**/api/v1/repositories/repository-1/recover', (route) => {
+    expect(route.request().method()).toBe('POST');
+    expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
+    recovered = true;
+    return route.fulfill({ status: 204 });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Recover snapshot' }).click();
+  await expect(page.getByText(turn.answer)).toBeVisible();
+  await expect(page.getByRole('button', { name: session.title, exact: true })).toBeVisible();
+});
+
 test('repository authorization failures still clear all private workspace choices', async ({
   page,
 }) => {
