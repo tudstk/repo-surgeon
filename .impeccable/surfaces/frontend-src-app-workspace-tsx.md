@@ -20,7 +20,7 @@ OWN-WORLD: DeepSource-informed neutral charcoal, quiet rules, system sans, compa
 
 STORY: Identify an account, understand public-snapshot and demo-provider limits, choose a session, inspect its actual saved outcome.
 
-FIRST VIEWPORT: One repository toolbar anchors three aligned panes: 280px repositories and sessions (260px at 1280px), fluid conversation with a sticky composer, and a resizable Code and Activity pane. The compact brand link returns to /landing. The account avatar sits alongside the snapshot and Sync controls. At 1100px and below the conversation leads with two labelled drawer triggers. Teal selected rows connect context. The geometric texture is restricted to sign-in and the public landing hero.
+FIRST VIEWPORT: One repository toolbar anchors three aligned panes: 280px repositories and sessions (260px at 1280px), fluid conversation with a sticky composer, and a resizable Code and Activity pane. The compact brand link returns to /landing. The GitHub username sits beside the account avatar. Snapshot and Sync controls live in the Code tab header. At 1100px and below the conversation leads with two labelled drawer triggers. Teal selected rows connect context. The geometric texture is restricted to sign-in and the public landing hero.
 
 FORM: Pinned DeepSource Operate direction; no tournament or comp. seed: none (unavailable). System sans serves sustained desktop work under subdued room light; intentional light tokens follow OS preference.
 

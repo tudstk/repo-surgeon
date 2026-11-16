@@ -454,6 +454,7 @@ for (const colorScheme of ['dark', 'light'] as const) {
     await expect(page.locator('.repository-context').locator(trigger)).toBeVisible();
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
+      await expect(trigger.getByText('@ada', { exact: true })).toBeVisible();
       await trigger.hover();
       await expect(page.getByRole('tooltip')).toHaveText('@ada');
       await expect(page.getByRole('tooltip')).toBeVisible();
@@ -526,7 +527,7 @@ test('a broken GitHub picture falls back to an initial without losing account na
   );
   await page.goto('/');
   const trigger = page.getByRole('button', { name: 'Account menu for @ada' });
-  await expect(trigger).toHaveText('A');
+  await expect(trigger.locator('.account-avatar')).toHaveText('A');
   await expect(trigger.locator('img')).toHaveCount(0);
   await trigger.focus();
   await expect(page.getByRole('tooltip')).toBeVisible();
@@ -610,7 +611,9 @@ test('public import selects its snapshot, recovers after failure and survives re
   await expect(dialog).toHaveCount(0);
   const importedRow = page.getByRole('button', { name: imported.name, exact: true });
   await expect(importedRow).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.getByText('Snapshot aaaaaaa · Read-only')).toBeVisible();
+  await expect(
+    page.locator('.work-toolbar').getByText('Snapshot aaaaaaa · Read-only'),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start read-only session' })).toBeEnabled();
   await capture(page, testInfo, 'public-import-selected');
   await page.reload();
@@ -1095,6 +1098,9 @@ test('the work pane resizes with the pointer and keyboard within 20–50% of the
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await fixture(page);
+  await page.route('**/api/v1/repositories', (route) =>
+    route.fulfill({ json: [{ ...repository, github_commit: 'a'.repeat(40) }] }),
+  );
   await page.goto('/');
   const divider = page.getByRole('separator', { name: 'Resize Code and Activity' });
   const pane = page.getByRole('region', { name: 'Code and activity' });
@@ -1110,6 +1116,7 @@ test('the work pane resizes with the pointer and keyboard within 20–50% of the
   expect((await pane.boundingBox())?.width).toBe(288);
   await page.mouse.up();
   await expect(page.getByRole('navigation', { name: 'Repository files' })).toBeVisible();
+  await expect(pane.getByRole('button', { name: 'Check GitHub for updates' })).toBeInViewport();
   await divider.press('ArrowLeft');
   await expect(divider).toHaveAttribute('aria-valuenow', '22');
   await divider.press('End');
@@ -1128,11 +1135,15 @@ for (const width of [1440, 390]) {
     let upstream = oldSnapshot.github_commit;
     let owned = oldSnapshot;
     let failSync = true;
+    let finishSync!: () => void;
+    const syncResponse = new Promise<void>((resolve) => {
+      finishSync = resolve;
+    });
     await page.route('**/api/v1/repositories', (route) => route.fulfill({ json: [owned] }));
     await page.route('**/api/v1/repositories/*/sync-status', (route) =>
       route.fulfill({ json: { up_to_date: upstream === owned.github_commit } }),
     );
-    await page.route('**/api/v1/repositories/repository-1/sync', (route) => {
+    await page.route('**/api/v1/repositories/repository-1/sync', async (route) => {
       expect(route.request().method()).toBe('POST');
       expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
       if (failSync) {
@@ -1142,38 +1153,66 @@ for (const width of [1440, 390]) {
           json: { detail: 'The archive could not be downloaded.' },
         });
       }
+      await syncResponse;
       owned = newSnapshot;
       return route.fulfill({ json: newSnapshot });
     });
     await page.goto('/');
-    const sync = page.getByRole('button', { name: 'Sync', exact: true });
-    await expect(page.getByText('Up to date', { exact: true })).toBeVisible();
+    const avatar = page.getByRole('button', { name: 'Account menu for @ada' });
+    await expect(avatar.getByText('@ada', { exact: true })).toBeVisible();
+    await expect(page.locator('.repository-context')).not.toContainText('Snapshot');
+    const openCode = async () => {
+      if (width === 390)
+        await page.getByRole('button', { name: 'Code & activity', exact: true }).click();
+    };
+    const closeCode = async () => {
+      if (width === 390)
+        await page.getByRole('button', { name: 'Close Code and activity' }).click();
+    };
+    await openCode();
+    const toolbar = page.locator('.work-toolbar');
+    const sync = toolbar.getByRole('button', { name: 'Sync', exact: true });
+    const code = toolbar.getByRole('tab', { name: 'Code' });
+    const activity = toolbar.getByRole('tab', { name: 'Activity' });
+    await expect(toolbar.getByText('Up to date', { exact: true })).toBeVisible();
+    await activity.click();
+    await expect(toolbar.getByText('Up to date', { exact: true })).toBeHidden();
+    await code.click();
     await expect(sync).toHaveCount(0);
     upstream = newSnapshot.github_commit;
-    await page.getByRole('button', { name: 'Check GitHub for updates' }).click();
-    await expect(page.getByText('Behind GitHub', { exact: true })).toBeVisible();
+    await toolbar.getByRole('button', { name: 'Check GitHub for updates' }).click();
+    await expect(toolbar.getByText('Behind GitHub', { exact: true })).toBeVisible();
     await expect(sync).toBeVisible();
-    const actions = page.locator('.context-actions');
-    const avatar = actions.getByRole('button', { name: 'Account menu for @ada' });
-    await expect(actions.locator(sync)).toBeVisible();
-    await expect(avatar).toBeVisible();
-    await avatar.click();
-    await expect(page.getByRole('menuitem', { name: 'Profile' })).toBeInViewport();
-    await capture(page, testInfo, `workspace-toolbar-${width}`);
-    await page.keyboard.press('Escape');
     await capture(page, testInfo, `snapshot-behind-${width}`);
     await sync.click();
-    await expect(page.getByText('The archive could not be downloaded.')).toBeVisible();
-    await expect(page.getByText('Snapshot aaaaaaa · Read-only')).toBeVisible();
-    await expect(page.getByText(turn.answer)).toBeVisible();
+    await expect(toolbar.getByText('The archive could not be downloaded.')).toBeVisible();
+    await expect(toolbar.getByText('Snapshot aaaaaaa · Read-only')).toBeVisible();
     await sync.click();
-    await expect(page.getByText('Snapshot bbbbbbb · Read-only')).toBeVisible();
-    await expect(page.getByText('Up to date', { exact: true })).toBeVisible();
+    const syncing = toolbar.getByRole('button', { name: 'Syncing…', exact: true });
+    await expect(syncing).toBeDisabled();
+    if (width === 390) {
+      await closeCode();
+      await openCode();
+    } else {
+      await activity.click();
+      await code.click();
+    }
+    await expect(syncing).toBeDisabled();
+    finishSync();
+    await expect(toolbar.getByText('Snapshot bbbbbbb · Read-only')).toBeVisible();
+    await expect(toolbar.getByText('Up to date', { exact: true })).toBeVisible();
     await expect(sync).toHaveCount(0);
-    await expect(page.getByText(turn.answer)).toBeVisible();
     await capture(page, testInfo, `snapshot-up-to-date-${width}`);
+    await closeCode();
+    await expect(page.getByText(turn.answer)).toBeVisible();
+    if (width === 390) {
+      await page.mouse.move(0, 0);
+      await capture(page, testInfo, 'workspace-toolbar-390');
+    }
     await page.reload();
-    await expect(page.getByText('Snapshot bbbbbbb · Read-only')).toBeVisible();
+    await openCode();
+    await expect(toolbar.getByText('Snapshot bbbbbbb · Read-only')).toBeVisible();
+    await closeCode();
     if (width === 390)
       await page.getByRole('button', { name: 'Repositories', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Repositories 1' })).toBeVisible();

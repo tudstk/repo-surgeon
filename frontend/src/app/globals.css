@@ -262,9 +262,24 @@ code {
   background: var(--hover);
   border-color: var(--border);
 }
+.account-trigger-with-username {
+  width: auto;
+  max-width: 100%;
+  gap: 8px;
+  padding-inline-start: 8px;
+  border-radius: var(--radius);
+}
+.account-username {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .account-avatar {
   width: 32px;
   height: 32px;
+  flex-shrink: 0;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -372,21 +387,10 @@ code {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
-.context-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
+.repository-context .account-menu {
+  max-width: 40%;
 }
-.context-details {
-  display: flex;
-  align-items: center;
-  justify-content: end;
-  flex-wrap: wrap;
-  min-width: 0;
-  gap: 6px 14px;
-}
-.context-caption {
+.snapshot-caption {
   color: var(--muted);
   font-size: 12px;
 }
@@ -395,11 +399,16 @@ code {
   min-width: 0;
   gap: 4px;
 }
-.github-sync-controls {
+.github-sync-controls,
+.github-sync-actions {
   display: flex;
   align-items: center;
+  justify-content: end;
   flex-wrap: wrap;
   gap: 8px;
+}
+.github-sync-actions {
+  min-width: 0;
 }
 .github-sync-status {
   color: var(--muted);
@@ -412,15 +421,15 @@ code {
 .github-sync-status[data-check='behind'] {
   color: var(--warning);
 }
-.repository-context .github-sync-button,
-.repository-context .github-sync-check {
+.work-toolbar .github-sync-button,
+.work-toolbar .github-sync-check {
   min-height: 32px;
 }
-.repository-context .github-sync-check {
+.work-toolbar .github-sync-check {
   min-width: 32px;
   padding: 6px;
 }
-.github-sync-controls .icon {
+.github-sync-actions .icon {
   width: 14px;
   height: 14px;
   flex-basis: 14px;
@@ -1139,25 +1148,20 @@ code {
     gap: 16px;
   }
   .repository-context {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
     padding: 8px 16px;
   }
-  .context-actions {
-    grid-column: 1 / -1;
+  .repository-context .add-repository {
+    min-width: 44px;
+    padding-inline: 8px;
   }
-  .context-details {
-    flex: 1;
-    justify-content: start;
+  .repository-context .add-repository span {
+    display: none;
   }
-  .context-details .github-sync {
-    margin-inline-start: auto;
-  }
-  .repository-context .github-sync-button,
-  .repository-context .github-sync-check {
+  .work-toolbar .github-sync-button,
+  .work-toolbar .github-sync-check {
     min-height: 44px;
   }
-  .repository-context .github-sync-check {
+  .work-toolbar .github-sync-check {
     min-width: 44px;
   }
   .panel-heading {
@@ -1648,12 +1652,23 @@ code {
   font-size: 16px;
 }
 
+.work-toolbar {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  padding-inline: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.work-toolbar > .github-sync,
+.work-toolbar > .snapshot-caption {
+  margin-inline-start: auto;
+  padding-block: 4px;
+}
 .work-tabs {
   display: flex;
-  flex-shrink: 0;
-  gap: 20px;
-  padding-inline: 16px;
-  border-bottom: 1px solid var(--border);
+  gap: 14px;
 }
 .work-tabs button {
   display: flex;

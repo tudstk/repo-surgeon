@@ -10,7 +10,7 @@ import { SessionActionDialog } from '@/components/ui/session-action-dialog';
 import { RepositoryRemovalDialog } from '@/components/ui/repository-removal-dialog';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { RepositoryCode } from './repository-code';
-import { GitHubSync } from './github-sync';
+import { GitHubSync, useGitHubSync } from './github-sync';
 import { GitHubRepositoryPicker } from './github-repository-picker';
 
 import {
@@ -139,6 +139,30 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     () => repositories.find((repository) => repository.id === selectedRepositoryId) ?? null,
     [repositories, selectedRepositoryId],
   );
+  const githubSync = useGitHubSync(
+    selectedRepository?.github_commit ? selectedRepository.id : undefined,
+    csrfToken,
+    submitting || removingId !== null,
+    (snapshot) => {
+      if (
+        selectedRepositoryIdRef.current !== snapshot.id ||
+        selectedRepository?.github_commit === snapshot.github_commit
+      )
+        return;
+      workspaceRequestGeneration.current += 1;
+      sessionToRestoreAfterSync.current = session
+        ? { repositoryId: snapshot.id, sessionId: session.id }
+        : null;
+      setRepositories((current) =>
+        current.map((item) => (item.id === snapshot.id ? snapshot : item)),
+      );
+      setSummary(null);
+      setError(null);
+      setUnavailableRepositoryId(null);
+      setAttempt((value) => value + 1);
+    },
+  );
+
   function openSnapshot(repository: OwnedRepository) {
     workspaceRequestGeneration.current += 1;
     selectedRepositoryIdRef.current = repository.id;
@@ -761,41 +785,50 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
 
   const workPane = (
     <>
-      <div className="work-tabs" role="tablist" aria-label="Repository work panel">
-        {(['code', 'activity'] as const).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            role="tab"
-            id={`${workTabsId}-${tab}`}
-            aria-controls={`${workTabsId}-${tab}-panel`}
-            aria-selected={workTab === tab}
-            tabIndex={workTab === tab ? 0 : -1}
-            onClick={() => setWorkTab(tab)}
-            onKeyDown={(event) => {
-              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-              event.preventDefault();
-              const next =
-                event.key === 'Home'
-                  ? 'code'
-                  : event.key === 'End'
-                    ? 'activity'
-                    : tab === 'code'
+      <div className="work-toolbar">
+        <div className="work-tabs" role="tablist" aria-label="Repository work panel">
+          {(['code', 'activity'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              id={`${workTabsId}-${tab}`}
+              aria-controls={`${workTabsId}-${tab}-panel`}
+              aria-selected={workTab === tab}
+              tabIndex={workTab === tab ? 0 : -1}
+              onClick={() => setWorkTab(tab)}
+              onKeyDown={(event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const next =
+                  event.key === 'Home'
+                    ? 'code'
+                    : event.key === 'End'
                       ? 'activity'
-                      : 'code';
-              setWorkTab(next);
-              document.getElementById(`${workTabsId}-${next}`)?.focus();
-            }}
-          >
-            <Icon name={tab} />
-            {tab === 'code' ? 'Code' : 'Activity'}
-            {tab === 'activity' && events.length ? (
-              <span className="count" aria-hidden="true">
-                {events.length}
-              </span>
-            ) : null}
-          </button>
-        ))}
+                      : tab === 'code'
+                        ? 'activity'
+                        : 'code';
+                setWorkTab(next);
+                document.getElementById(`${workTabsId}-${next}`)?.focus();
+              }}
+            >
+              <Icon name={tab} />
+              {tab === 'code' ? 'Code' : 'Activity'}
+              {tab === 'activity' && events.length ? (
+                <span className="count" aria-hidden="true">
+                  {events.length}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+        {workTab === 'code' && selectedRepository ? (
+          selectedRepository.github_commit ? (
+            <GitHubSync commit={selectedRepository.github_commit} state={githubSync} />
+          ) : (
+            <span className="snapshot-caption">Repository files stay unchanged</span>
+          )
+        ) : null}
       </div>
       <div
         className="work-tab-panel"
@@ -829,6 +862,8 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         <button
           className="secondary-button add-repository"
           type="button"
+          aria-label="Add repository"
+          title="Add repository"
           aria-haspopup="dialog"
           onClick={(event) => {
             event.currentTarget.focus();
@@ -836,44 +871,9 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           }}
         >
           <Icon name="plus" />
-          Add repository
+          <span>Add repository</span>
         </button>
-        <div className="context-actions">
-          <div className="context-details">
-            <span className="context-caption">
-              {selectedRepository?.github_commit
-                ? `Snapshot ${selectedRepository.github_commit.slice(0, 7)} · Read-only`
-                : 'Repository files stay unchanged'}
-            </span>
-            {selectedRepository?.github_commit ? (
-              <GitHubSync
-                key={selectedRepository.id}
-                repositoryId={selectedRepository.id}
-                csrfToken={csrfToken}
-                disabled={submitting || removingId !== null}
-                onSynced={(snapshot) => {
-                  if (
-                    selectedRepositoryIdRef.current !== snapshot.id ||
-                    selectedRepository.github_commit === snapshot.github_commit
-                  )
-                    return;
-                  workspaceRequestGeneration.current += 1;
-                  sessionToRestoreAfterSync.current = session
-                    ? { repositoryId: snapshot.id, sessionId: session.id }
-                    : null;
-                  setRepositories((current) =>
-                    current.map((item) => (item.id === snapshot.id ? snapshot : item)),
-                  );
-                  setSummary(null);
-                  setError(null);
-                  setUnavailableRepositoryId(null);
-                  setAttempt((value) => value + 1);
-                }}
-              />
-            ) : null}
-          </div>
-          <AccountMenu user={user} />
-        </div>
+        <AccountMenu user={user} showUsername />
       </header>
       <div className="mobile-pane-controls">
         <button type="button" aria-haspopup="dialog" onClick={() => setDrawer('repositories')}>
