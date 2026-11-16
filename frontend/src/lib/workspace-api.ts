@@ -73,6 +73,7 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
       typeof body.detail === 'string' ? body.detail : undefined,
     );
   }
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 
@@ -118,10 +119,10 @@ export function getProductSession(sessionId: string, signal?: AbortSignal) {
   return requestJson<ProductSessionDetail>(`/api/v1/sessions/${sessionId}`, { signal });
 }
 
-export function createProductSession(repositoryId: string, title: string, csrfToken: string) {
+export function createProductSession(repositoryId: string, csrfToken: string) {
   return requestJson<ProductSession>(
     '/api/v1/sessions',
-    mutationInit(csrfToken, { repository_id: repositoryId, title }),
+    mutationInit(csrfToken, { repository_id: repositoryId }),
   );
 }
 
@@ -161,6 +162,13 @@ export function importGitHubRepository(fullName: string, csrfToken: string) {
   );
 }
 
+export async function recoverRepositorySnapshot(repositoryId: string, csrfToken: string) {
+  await requestJson<void>(
+    `/api/v1/repositories/${repositoryId}/recover`,
+    mutationInit(csrfToken, {}),
+  );
+}
+
 export async function setRepositoryHidden(
   repositoryId: string,
   hidden: boolean,
@@ -173,6 +181,29 @@ export async function setRepositoryHidden(
   });
   if (!response.ok)
     throw new WorkspaceRequestError(response.status, 'repository_visibility_failed');
+}
+
+export function renameProductSession(sessionId: string, title: string, csrfToken: string) {
+  return requestJson<ProductSession>(`/api/v1/sessions/${sessionId}`, {
+    ...mutationInit(csrfToken, { title }),
+    method: 'PATCH',
+  });
+}
+
+export async function removeProductSession(sessionId: string, csrfToken: string) {
+  const response = await fetch(`/api/v1/sessions/${sessionId}/archive`, {
+    credentials: 'include',
+    cache: 'no-store',
+    ...mutationInit(csrfToken, {}),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new WorkspaceRequestError(
+      response.status,
+      'session_removal_failed',
+      typeof body.detail === 'string' ? body.detail : undefined,
+    );
+  }
 }
 
 export type RepositoryTreeEntry = {

@@ -27,3 +27,7 @@ This initial importer rejects symlink-containing repositories. Submodule sources
 ## Workspace visibility
 
 An owner-scoped, CSRF-protected visibility mutation hides a registration from the workspace list without deleting its snapshot or session history. The database visibility flag defaults to visible for existing registrations. Undo restores visibility; reimporting the identical public commit restores the existing registration after its filesystem identity is verified. This is list management, not disk reclamation or GitHub deletion.
+
+## Recover a stale device binding
+
+A filesystem remount can change the device number of an existing snapshot directory. The owner can request recovery through a CSRF-protected mutation. The importer fetches the pinned public commit within the existing limits and compares the managed snapshot tree with the fresh archive without following links. Recovery requires the original canonical path, root inode and matching file contents. A conditional update changes only the saved device number, preserving sessions and the full device/inode check for later reads.
