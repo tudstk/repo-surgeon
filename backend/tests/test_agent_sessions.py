@@ -8,7 +8,7 @@ from repo_surgeon.agent.loop import AgentTurn
 from repo_surgeon.agent.provider import ModelProvider
 from repo_surgeon.application import agent_sessions
 from repo_surgeon.application.agent_sessions import RunPersistedReadOnlyTurn, TurnExecutionError
-from repo_surgeon.application.repositories import RepositoryLookup
+from repo_surgeon.domain.repositories import Repository
 from repo_surgeon.domain.sessions import (
     AgentRun,
     AgentRunStatus,
@@ -63,24 +63,34 @@ class FailingStore:
         self.failure_recorded = self.rollback_called
 
 
+class MissingRepository:
+    async def get(self, repository_id: Any) -> Repository | None:
+        return None
+
+
 @pytest.mark.anyio
 async def test_completion_failure_rolls_back_before_recording_run_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = FailingStore()
 
+    completed = False
+
     async def completed_turn(*args: Any, **kwargs: Any) -> AgentTurn:
+        nonlocal completed
+        completed = True
         return AgentTurn("complete", "Done", None, 1, 0, 0, ())
 
     monkeypatch.setattr(agent_sessions, "run_turn", completed_turn)
     service = RunPersistedReadOnlyTurn(
         cast(agent_sessions.AgentSessionStore, store),
-        cast(RepositoryLookup, object()),
+        MissingRepository(),
         lambda: cast(ModelProvider, object()),
     )
 
     with pytest.raises(TurnExecutionError):
         await service.execute(store.session_id, "Summarize", datetime.now(UTC))
 
+    assert completed
     assert store.rollback_called
     assert store.failure_recorded

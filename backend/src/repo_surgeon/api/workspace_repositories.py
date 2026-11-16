@@ -210,7 +210,7 @@ async def sync_owned_snapshot(
     principal: MutationPrincipal,
     database: DatabaseSession,
 ) -> WorkspaceRepositoryResponse:
-    """Register a new pinned revision while retaining existing session references."""
+    """Switch the existing repository to the latest pinned revision."""
     response.headers["Cache-Control"] = "no-store"
     store = SqlAlchemyRepositoryStore(database, principal.user_id)
     repository = await _owned_github_snapshot(store, repository_id)
@@ -218,7 +218,17 @@ async def sync_owned_snapshot(
     try:
         snapshot = await importer.sync_public(repository)
         if snapshot is not None:
-            repository = await store.add_github(snapshot.root, snapshot.full_name, snapshot.commit)
+            advanced = await store.advance_github_snapshot(
+                repository, snapshot.root, snapshot.commit
+            )
+            if advanced is None:
+                raise problem(
+                    code="repository_sync_conflict",
+                    title="Snapshot registration changed",
+                    status=409,
+                    detail="Reload the workspace and check for updates again.",
+                )
+            repository = advanced
     except GitHubImportError as error:
         raise problem(
             code="repository_sync_failed",

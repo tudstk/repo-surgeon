@@ -1122,22 +1122,13 @@ for (const width of [1440, 390]) {
     await page.emulateMedia({ colorScheme: 'dark' });
     await fixture(page);
     const oldSnapshot = { ...repository, github_commit: 'a'.repeat(40) };
-    const newSnapshot = { ...repository, id: 'repository-2', github_commit: 'b'.repeat(40) };
+    const newSnapshot = { ...oldSnapshot, github_commit: 'b'.repeat(40) };
     let upstream = oldSnapshot.github_commit;
-    let owned = [oldSnapshot];
+    let owned = oldSnapshot;
     let failSync = true;
-    await page.route('**/api/v1/repositories', (route) => route.fulfill({ json: owned }));
+    await page.route('**/api/v1/repositories', (route) => route.fulfill({ json: [owned] }));
     await page.route('**/api/v1/repositories/*/sync-status', (route) =>
-      route.fulfill({
-        json: {
-          up_to_date: route.request().url().includes(newSnapshot.id)
-            ? upstream === newSnapshot.github_commit
-            : upstream === oldSnapshot.github_commit,
-        },
-      }),
-    );
-    await page.route('**/api/v1/sessions?*', (route) =>
-      route.fulfill({ json: route.request().url().includes(newSnapshot.id) ? [] : [session] }),
+      route.fulfill({ json: { up_to_date: upstream === owned.github_commit } }),
     );
     await page.route('**/api/v1/repositories/repository-1/sync', (route) => {
       expect(route.request().method()).toBe('POST');
@@ -1149,7 +1140,7 @@ for (const width of [1440, 390]) {
           json: { detail: 'The archive could not be downloaded.' },
         });
       }
-      owned = [oldSnapshot, newSnapshot];
+      owned = newSnapshot;
       return route.fulfill({ json: newSnapshot });
     });
     await page.goto('/');
@@ -1169,14 +1160,21 @@ for (const width of [1440, 390]) {
     await expect(page.getByText('Snapshot bbbbbbb · Read-only')).toBeVisible();
     await expect(page.getByText('Up to date', { exact: true })).toBeVisible();
     await expect(sync).toHaveCount(0);
-    await expect(page.getByText(turn.answer)).toHaveCount(0);
+    await expect(page.getByText(turn.answer)).toBeVisible();
     await capture(page, testInfo, `snapshot-up-to-date-${width}`);
     await page.reload();
     await expect(page.getByText('Snapshot bbbbbbb · Read-only')).toBeVisible();
     if (width === 390)
       await page.getByRole('button', { name: 'Repositories', exact: true }).click();
-    await page.getByRole('button', { name: /Snapshot aaaaaaa/ }).click();
-    if (width === 390) await page.keyboard.press('Escape');
-    await expect(page.getByText(turn.answer)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Repositories 1' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Snapshot bbbbbbb/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.getByRole('button', { name: /Snapshot aaaaaaa/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: session.title, exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 }

@@ -58,12 +58,9 @@ export function GitHubSync({
     try {
       const snapshot = await syncRepositorySnapshot(repositoryId, csrfToken);
       if (!mounted.current) return;
-      if (snapshot.id === repositoryId) {
-        statusText.current?.focus({ preventScroll: true });
-        setCheck('up-to-date');
-      } else {
-        onSynced(snapshot);
-      }
+      statusText.current?.focus({ preventScroll: true });
+      setCheck('up-to-date');
+      onSynced(snapshot);
     } catch (cause) {
       if (mounted.current) {
         setError(

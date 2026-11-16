@@ -137,7 +137,7 @@ class GitHubImporter:
             if latest == repository.github_commit:
                 return None
             return await self._download_snapshot(
-                repository.owner_user_id, repository_id, name, latest
+                repository.owner_user_id, repository_id, name, latest, verify_existing=True
             )
 
     async def verify_saved(self, repository: Repository) -> ResolvedLocalRepositoryRoot:
@@ -213,6 +213,7 @@ class GitHubImporter:
         commit: str,
         *,
         verify: Repository | None = None,
+        verify_existing: bool = False,
     ) -> ImportedSnapshot:
         payload = bytearray()
         async with self.client.stream(
@@ -236,7 +237,14 @@ class GitHubImporter:
         # The deterministic destination makes retries and concurrent imports converge.
         publication = asyncio.create_task(
             asyncio.to_thread(
-                self._publish, bytes(payload), user_id, repository_id, name, commit, verify
+                self._publish,
+                bytes(payload),
+                user_id,
+                repository_id,
+                name,
+                commit,
+                verify,
+                verify_existing,
             )
         )
         try:
@@ -289,6 +297,7 @@ class GitHubImporter:
         name: str,
         commit: str,
         verify: Repository | None = None,
+        verify_existing: bool = False,
     ) -> ImportedSnapshot:
         parent = self.storage / str(user_id) / str(repository_id)
         if verify is None:
@@ -302,7 +311,11 @@ class GitHubImporter:
             with (parent / ".publish.lock").open("a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 if verify is not None:
-                    identity = _verify_saved_tree(destination, staging, verify)
+                    if str(destination) != verify.canonical_root:
+                        raise _snapshot_changed()
+                    identity = _verify_snapshot_tree(destination, staging, verify.root_inode)
+                elif verify_existing and destination.exists():
+                    identity = _verify_snapshot_tree(destination, staging)
                 else:
                     if not destination.exists():
                         staging.rename(destination)
@@ -325,14 +338,14 @@ def _snapshot_changed() -> GitHubImportError:
     )
 
 
-def _verify_saved_tree(destination: Path, expected: Path, repository: Repository) -> os.stat_result:
-    if str(destination) != repository.canonical_root:
-        raise _snapshot_changed()
+def _verify_snapshot_tree(
+    destination: Path, expected: Path, expected_inode: int | None = None
+) -> os.stat_result:
     flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
     descriptor = os.open(destination, flags)
     try:
         identity = os.fstat(descriptor)
-        if identity.st_ino != repository.root_inode:
+        if expected_inode is not None and identity.st_ino != expected_inode:
             raise _snapshot_changed()
         _compare_directory(descriptor, expected, identity.st_dev)
         current = destination.lstat()

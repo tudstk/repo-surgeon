@@ -243,17 +243,40 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
             synced = await client.post(sync_url)
             assert synced.status_code == 200, synced.text
             snapshot = synced.json()
-            assert snapshot["id"] != repository["id"]
+            assert snapshot["id"] == repository["id"]
             assert snapshot["github_commit"] == latest
             assert (await client.post(sync_url)).json() == snapshot
-            assert (await client.get("/api/v1/repositories")).json() == [repository, snapshot]
+            assert (await client.get("/api/v1/repositories")).json() == [snapshot]
             refreshed = f"/api/v1/repositories/{snapshot['id']}"
             assert (await client.get(refreshed + "/sync-status")).json() == {"up_to_date": True}
             fresh = await client.get(refreshed + "/file", params={"path": "src/main.py"})
             assert fresh.json()["lines"] == ["print('new')"]
-            preserved = await client.get(repository_url + "/file", params={"path": "src/main.py"})
-            assert preserved.json()["lines"] == ["print('hello')"]
+            assert (root / "src/main.py").read_text() == "print('hello')"
             assert (await client.get(f"/api/v1/sessions/{session_id}")).json() == restored.json()
+            latest = "c" * 40
+            legacy = await client.post(
+                "/api/v1/repositories/github/import", json={"full_name": "owner/project"}
+            )
+            assert legacy.status_code == 200
+            duplicate = legacy.json()
+            duplicated_session = await client.post(
+                "/api/v1/sessions",
+                json={"repository_id": duplicate["id"], "title": "Previously synced"},
+            )
+            assert duplicated_session.status_code == 201
+            assert len((await client.get("/api/v1/repositories")).json()) == 2
+            consolidated = await client.post(sync_url)
+            assert consolidated.status_code == 200, consolidated.text
+            assert consolidated.json() == {**repository, "github_commit": latest}
+            assert (await client.get("/api/v1/repositories")).json() == [consolidated.json()]
+            session_list = await client.get(
+                "/api/v1/sessions", params={"repository_id": repository["id"]}
+            )
+            assert {item["id"] for item in session_list.json()} == {
+                session_id,
+                duplicated_session.json()["id"],
+            }
+            assert (root.parent / ("b" * 40) / "src/main.py").is_file()
     assert not list(settings.repository_storage.rglob(".import-*"))
 
 

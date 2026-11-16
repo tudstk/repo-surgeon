@@ -119,7 +119,9 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   const [attempt, setAttempt] = useState(0);
   const workspaceRequestGeneration = useRef(0);
   const selectedRepositoryIdRef = useRef<string | null>(null);
-  const repositoryName = useRef<HTMLSpanElement>(null);
+  const sessionToRestoreAfterSync = useRef<{ repositoryId: string; sessionId: string } | null>(
+    null,
+  );
 
   const clearPrivateWorkspace = useCallback(() => {
     workspaceRequestGeneration.current += 1;
@@ -181,16 +183,10 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       .then((owned) => {
         if (controller.signal.aborted) return;
         const currentSelection = selectedRepositoryIdRef.current;
-        const first = owned[0];
-        const defaultSnapshot = first?.github_commit
-          ? owned
-              .filter((repository) => repository.github_commit && repository.name === first.name)
-              .at(-1)
-          : first;
         const nextSelection =
           currentSelection && owned.some((repository) => repository.id === currentSelection)
             ? currentSelection
-            : (defaultSnapshot?.id ?? null);
+            : (owned[0]?.id ?? null);
         if (nextSelection !== currentSelection) {
           workspaceRequestGeneration.current += 1;
           setSummary(null);
@@ -228,8 +224,15 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         setUnavailableRepositoryId(null);
         setSummary(repositorySummary);
         setSessions(availableSessions);
-        if (availableSessions[0]) {
-          await restoreSession(availableSessions[0].id, controller.signal, generation);
+        const savedSelection = sessionToRestoreAfterSync.current;
+        sessionToRestoreAfterSync.current = null;
+        const preferred =
+          savedSelection?.repositoryId === selectedRepositoryId
+            ? availableSessions.find((item) => item.id === savedSelection.sessionId)
+            : undefined;
+        const sessionToRestore = preferred ?? availableSessions[0];
+        if (sessionToRestore) {
+          await restoreSession(sessionToRestore.id, controller.signal, generation);
         } else if (
           !controller.signal.aborted &&
           generation === workspaceRequestGeneration.current
@@ -829,9 +832,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       <AppHeader active="workspace" user={user} />
       <div className="repository-context">
         <Icon name="repo" />
-        <span ref={repositoryName} tabIndex={-1} title={selectedRepository?.name}>
-          {selectedRepository?.name ?? 'Your workspace'}
-        </span>
+        <span title={selectedRepository?.name}>{selectedRepository?.name ?? 'Your workspace'}</span>
         <div className="context-details">
           <span className="context-caption">
             {selectedRepository?.github_commit
@@ -845,8 +846,22 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
               csrfToken={csrfToken}
               disabled={submitting || removingId !== null}
               onSynced={(snapshot) => {
-                if (selectedRepositoryIdRef.current === selectedRepository.id)
-                  openSnapshot(snapshot);
+                if (
+                  selectedRepositoryIdRef.current !== snapshot.id ||
+                  selectedRepository.github_commit === snapshot.github_commit
+                )
+                  return;
+                workspaceRequestGeneration.current += 1;
+                sessionToRestoreAfterSync.current = session
+                  ? { repositoryId: snapshot.id, sessionId: session.id }
+                  : null;
+                setRepositories((current) =>
+                  current.map((item) => (item.id === snapshot.id ? snapshot : item)),
+                );
+                setSummary(null);
+                setError(null);
+                setUnavailableRepositoryId(null);
+                setAttempt((value) => value + 1);
               }}
             />
           ) : null}
