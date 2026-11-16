@@ -1095,7 +1095,7 @@ for (const width of [1440, 390]) {
 
 test('the work pane resizes with the pointer and keyboard within 20–50% of the viewport', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await fixture(page);
   await page.route('**/api/v1/repositories', (route) =>
@@ -1104,6 +1104,21 @@ test('the work pane resizes with the pointer and keyboard within 20–50% of the
   await page.goto('/');
   const divider = page.getByRole('separator', { name: 'Resize Code and Activity' });
   const pane = page.getByRole('region', { name: 'Code and activity' });
+  const paneHeaders = page.locator(
+    '.repo-panel > .panel-heading, .conversation > .panel-heading, .work-panel > .work-toolbar',
+  );
+  await expect(paneHeaders).toHaveCount(3);
+  const expectAlignedHeaders = async () => {
+    await expect
+      .poll(() =>
+        paneHeaders.evaluateAll(
+          (headers) => new Set(headers.map((header) => header.getBoundingClientRect().bottom)).size,
+        ),
+      )
+      .toBe(1);
+  };
+  await expect(pane.getByText('Up to date', { exact: true })).toBeVisible();
+  await expectAlignedHeaders();
   const bounds = await divider.boundingBox();
   if (!bounds) throw new Error('Resize handle is not visible');
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
@@ -1117,6 +1132,10 @@ test('the work pane resizes with the pointer and keyboard within 20–50% of the
   await page.mouse.up();
   await expect(page.getByRole('navigation', { name: 'Repository files' })).toBeVisible();
   await expect(pane.getByRole('button', { name: 'Check GitHub for updates' })).toBeInViewport();
+  await expectAlignedHeaders();
+  await capture(page, testInfo, 'aligned-headers-narrow-work-pane');
+  await pane.getByRole('tab', { name: 'Activity' }).click();
+  await expectAlignedHeaders();
   await divider.press('ArrowLeft');
   await expect(divider).toHaveAttribute('aria-valuenow', '22');
   await divider.press('End');

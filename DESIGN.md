@@ -113,7 +113,7 @@ Code uses the code role. Conversation copy is constrained to 70ch and explanator
 
 ## Layout
 
-The workspace opens with a single repository toolbar. The compact brand link and active repository name lead, with the GitHub username and avatar at the right. The Code tab pairs its snapshot revision, read-only status and Sync controls in the upper-right corner. The controls wrap beneath the tabs as the pane narrows. Desktop uses a 280px repositories and sessions pane, a fluid center, and a resizable Code and Activity pane. From 1101px through 1280px the left pane is 260px.
+The workspace opens with a single repository toolbar. The compact brand link and active repository name lead, with the GitHub username and avatar at the right. The Code tab pairs its snapshot revision, read-only status and Sync controls in the upper-right corner. The controls wrap beneath the tabs as the pane narrows. Desktop uses a 280px repositories and sessions pane, a fluid center, and a resizable Code and Activity pane. From 1101px through 1280px the left pane is 260px. The three pane headers share one row so their dividers stay aligned when the Code toolbar wraps.
 At 1100px and below only the conversation is shown in the main grid; labelled buttons open repository/session and event drawers. At 600px and below, spacing tightens, context wraps, and primary controls have a 44px minimum height. The shell uses dynamic viewport height. Conversation and event content scroll within their own areas; the composer stays in view.
 Spacing mostly follows 8/12/16/20/24/32px steps. Login content is capped at 440px; account content at 720px. Keep all grid/flex children shrinkable and wrap long user data.
 

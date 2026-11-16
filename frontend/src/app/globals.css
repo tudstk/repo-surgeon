@@ -464,11 +464,9 @@ code {
 }
 .repo-panel {
   border-right: 1px solid var(--border);
-  overflow: auto;
 }
 .work-panel {
   position: relative;
-  container: work-pane / inline-size;
   border-left: 1px solid var(--border);
 }
 .work-resize {
@@ -497,6 +495,29 @@ code {
 .workspace-grid[data-resizing-work='true'] {
   cursor: col-resize;
   user-select: none;
+}
+@media (min-width: 1101px) {
+  .workspace-grid {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  .workspace-grid > :is(.repo-panel, .conversation, .work-panel) {
+    display: grid;
+    grid-row: 1 / -1;
+    grid-template-rows: subgrid;
+  }
+  .repo-panel > .panel-heading {
+    padding-block: 8px;
+  }
+  .repo-panel-body,
+  .work-panel > .work-tab-panel {
+    grid-row: 2 / -1;
+  }
+  .repo-panel-body {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    overflow: auto;
+  }
 }
 .panel-heading {
   min-height: 56px;
@@ -1668,6 +1689,7 @@ code {
 }
 .work-tabs {
   display: flex;
+  align-self: stretch;
   gap: 14px;
 }
 .work-tabs button {
@@ -1693,6 +1715,9 @@ code {
   flex-direction: column;
   min-height: 0;
   min-width: 0;
+}
+.work-panel > .work-tab-panel {
+  container: work-pane / inline-size;
 }
 .work-tab-panel[hidden] {
   display: none;
