@@ -31,13 +31,6 @@ import {
   WorkspaceRequestError,
 } from '@/lib/workspace-api';
 
-const minWorkWidth = 20;
-const maxWorkWidth = 50;
-
-function clampWorkWidth(width: number) {
-  return Math.min(maxWorkWidth, Math.max(minWorkWidth, width));
-}
-
 const unavailableRepositoryMessage =
   'This repository is unavailable. Choose another repository or retry later.';
 
@@ -75,6 +68,13 @@ function eventMessage(event: RunEvent) {
   if (event.type === 'run.completed') return 'Run completed';
   if (event.type === 'run.failed') return 'Run failed';
   return 'Saved run activity';
+}
+
+const minWorkWidth = 20;
+const maxWorkWidth = 50;
+
+function clampWorkWidth(width: number) {
+  return Math.min(maxWorkWidth, Math.max(minWorkWidth, width));
 }
 
 export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrfToken: string }) {

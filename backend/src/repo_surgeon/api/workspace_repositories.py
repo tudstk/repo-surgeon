@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, Response, status
@@ -28,7 +28,7 @@ from repo_surgeon.application.repository_files import (
     RepositoryFileError,
 )
 from repo_surgeon.application.repository_intelligence import detect_repository_summary
-from repo_surgeon.domain.repositories import Repository, RepositorySource
+from repo_surgeon.domain.repositories import RepositorySource
 from repo_surgeon.infrastructure.github_import import (
     FULL_NAME_PATTERN,
     GitHubImporter,
@@ -41,6 +41,9 @@ from repo_surgeon.infrastructure.github_repository_search import (
     PublicGitHubRepository,
 )
 from repo_surgeon.infrastructure.repository_store import SqlAlchemyRepositoryStore
+
+if TYPE_CHECKING:
+    from repo_surgeon.domain.repositories import Repository
 
 router = APIRouter(prefix="/api/v1/repositories", tags=["workspace repositories"])
 

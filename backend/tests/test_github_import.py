@@ -137,6 +137,18 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
             assert recovered.status_code == 204, recovered.text
             assert (await client.get(repository_url + "/summary")).status_code == 200
             assert (await client.get(f"/api/v1/sessions/{session_id}")).json() == restored.json()
+            visibility = f"/api/v1/repositories/{repository['id']}/visibility"
+            assert (await client.post(visibility, json={"hidden": True})).status_code == 204
+            assert (await client.get("/api/v1/repositories")).json() == []
+            assert (await client.get(f"/api/v1/sessions/{session_id}")).status_code == 200
+            reimported = await client.post(
+                "/api/v1/repositories/github/import", json={"full_name": "owner/project"}
+            )
+            assert reimported.json() == repository
+            assert (await client.get("/api/v1/repositories")).json() == [repository]
+            assert (await client.post(visibility, json={"hidden": True})).status_code == 204
+            assert (await client.post(visibility, json={"hidden": False})).status_code == 204
+            assert (await client.get("/api/v1/repositories")).json() == [repository]
             (root / ".env").write_text("private-value")
             (root / "secret-folder").mkdir()
             (root / "secret-folder" / "inside.py").write_text("private-value")
@@ -193,18 +205,6 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
                 assert "private-value" not in refused.text
             refused = await client.get(repository_url + "/tree", params={"directory": "linked"})
             assert refused.status_code == 404
-            visibility = f"/api/v1/repositories/{repository['id']}/visibility"
-            assert (await client.post(visibility, json={"hidden": True})).status_code == 204
-            assert (await client.get("/api/v1/repositories")).json() == []
-            assert (await client.get(f"/api/v1/sessions/{session_id}")).status_code == 200
-            reimported = await client.post(
-                "/api/v1/repositories/github/import", json={"full_name": "owner/project"}
-            )
-            assert reimported.json() == repository
-            assert (await client.get("/api/v1/repositories")).json() == [repository]
-            assert (await client.post(visibility, json={"hidden": True})).status_code == 204
-            assert (await client.post(visibility, json={"hidden": False})).status_code == 204
-            assert (await client.get("/api/v1/repositories")).json() == [repository]
     assert len(requests) == 15
     assert not list(settings.repository_storage.rglob(".import-*"))
 
