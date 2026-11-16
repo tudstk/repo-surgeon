@@ -37,7 +37,7 @@ export function Drawer({
         if (event.key !== 'Tab') return;
         const controls = Array.from(
           event.currentTarget.querySelectorAll<HTMLElement>(
-            'button:not(:disabled), a[href], textarea:not(:disabled), [tabindex="0"]',
+            'button:not(:disabled), a[href], textarea:not(:disabled), summary, [tabindex="0"]',
           ),
         );
         const visible = controls.filter(

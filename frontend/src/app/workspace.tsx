@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import { Brand, Icon } from '@/components/ui/shell';
 import { AccountMenu } from '@/components/ui/account-menu';
 import type { SafeProfile } from '@/lib/auth-api';
@@ -10,6 +9,7 @@ import { SessionActionDialog } from '@/components/ui/session-action-dialog';
 import { RepositoryRemovalDialog } from '@/components/ui/repository-removal-dialog';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { RepositoryCode } from './repository-code';
+import { RepositorySummaryPanel } from './repository-summary-panel';
 import { GitHubSync, useGitHubSync } from './github-sync';
 import { GitHubRepositoryPicker } from './github-repository-picker';
 
@@ -35,29 +35,6 @@ import {
 
 const unavailableRepositoryMessage =
   'This repository is unavailable. Choose another repository or retry later.';
-
-const languageIcons: Record<string, string> = {
-  Python: 'python',
-  TypeScript: 'typescript',
-  JavaScript: 'javascript',
-  Go: 'go',
-  Rust: 'rust',
-  Java: 'java',
-  CSS: 'css3',
-  HTML: 'html5',
-  Shell: 'bash',
-  Ruby: 'ruby',
-  PHP: 'php',
-  C: 'c',
-  'C++': 'cplusplus',
-  'C#': 'csharp',
-};
-
-function formatLines(lines: number | null) {
-  return lines === null
-    ? 'LOC unavailable'
-    : `${new Intl.NumberFormat('en', { notation: 'compact' }).format(lines)} LOC`;
-}
 
 function eventMessage(event: RunEvent) {
   if (event.type === 'progress.updated' && typeof event.data.message === 'string') {
@@ -651,76 +628,16 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             ) : null}
           </div>
         </div>
-        <section className="repo-summary" aria-labelledby="repo-summary-title">
-          <div className="section-heading">
-            <h2 id="repo-summary-title">Repository summary</h2>
-          </div>
-          {summary ? (
-            <>
-              <dl>
-                <div>
-                  <dt>Confidence</dt>
-                  <dd>{summary.language_confidence ?? 'Unknown'}</dd>
-                </div>
-                <div>
-                  <dt>Files</dt>
-                  <dd>{summary.file_count}</dd>
-                </div>
-                <div>
-                  <dt>Size</dt>
-                  <dd>{formatLines(summary.approximate_lines)}</dd>
-                </div>
-                <div>
-                  <dt>Tests detected</dt>
-                  <dd>{summary.test_framework ?? 'Not detected'}</dd>
-                </div>
-                <div>
-                  <dt>Languages</dt>
-                  <dd className="language-list">
-                    {Object.entries(summary.languages ?? {}).length
-                      ? Object.entries(summary.languages ?? {}).map(([name, percent]) => (
-                          <span className="language-share" key={name}>
-                            {languageIcons[name] ? (
-                              <Image
-                                className="language-icon"
-                                src={`/languages/${languageIcons[name]}.svg`}
-                                alt=""
-                                width={22}
-                                height={22}
-                                unoptimized
-                              />
-                            ) : (
-                              <Icon name="repo" />
-                            )}
-                            <span>{name}</span>
-                            <span>{percent.toFixed(1)}%</span>
-                          </span>
-                        ))
-                      : (summary.language ?? 'Not detected')}
-                  </dd>
-                </div>
-              </dl>
-              {summary.test_command ? (
-                <code className="test-command">{summary.test_command}</code>
-              ) : null}
-              <p className="summary-note">
-                Test detection is not a test result.
-                {' Language shares use detected source-file bytes.'}
-                {summary.truncated ? ' Some files or lines may be omitted by scan limits.' : ''}
-              </p>
-              {summary.detected_at ? (
-                <p className="summary-note">
-                  Scanned{' '}
-                  <time dateTime={summary.detected_at}>
-                    {new Date(summary.detected_at).toISOString().slice(0, 10)}
-                  </time>
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="empty-state">Select a repository.</p>
-          )}
-        </section>
+        <RepositorySummaryPanel
+          summary={summary}
+          placeholder={
+            loading || (selectedRepository && !error)
+              ? 'Loading repository summary…'
+              : selectedRepository
+                ? 'Repository summary unavailable.'
+                : 'Select a repository.'
+          }
+        />
       </div>
     </>
   );

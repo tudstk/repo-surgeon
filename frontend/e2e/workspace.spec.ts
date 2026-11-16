@@ -1,8 +1,8 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 
-async function capture(page: Page, testInfo: TestInfo, name: string) {
+async function capture(target: Page | Locator, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(`${name}.png`);
-  await page.screenshot({ path });
+  await target.screenshot({ path, style: 'nextjs-portal { visibility: hidden; }' });
   await testInfo.attach(name, { path, contentType: 'image/png' });
 }
 
@@ -32,6 +32,18 @@ const turn = {
   started_at: session.created_at,
   completed_at: session.updated_at,
 };
+const repositorySummary = {
+  language: 'Python',
+  languages: { Python: 75, TypeScript: 25 },
+  language_confidence: 'high',
+  file_count: 12,
+  approximate_lines: 420,
+  test_framework: 'pytest',
+  test_command: 'uv run pytest',
+  test_detection: 'detected',
+  detected_at: session.created_at,
+  truncated: true,
+};
 
 async function fixture(page: Page, state: 'saved' | 'empty' | 'failed' | 'ready' = 'saved') {
   await page.route('**/api/v1/auth/session', (route) => route.fulfill({ json: account }));
@@ -39,20 +51,7 @@ async function fixture(page: Page, state: 'saved' | 'empty' | 'failed' | 'ready'
     route.fulfill({ json: state === 'empty' ? [] : [repository] }),
   );
   await page.route('**/api/v1/repositories/*/summary', (route) =>
-    route.fulfill({
-      json: {
-        language: 'Python',
-        languages: { Python: 75, TypeScript: 25 },
-        language_confidence: 'high',
-        file_count: 12,
-        approximate_lines: 420,
-        test_framework: 'pytest',
-        test_command: 'uv run pytest',
-        test_detection: 'detected',
-        detected_at: session.created_at,
-        truncated: true,
-      },
-    }),
+    route.fulfill({ json: repositorySummary }),
   );
   await page.route('**/api/v1/repositories/*/tree?*', (route) =>
     route.fulfill({ json: { entries: [], next_offset: null, scan_limit_reached: false } }),
@@ -148,6 +147,8 @@ for (const viewport of [
       await expect(
         page.getByRole('button', { name: 'Close Repositories and sessions' }),
       ).toBeFocused();
+      await page.keyboard.press('Shift+Tab');
+      await expect(dialog.locator('summary')).toBeFocused();
       await page.keyboard.press('Shift+Tab');
       await expect(
         page.getByRole('button', { name: 'Actions for session Read-only review' }),
@@ -643,31 +644,54 @@ for (const width of [1440, 390]) {
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: width === 390 ? 'light' : 'dark' });
     await fixture(page);
+    await page.route('**/api/v1/repositories/*/summary', (route) =>
+      route.fulfill({
+        json: {
+          ...repositorySummary,
+          language: 'TypeScript / JavaScript',
+          languages: { JavaScript: 74.2, CSS: 24.6, HTML: 1.2 },
+          file_count: 32,
+          approximate_lines: 1543,
+          ...(width === 1440
+            ? { test_framework: null, test_command: null, test_detection: 'not_found' }
+            : {}),
+        },
+      }),
+    );
     await page.goto('/');
     if (width === 390)
       await page.getByRole('button', { name: 'Repositories', exact: true }).click();
     const summary = page.getByRole('region', { name: 'Repository summary' });
-    await expect(summary.locator('dt')).toHaveText([
-      'Confidence',
-      'Files',
-      'Size',
-      'Tests detected',
-      'Languages',
+    await expect(summary.getByText('32', { exact: true })).toBeVisible();
+    await expect(summary.getByText('1.5K', { exact: true })).toBeVisible();
+    await expect(
+      summary.getByText(width === 1440 ? 'Not detected' : 'pytest', { exact: true }),
+    ).toBeVisible();
+    const languages = summary.getByRole('list', { name: 'Language shares' });
+    await expect(languages.getByRole('listitem')).toHaveText([
+      /JavaScript\s*74\.2%/,
+      /CSS\s*24\.6%/,
+      /HTML\s*1\.2%/,
     ]);
-    await expect(summary.getByText('75.0%')).toBeVisible();
-    await expect(summary.getByText('25.0%')).toBeVisible();
-    await expect(summary.getByText('Partial scan', { exact: true })).toHaveCount(0);
-    await expect(summary.locator('img')).toHaveCount(2);
+    await expect(languages.locator('img')).toHaveCount(3);
     await expect
       .poll(() =>
-        summary
+        languages
           .locator('img')
-          .first()
-          .evaluate((img: HTMLImageElement) => img.naturalWidth),
+          .evaluateAll((icons) => icons.every((img) => (img as HTMLImageElement).naturalWidth > 0)),
       )
-      .toBeGreaterThan(0);
-    await capture(page, testInfo, `language-summary-${width}`);
+      .toBe(true);
+    const details = summary.locator('summary');
+    await expect(summary.getByText('Language confidence')).toBeHidden();
+    await capture(summary, testInfo, `repository-summary-${width}`);
+    await details.press('Enter');
+    await expect(summary.getByText('Language confidence')).toBeVisible();
+    await expect(summary.getByText('Scan limits may omit some files or lines.')).toBeVisible();
+    if (width === 390) await expect(summary.getByText('uv run pytest')).toBeVisible();
+    await details.press('Enter');
+    await expect(summary.getByText('Language confidence')).toBeHidden();
   });
 }
 

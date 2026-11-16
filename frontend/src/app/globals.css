@@ -85,7 +85,8 @@ textarea {
 }
 button:focus-visible,
 a:focus-visible,
-textarea:focus-visible {
+textarea:focus-visible,
+.repo-scan-details summary:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
@@ -591,43 +592,148 @@ code {
 }
 .repo-summary {
   margin-top: auto;
-  padding: 20px;
+  padding: 16px 20px 8px;
   border-top: 1px solid var(--border);
+  font-size: 12px;
 }
-.repo-summary .section-heading {
-  margin: 0 0 16px;
-  flex-wrap: wrap;
-}
-.repo-summary dl {
-  margin: 0;
+.repo-summary-metrics {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+  margin: 12px 0;
 }
-.repo-summary dl > div {
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-}
-.repo-summary dt {
+.repo-summary dt,
+.repo-summary-muted {
   color: var(--muted);
 }
 .repo-summary dd {
   margin: 0;
-  text-align: right;
   overflow-wrap: anywhere;
   font-variant-numeric: tabular-nums;
+}
+.repo-summary-metrics > div:not(.repo-summary-tests) dd {
+  margin-top: 2px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.repo-summary-tests {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.repo-summary-tests dd {
+  text-align: end;
+}
+.repo-summary-languages {
+  padding-block: 12px;
+  border-top: 1px solid var(--border);
+}
+.repo-summary-language-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+}
+.repo-summary-language-heading span,
+.language-percent {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.language-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.language-share {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 8px;
+  overflow-wrap: anywhere;
+}
+.language-icon {
+  width: 18px;
+  height: 18px;
+}
+.language-track {
+  grid-column: 2 / -1;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--border);
+}
+.language-track span {
+  display: block;
+  height: 100%;
+  max-inline-size: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+}
+.repo-scan-details {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+}
+.repo-scan-details summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  cursor: pointer;
+  list-style: none;
+}
+.repo-scan-details summary::-webkit-details-marker {
+  display: none;
+}
+.repo-scan-details summary:hover {
+  color: var(--text);
+}
+.repo-scan-details summary .icon {
+  width: 14px;
+  height: 14px;
+  flex-basis: 14px;
+}
+.repo-scan-details[open] summary .icon {
+  transform: rotate(90deg);
+}
+.repo-scan-details-body,
+.repo-scan-details dl {
+  display: grid;
+  gap: 8px;
+}
+.repo-scan-details dl {
+  margin: 0;
+}
+.repo-scan-details dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.repo-scan-details dd {
+  color: var(--text);
+}
+.repo-scan-confidence {
+  text-transform: capitalize;
+}
+.repo-summary > .repo-summary-muted {
+  padding-block: 12px;
 }
 .summary-note {
   margin-top: 12px;
   color: var(--muted);
   font-size: 12px;
 }
-.test-command {
+.repo-scan-details code {
   display: block;
-  padding: 8px;
-  margin-top: 16px;
-  background: var(--raised);
-  border-radius: 4px;
+  color: var(--text);
 }
 .empty-state {
   padding: 8px;
@@ -1178,6 +1284,9 @@ code {
   .repository-context .add-repository span {
     display: none;
   }
+  .repo-scan-details summary {
+    min-height: 44px;
+  }
   .work-toolbar .github-sync-button,
   .work-toolbar .github-sync-check {
     min-height: 44px;
@@ -1416,37 +1525,6 @@ code {
 }
 .finding a {
   color: var(--accent);
-}
-
-.repo-summary {
-  font-size: 12px;
-}
-.repo-summary .section-heading h2 {
-  font-size: 12px;
-}
-.language-list {
-  display: grid;
-  gap: 6px;
-}
-.language-share {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.language-icon {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-}
-.language-share > span:last-child {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-}
-
-.repo-summary dt,
-.repo-summary dd {
-  font-size: 12px;
 }
 
 .sidebar-section-heading h2 {
