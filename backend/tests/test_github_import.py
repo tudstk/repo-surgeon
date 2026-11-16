@@ -3,6 +3,7 @@
 import io
 import zipfile
 from pathlib import Path
+from uuid import UUID
 
 import httpx
 import pytest
@@ -14,6 +15,7 @@ from repo_surgeon.infrastructure.github_import import (
     GitHubImportError,
     extract_snapshot,
 )
+from repo_surgeon.infrastructure.repository_models import RepositoryRecord
 from repo_surgeon.main import create_app
 from repo_surgeon.settings import Settings
 
@@ -111,6 +113,30 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
             assert turn.json()["status"] == "completed"
             restored = await client.get(f"/api/v1/sessions/{session_id}")
             assert restored.json()["turns"][0]["run_id"] == turn.json()["run_id"]
+            repository_url = f"/api/v1/repositories/{repository['id']}"
+            async with app.state.session_factory() as database:
+                row = await database.get(RepositoryRecord, UUID(repository["id"]))
+                assert row is not None and row.root_device is not None
+                root = Path(row.canonical_root)
+                row.root_device += 1
+                await database.commit()
+            assert (await client.get(repository_url + "/summary")).status_code == 503
+            original = root / "src/main.py"
+            original.write_text("changed")
+            assert (await client.post(repository_url + "/recover")).status_code == 422
+            assert (await client.get(repository_url + "/summary")).status_code == 503
+            outside = tmp_path / "outside.py"
+            outside.write_text("print('hello')")
+            original.unlink()
+            original.symlink_to(outside)
+            assert (await client.post(repository_url + "/recover")).status_code == 422
+            assert (await client.get(repository_url + "/summary")).status_code == 503
+            original.unlink()
+            original.write_text("print('hello')")
+            recovered = await client.post(repository_url + "/recover")
+            assert recovered.status_code == 204, recovered.text
+            assert (await client.get(repository_url + "/summary")).status_code == 200
+            assert (await client.get(f"/api/v1/sessions/{session_id}")).json() == restored.json()
             visibility = f"/api/v1/repositories/{repository['id']}/visibility"
             assert (await client.post(visibility, json={"hidden": True})).status_code == 204
             assert (await client.get("/api/v1/repositories")).json() == []
@@ -123,7 +149,7 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
             assert (await client.post(visibility, json={"hidden": True})).status_code == 204
             assert (await client.post(visibility, json={"hidden": False})).status_code == 204
             assert (await client.get("/api/v1/repositories")).json() == [repository]
-    assert len(requests) == 9
+    assert len(requests) == 15
     assert not list(settings.repository_storage.rglob(".import-*"))
 
 
@@ -242,6 +268,11 @@ async def test_public_import_requires_csrf_and_isolates_accounts(tmp_path: Path)
                 headers={"X-CSRF-Token": "wrong"},
             )
             assert forbidden.status_code == 403
+            assert (
+                await client.post(
+                    f"/api/v1/repositories/{first_id}/recover", headers={"X-CSRF-Token": "wrong"}
+                )
+            ).status_code == 403
             assert "canonical_root" not in first.text
             token, csrf = credentials[1]
             client.cookies.set("__Host-repo_surgeon_session", token)
@@ -251,6 +282,9 @@ async def test_public_import_requires_csrf_and_isolates_accounts(tmp_path: Path)
                 await client.post(
                     f"/api/v1/repositories/{first_id}/visibility", json={"hidden": True}
                 )
+            ).status_code == 404
+            assert (
+                await client.post(f"/api/v1/repositories/{first_id}/recover")
             ).status_code == 404
             assert (await client.get(f"/api/v1/repositories/{first_id}/summary")).status_code == 404
             second = await client.post(endpoint, json=body)

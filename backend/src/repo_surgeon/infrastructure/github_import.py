@@ -17,6 +17,7 @@ from uuid import UUID
 import httpx
 
 from repo_surgeon.application.repositories import ResolvedLocalRepositoryRoot
+from repo_surgeon.domain.repositories import Repository
 
 FULL_NAME_PATTERN = r"^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$"
 MAX_ARCHIVE_BYTES = 25 * 1024 * 1024
@@ -115,6 +116,24 @@ class GitHubImporter:
 
     async def import_public(self, full_name: str, user_id: UUID) -> ImportedSnapshot:
         """Validate visibility, pin the default revision and download within a deadline."""
+        return await self._fetch_snapshot(full_name, user_id)
+
+    async def verify_saved(self, repository: Repository) -> ResolvedLocalRepositoryRoot:
+        """Verify a stale binding against a fresh archive of the original public commit."""
+        if (
+            repository.github_full_name is None
+            or repository.github_commit is None
+            or repository.root_inode is None
+        ):
+            raise GitHubImportError("This snapshot cannot be verified.")
+        result = await self._fetch_snapshot(
+            repository.github_full_name, repository.owner_user_id, verify=repository
+        )
+        return result.root
+
+    async def _fetch_snapshot(
+        self, full_name: str, user_id: UUID, *, verify: Repository | None = None
+    ) -> ImportedSnapshot:
         if not re.fullmatch(FULL_NAME_PATTERN, full_name) or full_name.split("/")[1] in {".", ".."}:
             raise GitHubImportError("Choose an available public GitHub repository.")
         try:
@@ -136,18 +155,23 @@ class GitHubImporter:
                 ):
                     raise GitHubImportError("Choose an available public GitHub repository.")
                 name = repo["full_name"]
-                revision = await self.client.get(
-                    f"https://api.github.com/repos/{name}/commits",
-                    params={"per_page": 1},
-                    headers={"Accept": "application/vnd.github+json"},
-                )
-                revision.raise_for_status()
-                revisions = revision.json()
-                commit = (
-                    revisions[0].get("sha")
-                    if isinstance(revisions, list) and revisions and isinstance(revisions[0], dict)
-                    else None
-                )
+                if verify is not None:
+                    commit = verify.github_commit
+                else:
+                    revision = await self.client.get(
+                        f"https://api.github.com/repos/{name}/commits",
+                        params={"per_page": 1},
+                        headers={"Accept": "application/vnd.github+json"},
+                    )
+                    revision.raise_for_status()
+                    revisions = revision.json()
+                    commit = (
+                        revisions[0].get("sha")
+                        if isinstance(revisions, list)
+                        and revisions
+                        and isinstance(revisions[0], dict)
+                        else None
+                    )
                 if not isinstance(commit, str) or not re.fullmatch(r"[a-f0-9]{40}", commit):
                     raise GitHubImportError("The repository has no importable revision.")
                 payload = bytearray()
@@ -172,7 +196,7 @@ class GitHubImporter:
                 # The deterministic destination makes retries and concurrent imports converge.
                 publication = asyncio.create_task(
                     asyncio.to_thread(
-                        self._publish, bytes(payload), user_id, repo["id"], name, commit
+                        self._publish, bytes(payload), user_id, repo["id"], name, commit, verify
                     )
                 )
                 try:
@@ -212,10 +236,17 @@ class GitHubImporter:
             raise GitHubImportError("GitHub returned invalid repository metadata.") from None
 
     def _publish(
-        self, archive: bytes, user_id: UUID, repository_id: int, name: str, commit: str
+        self,
+        archive: bytes,
+        user_id: UUID,
+        repository_id: int,
+        name: str,
+        commit: str,
+        verify: Repository | None = None,
     ) -> ImportedSnapshot:
         parent = self.storage / str(user_id) / str(repository_id)
-        parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if verify is None:
+            parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         if parent.resolve() != parent:
             raise GitHubImportError("Repository storage is unavailable.")
         destination = parent / commit
@@ -224,9 +255,12 @@ class GitHubImporter:
             extract_snapshot(archive, staging)
             with (parent / ".publish.lock").open("a") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
-                if not destination.exists():
-                    staging.rename(destination)
-                identity = destination.lstat()
+                if verify is not None:
+                    identity = _verify_saved_tree(destination, staging, verify)
+                else:
+                    if not destination.exists():
+                        staging.rename(destination)
+                    identity = destination.lstat()
             if not stat.S_ISDIR(identity.st_mode):
                 raise GitHubImportError("Repository storage is unavailable.")
             return ImportedSnapshot(
@@ -236,3 +270,77 @@ class GitHubImporter:
             )
         finally:
             shutil.rmtree(staging, ignore_errors=True)
+
+
+def _snapshot_changed() -> GitHubImportError:
+    return GitHubImportError(
+        "The saved files could not be matched to this GitHub revision. "
+        "Import a fresh snapshot or contact the service operator."
+    )
+
+
+def _verify_saved_tree(destination: Path, expected: Path, repository: Repository) -> os.stat_result:
+    if str(destination) != repository.canonical_root:
+        raise _snapshot_changed()
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+    descriptor = os.open(destination, flags)
+    try:
+        identity = os.fstat(descriptor)
+        if identity.st_ino != repository.root_inode:
+            raise _snapshot_changed()
+        _compare_directory(descriptor, expected, identity.st_dev)
+        current = destination.lstat()
+        if (current.st_dev, current.st_ino) != (identity.st_dev, identity.st_ino):
+            raise _snapshot_changed()
+        return identity
+    finally:
+        os.close(descriptor)
+
+
+def _compare_directory(descriptor: int, expected: Path, device: int) -> None:
+    # The upstream archive has already bounded these names, depth and bytes.
+    remaining = {entry.name: entry for entry in expected.iterdir()}
+    with os.scandir(descriptor) as entries:
+        for entry in entries:
+            match = remaining.pop(entry.name, None)
+            if match is None:
+                raise _snapshot_changed()
+            directory = match.is_dir()
+            flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+            if directory:
+                flags |= os.O_DIRECTORY
+            else:
+                info = entry.stat(follow_symlinks=False)
+                if not stat.S_ISREG(info.st_mode):
+                    raise _snapshot_changed()
+            child = os.open(entry.name, flags, dir_fd=descriptor)
+            try:
+                info = os.fstat(child)
+                if info.st_dev != device:
+                    raise _snapshot_changed()
+                if directory:
+                    _compare_directory(child, match, device)
+                else:
+                    _compare_file(child, match, info)
+            finally:
+                os.close(child)
+    if remaining:
+        raise _snapshot_changed()
+
+
+def _compare_file(descriptor: int, expected: Path, info: os.stat_result) -> None:
+    if (
+        not stat.S_ISREG(info.st_mode)
+        or info.st_nlink != 1
+        or info.st_size != expected.stat().st_size
+    ):
+        raise _snapshot_changed()
+    with os.fdopen(descriptor, "rb", closefd=False) as current, expected.open("rb") as original:
+        while chunk := original.read(64 * 1024):
+            if current.read(len(chunk)) != chunk:
+                raise _snapshot_changed()
+        if current.read(1):
+            raise _snapshot_changed()
+    after = os.fstat(descriptor)
+    if (after.st_ctime_ns, after.st_mtime_ns) != (info.st_ctime_ns, info.st_mtime_ns):
+        raise _snapshot_changed()

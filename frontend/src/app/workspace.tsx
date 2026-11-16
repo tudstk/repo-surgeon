@@ -11,6 +11,7 @@ import { GitHubRepositoryPicker } from './github-repository-picker';
 
 import {
   createProductSession,
+  recoverRepositorySnapshot,
   setRepositoryHidden,
   createReadOnlyTurn,
   getPersistedRunEvents,
@@ -25,6 +26,9 @@ import {
   type RunEvent,
   WorkspaceRequestError,
 } from '@/lib/workspace-api';
+
+const unavailableRepositoryMessage =
+  'This repository is unavailable. Choose another repository or retry later.';
 
 const languageIcons: Record<string, string> = {
   Python: 'python',
@@ -86,6 +90,8 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   const submitting = pendingAction !== null;
   const creatingSession = pendingAction === 'session';
   const [error, setError] = useState<string | null>(null);
+  const [unavailableRepositoryId, setUnavailableRepositoryId] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const workspaceRequestGeneration = useRef(0);
   const selectedRepositoryIdRef = useRef<string | null>(null);
@@ -170,6 +176,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     ])
       .then(async ([repositorySummary, availableSessions]) => {
         if (controller.signal.aborted || generation !== workspaceRequestGeneration.current) return;
+        setUnavailableRepositoryId(null);
         setSummary(repositorySummary);
         setSessions(availableSessions);
         if (availableSessions[0]) {
@@ -196,7 +203,8 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             setSessions([]);
             setSession(null);
             setEvents([]);
-            setError('This repository is unavailable. Choose another repository or retry later.');
+            setUnavailableRepositoryId(selectedRepositoryId);
+            setError(unavailableRepositoryMessage);
           } else {
             clearPrivateWorkspace();
             setError('Repository workspace state could not be loaded.');
@@ -205,6 +213,37 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       });
     return () => controller.abort();
   }, [attempt, clearPrivateWorkspace, restoreSession, selectedRepositoryId]);
+
+  const canRecover = Boolean(
+    selectedRepository?.github_commit && selectedRepository.id === unavailableRepositoryId,
+  );
+
+  const retryWorkspace = () => {
+    setLoading(true);
+    setError(null);
+    setUnavailableRepositoryId(null);
+    setAttempt((value) => value + 1);
+  };
+
+  const handleRecoverSnapshot = async () => {
+    if (!selectedRepository || recovering) return;
+    const generation = workspaceRequestGeneration.current;
+    setRecovering(true);
+    try {
+      await recoverRepositorySnapshot(selectedRepository.id, csrfToken);
+      if (generation === workspaceRequestGeneration.current) retryWorkspace();
+    } catch (cause) {
+      if (generation === workspaceRequestGeneration.current) {
+        setError(
+          cause instanceof WorkspaceRequestError && cause.detail
+            ? cause.detail
+            : 'Snapshot recovery failed. Please try again.',
+        );
+      }
+    } finally {
+      setRecovering(false);
+    }
+  };
 
   const handleStartSession = async () => {
     setSessionsExpanded(true);
@@ -669,17 +708,18 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                 <Icon name="error" />
                 <div>
                   <strong>Workspace unavailable</strong>
-                  <p>{error}</p>
+                  <p>
+                    {canRecover && error === unavailableRepositoryMessage
+                      ? 'This snapshot could not be opened. Verify its files against the saved GitHub revision to recover it.'
+                      : error}
+                  </p>
                   <button
                     type="button"
                     className="secondary-button"
-                    onClick={() => {
-                      setLoading(true);
-                      setError(null);
-                      setAttempt((value) => value + 1);
-                    }}
+                    disabled={recovering}
+                    onClick={canRecover ? () => void handleRecoverSnapshot() : retryWorkspace}
                   >
-                    Retry
+                    {canRecover ? (recovering ? 'Verifying…' : 'Recover snapshot') : 'Retry'}
                   </button>
                 </div>
               </div>

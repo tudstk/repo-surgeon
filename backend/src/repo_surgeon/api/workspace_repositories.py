@@ -18,6 +18,7 @@ from repo_surgeon.application.repositories import (
 )
 from repo_surgeon.application.repository_files import RepositoryFileError
 from repo_surgeon.application.repository_intelligence import detect_repository_summary
+from repo_surgeon.domain.repositories import RepositorySource
 from repo_surgeon.infrastructure.github_import import (
     FULL_NAME_PATTERN,
     GitHubImporter,
@@ -143,6 +144,38 @@ async def import_github_repository(
     return WorkspaceRepositoryResponse(
         id=repository.id, name=snapshot.full_name, github_commit=snapshot.commit
     )
+
+
+@router.post("/{repository_id}/recover", status_code=204)
+async def recover_owned_snapshot(
+    repository_id: UUID,
+    request: Request,
+    principal: MutationPrincipal,
+    database: DatabaseSession,
+) -> Response:
+    """Verify the original pinned snapshot before recovering its device binding."""
+    store = SqlAlchemyRepositoryStore(database, principal.user_id)
+    repository = await store.get(repository_id)
+    if repository is None or repository.source != RepositorySource.GITHUB:
+        raise _not_found()
+    importer: GitHubImporter = request.app.state.github_importer
+    try:
+        verified = await importer.verify_saved(repository)
+    except GitHubImportError as error:
+        raise problem(
+            code="repository_recovery_failed",
+            title="Snapshot recovery failed",
+            status=422,
+            detail=str(error),
+        ) from error
+    if not await store.recover_github_device(repository, verified):
+        raise problem(
+            code="repository_recovery_conflict",
+            title="Snapshot registration changed",
+            status=409,
+            detail="Reload the workspace before retrying recovery.",
+        )
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
 
 @router.get(
