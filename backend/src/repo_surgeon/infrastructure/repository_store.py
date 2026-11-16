@@ -1,6 +1,7 @@
 """SQLAlchemy adapter for registered repositories."""
 
-from datetime import UTC
+from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -14,6 +15,7 @@ from repo_surgeon.application.repositories import (
 from repo_surgeon.domain.authentication import LOCAL_DEVELOPMENT_USER_ID
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.infrastructure.repository_models import RepositoryRecord
+from repo_surgeon.infrastructure.run_models import ConversationSessionRecord
 
 
 def _to_domain(record: RepositoryRecord) -> Repository:
@@ -81,6 +83,9 @@ class SqlAlchemyRepositoryStore:
             root_device=root.root_device,
             root_inode=root.root_inode,
         )
+        if source == RepositorySource.GITHUB:
+            # Keep successive snapshot registrations ordered even within the same second.
+            record.created_at = datetime.now(UTC)
         self._session.add(record)
         try:
             await self._session.commit()
@@ -103,6 +108,87 @@ class SqlAlchemyRepositoryStore:
             raise
         await self._session.refresh(record)
         return _to_domain(record)
+
+    async def advance_github_snapshot(
+        self,
+        expected: Repository,
+        root: ResolvedLocalRepositoryRoot,
+        commit: str,
+    ) -> Repository | None:
+        """Advance the selected repository ID and retire preexisting duplicate registrations."""
+        parent = Path(expected.canonical_root).parent
+        if (
+            Path(root.canonical_root).parent != parent
+            or Path(root.canonical_root).name != commit
+            or not expected.github_full_name
+        ):
+            return None
+        result = await self._session.scalars(
+            select(RepositoryRecord)
+            .where(
+                RepositoryRecord.owner_user_id == self._owner_user_id,
+                RepositoryRecord.source == RepositorySource.GITHUB.value,
+                RepositoryRecord.github_full_name == expected.github_full_name,
+            )
+            .order_by(RepositoryRecord.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        same_repo = [row for row in result if Path(row.canonical_root).parent == parent]
+        current = next((row for row in same_repo if row.id == expected.id), None)
+        if current is None or current.hidden:
+            return None
+
+        destination = next(
+            (row for row in same_repo if row.canonical_root == root.canonical_root),
+            None,
+        )
+        if destination is not current and _to_domain(current) != expected:
+            return None  # A concurrent request published a different revision.
+        try:
+            if destination is not None and destination is not current:
+                if destination.root_inode != root.root_inode or destination.github_commit != commit:
+                    raise RepositoryRegistrationError(
+                        code="repository_identity_changed",
+                        detail="The latest snapshot directory has changed. Contact the operator.",
+                    )
+                # Release the unique destination key inside the transaction, then keep its
+                # registration as a hidden record for the previous revision.
+                destination.canonical_root = f"pending-sync:{destination.id}"
+                await self._session.flush()
+                current.canonical_root = root.canonical_root
+                await self._session.flush()
+                destination.canonical_root = expected.canonical_root
+                destination.github_commit = expected.github_commit
+                destination.root_device = expected.root_device
+                destination.root_inode = expected.root_inode
+
+            current.canonical_root = root.canonical_root
+            current.github_commit = commit
+            current.root_device = root.root_device
+            current.root_inode = root.root_inode
+
+            retired = [
+                row
+                for row in same_repo
+                if row.id != current.id and (not row.hidden or row is destination)
+            ]
+            if retired:
+                await self._session.execute(
+                    update(ConversationSessionRecord)
+                    .where(
+                        ConversationSessionRecord.owner_user_id == self._owner_user_id,
+                        ConversationSessionRecord.repository_id.in_([row.id for row in retired]),
+                    )
+                    .values(repository_id=current.id)
+                )
+                for row in retired:
+                    row.hidden = True
+            await self._session.commit()
+        except IntegrityError:
+            await self._session.rollback()
+            return None
+        return _to_domain(current)
 
     async def recover_github_device(
         self, repository: Repository, verified: ResolvedLocalRepositoryRoot

@@ -57,6 +57,9 @@ async function fixture(page: Page, state: 'saved' | 'empty' | 'failed' | 'ready'
   await page.route('**/api/v1/repositories/*/tree?*', (route) =>
     route.fulfill({ json: { entries: [], next_offset: null, scan_limit_reached: false } }),
   );
+  await page.route('**/api/v1/repositories/*/sync-status', (route) =>
+    route.fulfill({ json: { up_to_date: true } }),
+  );
   await page.route('**/api/v1/sessions?*', (route) => route.fulfill({ json: [session] }));
   await page.route('**/api/v1/sessions/session-1', (route) =>
     route.fulfill({
@@ -1112,3 +1115,66 @@ test('the work pane resizes with the pointer and keyboard within 20–50% of the
   await divider.press('Home');
   await expect(divider).toHaveAttribute('aria-valuenow', '20');
 });
+
+for (const width of [1440, 390]) {
+  test(`Sync updates the selected public snapshot at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await fixture(page);
+    const oldSnapshot = { ...repository, github_commit: 'a'.repeat(40) };
+    const newSnapshot = { ...oldSnapshot, github_commit: 'b'.repeat(40) };
+    let upstream = oldSnapshot.github_commit;
+    let owned = oldSnapshot;
+    let failSync = true;
+    await page.route('**/api/v1/repositories', (route) => route.fulfill({ json: [owned] }));
+    await page.route('**/api/v1/repositories/*/sync-status', (route) =>
+      route.fulfill({ json: { up_to_date: upstream === owned.github_commit } }),
+    );
+    await page.route('**/api/v1/repositories/repository-1/sync', (route) => {
+      expect(route.request().method()).toBe('POST');
+      expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
+      if (failSync) {
+        failSync = false;
+        return route.fulfill({
+          status: 422,
+          json: { detail: 'The archive could not be downloaded.' },
+        });
+      }
+      owned = newSnapshot;
+      return route.fulfill({ json: newSnapshot });
+    });
+    await page.goto('/');
+    const sync = page.getByRole('button', { name: 'Sync', exact: true });
+    await expect(page.getByText('Up to date', { exact: true })).toBeVisible();
+    await expect(sync).toHaveCount(0);
+    upstream = newSnapshot.github_commit;
+    await page.getByRole('button', { name: 'Check GitHub for updates' }).click();
+    await expect(page.getByText('Behind GitHub', { exact: true })).toBeVisible();
+    await expect(sync).toBeVisible();
+    await capture(page, testInfo, `snapshot-behind-${width}`);
+    await sync.click();
+    await expect(page.getByText('The archive could not be downloaded.')).toBeVisible();
+    await expect(page.getByText('Snapshot aaaaaaa · Read-only')).toBeVisible();
+    await expect(page.getByText(turn.answer)).toBeVisible();
+    await sync.click();
+    await expect(page.getByText('Snapshot bbbbbbb · Read-only')).toBeVisible();
+    await expect(page.getByText('Up to date', { exact: true })).toBeVisible();
+    await expect(sync).toHaveCount(0);
+    await expect(page.getByText(turn.answer)).toBeVisible();
+    await capture(page, testInfo, `snapshot-up-to-date-${width}`);
+    await page.reload();
+    await expect(page.getByText('Snapshot bbbbbbb · Read-only')).toBeVisible();
+    if (width === 390)
+      await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Repositories 1' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Snapshot bbbbbbb/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.getByRole('button', { name: /Snapshot aaaaaaa/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: session.title, exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+}

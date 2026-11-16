@@ -12,6 +12,7 @@ from uuid import UUID
 from repo_surgeon.agent.loop import AgentTurn, run_turn
 from repo_surgeon.agent.provider import ModelProvider
 from repo_surgeon.application.repositories import RepositoryLookup
+from repo_surgeon.domain.repositories import Repository
 from repo_surgeon.domain.sessions import (
     AgentRun,
     ConversationSession,
@@ -79,6 +80,16 @@ class CreateConversationSession:
         return await self.store.create_session(repository_id, title, now)
 
 
+@dataclass(frozen=True, slots=True)
+class _TurnRepository:
+    repository: Repository | None
+
+    async def get(self, repository_id: UUID) -> Repository | None:
+        if self.repository is not None and self.repository.id == repository_id:
+            return self.repository
+        return None
+
+
 class RunPersistedReadOnlyTurn:
     """Run the existing bounded loop and persist its normalized public trace."""
 
@@ -100,9 +111,11 @@ class RunPersistedReadOnlyTurn:
         if run is None:
             return None
         try:
+            # Sync can advance the registration between tool calls. Keep this turn on one root.
+            pinned = await self._repository_lookup.get(session.repository_id)
             result = await run_turn(
                 self._provider_factory(),
-                McpFileTools(self._repository_lookup),
+                McpFileTools(_TurnRepository(pinned)),
                 session.repository_id,
                 question,
             )
