@@ -21,6 +21,14 @@ from repo_surgeon.domain.sessions import (
 from repo_surgeon.mcp.file_tools import McpFileTools
 
 
+class SessionTitleConflictError(Exception):
+    """Another session in this repository already uses the requested title."""
+
+
+class SessionBusyError(Exception):
+    """A running turn prevents archiving its session."""
+
+
 class EventCursorInvalidError(Exception):
     """The supplied SSE cursor is not an event in the requested owned run."""
 
@@ -33,7 +41,7 @@ class AgentSessionStore(Protocol):
     """Tenant-bound persistence operations for product sessions and traces."""
 
     async def create_session(
-        self, repository_id: UUID, title: str, now: datetime
+        self, repository_id: UUID, title: str | None, now: datetime
     ) -> ConversationSession | None: ...
 
     async def list_sessions(
@@ -66,7 +74,7 @@ class CreateConversationSession:
     store: AgentSessionStore
 
     async def execute(
-        self, repository_id: UUID, title: str, now: datetime
+        self, repository_id: UUID, title: str | None, now: datetime
     ) -> ConversationSession | None:
         return await self.store.create_session(repository_id, title, now)
 

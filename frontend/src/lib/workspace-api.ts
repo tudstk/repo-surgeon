@@ -119,10 +119,10 @@ export function getProductSession(sessionId: string, signal?: AbortSignal) {
   return requestJson<ProductSessionDetail>(`/api/v1/sessions/${sessionId}`, { signal });
 }
 
-export function createProductSession(repositoryId: string, title: string, csrfToken: string) {
+export function createProductSession(repositoryId: string, csrfToken: string) {
   return requestJson<ProductSession>(
     '/api/v1/sessions',
-    mutationInit(csrfToken, { repository_id: repositoryId, title }),
+    mutationInit(csrfToken, { repository_id: repositoryId }),
   );
 }
 
@@ -181,4 +181,27 @@ export async function setRepositoryHidden(
   });
   if (!response.ok)
     throw new WorkspaceRequestError(response.status, 'repository_visibility_failed');
+}
+
+export function renameProductSession(sessionId: string, title: string, csrfToken: string) {
+  return requestJson<ProductSession>(`/api/v1/sessions/${sessionId}`, {
+    ...mutationInit(csrfToken, { title }),
+    method: 'PATCH',
+  });
+}
+
+export async function removeProductSession(sessionId: string, csrfToken: string) {
+  const response = await fetch(`/api/v1/sessions/${sessionId}/archive`, {
+    credentials: 'include',
+    cache: 'no-store',
+    ...mutationInit(csrfToken, {}),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new WorkspaceRequestError(
+      response.status,
+      'session_removal_failed',
+      typeof body.detail === 'string' ? body.detail : undefined,
+    );
+  }
 }

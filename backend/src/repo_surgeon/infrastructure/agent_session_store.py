@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -11,7 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from repo_surgeon.agent.loop import AgentTurn, ToolEvent
-from repo_surgeon.application.agent_sessions import EventCursorInvalidError
+from repo_surgeon.application.agent_sessions import (
+    EventCursorInvalidError,
+    SessionBusyError,
+    SessionTitleConflictError,
+)
 from repo_surgeon.domain.sessions import (
     AgentRun,
     AgentRunStatus,
@@ -142,22 +147,36 @@ class SqlAlchemyAgentSessionStore:
         await self._database.rollback()
 
     async def create_session(
-        self, repository_id: UUID, title: str, now: datetime
+        self, repository_id: UUID, title: str | None, now: datetime
     ) -> ConversationSession | None:
         repository = (
             await self._database.execute(
-                select(RepositoryRecord).where(
+                select(RepositoryRecord)
+                .where(
                     RepositoryRecord.id == repository_id,
                     RepositoryRecord.owner_user_id == self._owner_user_id,
                 )
+                .with_for_update()
             )
         ).scalar_one_or_none()
         if repository is None:
             return None
+        name = (repository.github_full_name or Path(repository.canonical_root).name).rsplit("/", 1)[
+            -1
+        ]
+        base = (title or f"{name} read-only review").strip()[:200]
+        base = self._short_title(base, repository)
+        titles = await self._titles(repository)
+        candidate = base
+        suffix = 0
+        while candidate.casefold() in titles:
+            suffix += 1
+            ending = f"-{suffix}"
+            candidate = base[: 200 - len(ending)] + ending
         record = ConversationSessionRecord(
             owner_user_id=self._owner_user_id,
             repository_id=repository.id,
-            title=title,
+            title=candidate,
             status=ConversationSessionStatus.ACTIVE.value,
             created_at=now,
             updated_at=now,
@@ -167,11 +186,88 @@ class SqlAlchemyAgentSessionStore:
         await self._database.refresh(record)
         return _session(record)
 
+    @staticmethod
+    def _short_title(title: str, repository: RepositoryRecord) -> str:
+        if repository.github_full_name and "/" in repository.github_full_name:
+            prefix = repository.github_full_name.split("/", 1)[0] + "/"
+            return title.removeprefix(prefix) or "Session"
+        return title
+
+    async def _titles(self, repository: RepositoryRecord, exclude: UUID | None = None) -> set[str]:
+        statement = select(ConversationSessionRecord.title).where(
+            ConversationSessionRecord.repository_id == repository.id,
+            ConversationSessionRecord.owner_user_id == self._owner_user_id,
+        )
+        if exclude is not None:
+            statement = statement.where(ConversationSessionRecord.id != exclude)
+        return {
+            self._short_title(title, repository).casefold()
+            for title in (await self._database.scalars(statement))
+        }
+
+    async def rename_session(
+        self, session_id: UUID, title: str, now: datetime
+    ) -> ConversationSession | None:
+        record = await self._active_session_record(session_id)
+        if record is None:
+            return None
+        repository = (
+            await self._database.scalars(
+                select(RepositoryRecord)
+                .where(
+                    RepositoryRecord.id == record.repository_id,
+                    RepositoryRecord.owner_user_id == self._owner_user_id,
+                )
+                .with_for_update()
+            )
+        ).one()
+        title = self._short_title(title, repository)
+        if title.casefold() in await self._titles(repository, session_id):
+            raise SessionTitleConflictError
+        record.title = title
+        record.updated_at = now
+        await self._database.commit()
+        return _session(record)
+
+    async def archive_session(self, session_id: UUID, now: datetime) -> bool:
+        record = await self._active_session_record(session_id)
+        if record is None:
+            return False
+        running = await self._database.scalar(
+            select(AgentRunRecord.id)
+            .where(
+                AgentRunRecord.session_id == session_id,
+                AgentRunRecord.owner_user_id == self._owner_user_id,
+                AgentRunRecord.status == AgentRunStatus.RUNNING.value,
+            )
+            .limit(1)
+        )
+        if running is not None:
+            raise SessionBusyError
+        record.status = ConversationSessionStatus.ARCHIVED.value
+        record.updated_at = now
+        await self._database.commit()
+        return True
+
+    async def _active_session_record(self, session_id: UUID) -> ConversationSessionRecord | None:
+        return (
+            await self._database.scalars(
+                select(ConversationSessionRecord)
+                .where(
+                    ConversationSessionRecord.id == session_id,
+                    ConversationSessionRecord.owner_user_id == self._owner_user_id,
+                    ConversationSessionRecord.status == ConversationSessionStatus.ACTIVE.value,
+                )
+                .with_for_update()
+            )
+        ).one_or_none()
+
     async def list_sessions(
         self, repository_id: UUID | None = None
     ) -> tuple[ConversationSession, ...]:
         statement = select(ConversationSessionRecord).where(
-            ConversationSessionRecord.owner_user_id == self._owner_user_id
+            ConversationSessionRecord.owner_user_id == self._owner_user_id,
+            ConversationSessionRecord.status == ConversationSessionStatus.ACTIVE.value,
         )
         if repository_id is not None:
             statement = statement.where(ConversationSessionRecord.repository_id == repository_id)
@@ -191,6 +287,7 @@ class SqlAlchemyAgentSessionStore:
                 select(ConversationSessionRecord).where(
                     ConversationSessionRecord.id == session_id,
                     ConversationSessionRecord.owner_user_id == self._owner_user_id,
+                    ConversationSessionRecord.status == ConversationSessionStatus.ACTIVE.value,
                 )
             )
         ).scalar_one_or_none()
@@ -215,10 +312,13 @@ class SqlAlchemyAgentSessionStore:
     async def start_run(self, session_id: UUID, question: str, now: datetime) -> AgentRun | None:
         session_record = (
             await self._database.execute(
-                select(ConversationSessionRecord).where(
+                select(ConversationSessionRecord)
+                .where(
                     ConversationSessionRecord.id == session_id,
                     ConversationSessionRecord.owner_user_id == self._owner_user_id,
+                    ConversationSessionRecord.status == ConversationSessionStatus.ACTIVE.value,
                 )
+                .with_for_update()
             )
         ).scalar_one_or_none()
         if session_record is None:

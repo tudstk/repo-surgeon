@@ -4,7 +4,8 @@ import Image from 'next/image';
 import { AppHeader, Icon } from '@/components/ui/shell';
 import type { SafeProfile } from '@/lib/auth-api';
 import { Drawer } from '@/components/ui/drawer';
-import { RepositoryActions } from '@/components/ui/repository-actions';
+import { RowActions } from '@/components/ui/row-actions';
+import { SessionActionDialog } from '@/components/ui/session-action-dialog';
 import { RepositoryRemovalDialog } from '@/components/ui/repository-removal-dialog';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GitHubRepositoryPicker } from './github-repository-picker';
@@ -12,6 +13,8 @@ import { GitHubRepositoryPicker } from './github-repository-picker';
 import {
   createProductSession,
   recoverRepositorySnapshot,
+  renameProductSession,
+  removeProductSession,
   setRepositoryHidden,
   createReadOnlyTurn,
   getPersistedRunEvents,
@@ -69,6 +72,13 @@ function eventMessage(event: RunEvent) {
 export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrfToken: string }) {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const visibilityPending = useRef(false);
+  const [sessionAction, setSessionAction] = useState<{
+    action: 'rename' | 'remove';
+    session: ProductSession;
+  } | null>(null);
+  const [sessionActionPending, setSessionActionPending] = useState(false);
+  const sessionMutationPending = useRef(false);
+  const [sessionActionError, setSessionActionError] = useState<string | null>(null);
   const repositoryToggle = useRef<HTMLButtonElement>(null);
   const [removalTarget, setRemovalTarget] = useState<OwnedRepository | null>(null);
   const [removedRepository, setRemovedRepository] = useState<OwnedRepository | null>(null);
@@ -252,11 +262,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     setPendingAction('session');
     setError(null);
     try {
-      const created = await createProductSession(
-        selectedRepository.id,
-        `${selectedRepository.name} read-only review`,
-        csrfToken,
-      );
+      const created = await createProductSession(selectedRepository.id, csrfToken);
       if (generation !== workspaceRequestGeneration.current) return;
       // A new selection supersedes any older session restore still in flight.
       workspaceRequestGeneration.current += 1;
@@ -331,6 +337,57 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     } finally {
       visibilityPending.current = false;
       setRemovingId(null);
+    }
+  };
+
+  const sessionDisplayName = (title: string) => {
+    const name = selectedRepository?.name;
+    const prefix = name?.includes('/') ? name.split('/')[0] + '/' : null;
+    return prefix && title.startsWith(prefix) ? title.slice(prefix.length) : title;
+  };
+
+  const handleSessionAction = async (title: string) => {
+    if (!sessionAction || sessionMutationPending.current) return;
+    sessionMutationPending.current = true;
+    setSessionActionPending(true);
+    setSessionActionError(null);
+    const target = sessionAction.session;
+    try {
+      if (sessionAction.action === 'rename') {
+        const renamed = await renameProductSession(target.id, title, csrfToken);
+        if (selectedRepositoryIdRef.current === target.repository_id) {
+          setSessions((current) => current.map((item) => (item.id === target.id ? renamed : item)));
+          setSession((current) =>
+            current?.id === target.id ? { ...current, ...renamed } : current,
+          );
+        }
+      } else {
+        await removeProductSession(target.id, csrfToken);
+        if (selectedRepositoryIdRef.current === target.repository_id) {
+          const remaining = sessions.filter((item) => item.id !== target.id);
+          setSessions(remaining);
+          const generation = ++workspaceRequestGeneration.current;
+          if (!session || session.id === target.id) {
+            setSession(null);
+            setEvents([]);
+            if (remaining[0])
+              void restoreSession(remaining[0].id, undefined, generation).catch(() => {
+                if (generation === workspaceRequestGeneration.current)
+                  setError('The next session could not be loaded. Please reload the workspace.');
+              });
+          }
+        }
+      }
+      setSessionAction(null);
+    } catch (cause) {
+      setSessionActionError(
+        cause instanceof WorkspaceRequestError && cause.detail
+          ? cause.detail
+          : 'The session could not be updated. Please retry.',
+      );
+    } finally {
+      sessionMutationPending.current = false;
+      setSessionActionPending(false);
     }
   };
 
@@ -411,7 +468,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                     ) : null}
                   </span>
                 </button>
-                <RepositoryActions
+                <RowActions
                   name={repository.name}
                   disabled={submitting || removingId !== null}
                   onRemove={() => {
@@ -488,28 +545,45 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           aria-label="Sessions"
         >
           {sessions.map((item) => (
-            <button
-              aria-pressed={item.id === session?.id}
-              className="selection-row"
+            <div
+              className="repository-selection"
+              data-selected={item.id === session?.id}
               key={item.id}
-              title={item.title}
-              onClick={() => {
-                const generation = workspaceRequestGeneration.current + 1;
-                setSession(null);
-                setEvents([]);
-                void restoreSession(item.id).catch(() => {
-                  if (generation === workspaceRequestGeneration.current) {
-                    clearPrivateWorkspace();
-                    setError('Repository workspace state could not be loaded.');
-                  }
-                });
-                closeDrawer();
-              }}
-              type="button"
             >
-              <Icon name="activity" />
-              <span>{item.title}</span>
-            </button>
+              <button
+                aria-pressed={item.id === session?.id}
+                className="selection-row"
+                title={sessionDisplayName(item.title)}
+                onClick={() => {
+                  const generation = workspaceRequestGeneration.current + 1;
+                  setSession(null);
+                  setEvents([]);
+                  void restoreSession(item.id).catch(() => {
+                    if (generation === workspaceRequestGeneration.current) {
+                      clearPrivateWorkspace();
+                      setError('Repository workspace state could not be loaded.');
+                    }
+                  });
+                  closeDrawer();
+                }}
+                type="button"
+              >
+                <Icon name="activity" />
+                <span>{sessionDisplayName(item.title)}</span>
+              </button>
+              <RowActions
+                name={`session ${sessionDisplayName(item.title)}`}
+                disabled={submitting || sessionActionPending}
+                onRename={() => {
+                  setSessionActionError(null);
+                  setSessionAction({ action: 'rename', session: item });
+                }}
+                onRemove={() => {
+                  setSessionActionError(null);
+                  setSessionAction({ action: 'remove', session: item });
+                }}
+              />
+            </div>
           ))}
           {selectedRepository && sessions.length === 0 ? (
             <p className="empty-state">Your read-only sessions will appear here.</p>
@@ -855,6 +929,19 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         >
           {drawer === 'repositories' ? repositoryPane : eventPane}
         </Drawer>
+      ) : null}
+      {sessionAction ? (
+        <SessionActionDialog
+          key={`${sessionAction.session.id}-${sessionAction.action}`}
+          name={sessionDisplayName(sessionAction.session.title)}
+          action={sessionAction.action}
+          pending={sessionActionPending}
+          error={sessionActionError}
+          onCancel={() => {
+            if (!sessionMutationPending.current) setSessionAction(null);
+          }}
+          onConfirm={(title) => void handleSessionAction(title)}
+        />
       ) : null}
       {removalTarget ? (
         <RepositoryRemovalDialog

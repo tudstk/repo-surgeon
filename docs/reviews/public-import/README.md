@@ -7,3 +7,5 @@ Captured with Playwright against the local frontend using synthetic API fixtures
 `confirmation-1440.png` and `confirmation-390.png` show the removal confirmation with the repository name and associated sessions. Cancel and Escape preserve the entry; a failed mutation stays open for retry. The actions captures include the menu control inside the selected row.
 
 `removal-notice-1440.png` (dark) and `removal-notice-390.png` (light) show the gray Undo notice with its dismiss control.
+
+`session-menu-1440.png` shows the session actions and numeric title suffix. `session-removal-390.png` shows the mobile confirmation.

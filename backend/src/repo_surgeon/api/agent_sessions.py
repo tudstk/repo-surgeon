@@ -10,7 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Header, Query, Response, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 from repo_surgeon.agent.provider import deterministic_read_only_provider
 from repo_surgeon.api.dependencies import (
@@ -23,6 +23,8 @@ from repo_surgeon.application.agent_sessions import (
     CreateConversationSession,
     EventCursorInvalidError,
     RunPersistedReadOnlyTurn,
+    SessionBusyError,
+    SessionTitleConflictError,
     TurnExecutionError,
 )
 from repo_surgeon.domain.sessions import AgentRun, ConversationSession, NormalizedRunEvent
@@ -34,7 +36,14 @@ router = APIRouter(prefix="/api/v1", tags=["agent sessions"])
 
 class CreateSessionRequest(BaseModel):
     repository_id: UUID
-    title: str = Field(min_length=1, max_length=200)
+    title: (
+        Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+        | None
+    ) = None
+
+
+class RenameSessionRequest(BaseModel):
+    title: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 
 
 class SessionResponse(BaseModel):
@@ -165,6 +174,53 @@ async def get_session(
         **session.model_dump(),
         turns=[PersistedTurnResponse.from_domain(run) for run in detail.runs],
     )
+
+
+@router.patch("/sessions/{session_id}", response_model=SessionResponse)
+async def rename_session(
+    session_id: UUID,
+    body: RenameSessionRequest,
+    response: Response,
+    principal: MutationPrincipal,
+    database: DatabaseSession,
+) -> SessionResponse:
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        renamed = await SqlAlchemyAgentSessionStore(database, principal.user_id).rename_session(
+            session_id, body.title, datetime.now(UTC)
+        )
+    except SessionTitleConflictError as error:
+        raise problem(
+            code="session_title_conflict",
+            title="Session name already used",
+            status=409,
+            detail="This repository already has a session with that name. Choose another name.",
+        ) from error
+    if renamed is None:
+        raise _session_not_found()
+    return SessionResponse.from_domain(renamed)
+
+
+@router.post("/sessions/{session_id}/archive", status_code=204)
+async def archive_session(
+    session_id: UUID,
+    principal: MutationPrincipal,
+    database: DatabaseSession,
+) -> Response:
+    try:
+        archived = await SqlAlchemyAgentSessionStore(database, principal.user_id).archive_session(
+            session_id, datetime.now(UTC)
+        )
+    except SessionBusyError as error:
+        raise problem(
+            code="session_busy",
+            title="Session is running",
+            status=409,
+            detail="Wait for the current inspection to finish before removing this session.",
+        ) from error
+    if not archived:
+        raise _session_not_found()
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
 
 @router.post(
