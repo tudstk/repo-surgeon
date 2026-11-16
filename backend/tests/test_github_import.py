@@ -119,6 +119,10 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
             (root / "empty").mkdir()
             (root / "linked").symlink_to(tmp_path, target_is_directory=True)
             (root / "src" / "binary.png").write_bytes(b"\x00")
+            (root / "src" / "local.key").write_text("private-value")
+            (root / "src" / "key-material.txt").write_text(
+                "-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-value"
+            )
             (root / "src" / "unicode.md").write_text("# Unicode", encoding="utf-16")
             (root / "src" / "long.txt").write_text("line\n" * 201)
             (root / "src" / "large.txt").write_bytes(b"a" * (64 * 1024 + 1))
@@ -155,6 +159,8 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
                 ("../outside.py", 404),
                 ("secret-folder/inside.py", 404),
                 ("linked/outside.py", 404),
+                ("src/local.key", 404),
+                ("src/key-material.txt", 404),
                 ("src/large.txt", 413),
                 ("src/binary.png", 415),
             ]:

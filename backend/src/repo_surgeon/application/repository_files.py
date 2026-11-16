@@ -6,6 +6,7 @@ import codecs
 import fnmatch
 import hashlib
 import os
+import re
 import stat
 from contextlib import ExitStack
 from dataclasses import dataclass
@@ -18,6 +19,10 @@ MAX_FILE_BYTES = 64 * 1024
 MAX_LINE_COUNT = 200
 BROWSER_PAGE_SIZE = 100
 BROWSER_SCAN_LIMIT = 10_000
+_PRIVATE_KEY_HEADER = re.compile(
+    r"^[ \t]*(?:-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY(?: BLOCK)?-----|PuTTY-User-Key-File-[23]:)",
+    re.MULTILINE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -274,6 +279,9 @@ class ConfinedRepositoryFiles:
         if "\x00" in text:
             raise RepositoryFileError("binary_file", "The requested file is binary.")
 
+        if _PRIVATE_KEY_HEADER.search(text):
+            raise RepositoryFileError("unsafe_path", "The requested file is not available.")
+
         all_lines = text.splitlines()
         requested_end = end_line if end_line is not None else start_line + MAX_LINE_COUNT - 1
         selected_end = min(requested_end, start_line + MAX_LINE_COUNT - 1, len(all_lines))
@@ -421,6 +429,8 @@ class ConfinedRepositoryFiles:
             "id_ecdsa",
             "id_ed25519",
         }:
+            raise RepositoryFileError("unsafe_path", "The requested path is not available.")
+        if PurePath(filename).suffix in {".key", ".p12", ".pfx", ".ppk"}:
             raise RepositoryFileError("unsafe_path", "The requested path is not available.")
         if any(
             marker in component
