@@ -145,6 +145,62 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
                 "/api/v1/repositories/github/import", json={"full_name": "owner/project"}
             )
             assert reimported.json() == repository
+            (root / ".env").write_text("private-value")
+            (root / "secret-folder").mkdir()
+            (root / "secret-folder" / "inside.py").write_text("private-value")
+            (root / "empty").mkdir()
+            (root / "linked").symlink_to(tmp_path, target_is_directory=True)
+            (root / "src" / "binary.png").write_bytes(b"\x00")
+            (root / "src" / "local.key").write_text("private-value")
+            (root / "src" / "key-material.txt").write_text(
+                "-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-value"
+            )
+            (root / "src" / "unicode.md").write_text("# Unicode", encoding="utf-16")
+            (root / "src" / "long.txt").write_text("line\n" * 501)
+            (root / "src" / "large.txt").write_bytes(b"a" * (64 * 1024 + 1))
+            tree = await client.get(repository_url + "/tree")
+            assert tree.headers["cache-control"] == "no-store"
+            assert [(entry["name"], entry["kind"]) for entry in tree.json()["entries"]] == [
+                ("empty", "directory"),
+                ("src", "directory"),
+            ]
+            children = await client.get(repository_url + "/tree", params={"directory": "src"})
+            assert children.json()["entries"][0]["path"] == "src/binary.png"
+            preview = await client.get(repository_url + "/file", params={"path": "src/main.py"})
+            assert preview.headers["cache-control"] == "no-store"
+            assert preview.json() == {
+                "path": "src/main.py",
+                "start_line": 1,
+                "end_line": 1,
+                "has_more": False,
+                "lines": ["print('hello')"],
+            }
+            unicode_preview = await client.get(
+                repository_url + "/file", params={"path": "src/unicode.md"}
+            )
+            assert unicode_preview.json()["lines"] == ["# Unicode"]
+            long = await client.get(repository_url + "/file", params={"path": "src/long.txt"})
+            assert len(long.json()["lines"]) == 500 and long.json()["has_more"]
+            last = await client.get(
+                repository_url + "/file",
+                params={"path": "src/long.txt", "start_line": 501},
+            )
+            assert last.json()["lines"] == ["line"] and not last.json()["has_more"]
+            for path, status in [
+                (".env", 404),
+                ("../outside.py", 404),
+                ("secret-folder/inside.py", 404),
+                ("linked/outside.py", 404),
+                ("src/local.key", 404),
+                ("src/key-material.txt", 404),
+                ("src/large.txt", 413),
+                ("src/binary.png", 415),
+            ]:
+                refused = await client.get(repository_url + "/file", params={"path": path})
+                assert refused.status_code == status
+                assert "private-value" not in refused.text
+            refused = await client.get(repository_url + "/tree", params={"directory": "linked"})
+            assert refused.status_code == 404
             assert (await client.get("/api/v1/repositories")).json() == [repository]
             assert (await client.post(visibility, json={"hidden": True})).status_code == 204
             assert (await client.post(visibility, json={"hidden": False})).status_code == 204
@@ -287,6 +343,11 @@ async def test_public_import_requires_csrf_and_isolates_accounts(tmp_path: Path)
                 await client.post(f"/api/v1/repositories/{first_id}/recover")
             ).status_code == 404
             assert (await client.get(f"/api/v1/repositories/{first_id}/summary")).status_code == 404
+            assert (await client.get(f"/api/v1/repositories/{first_id}/tree")).status_code == 404
+            foreign_file = await client.get(
+                f"/api/v1/repositories/{first_id}/file", params={"path": "src/main.py"}
+            )
+            assert foreign_file.status_code == 404
             second = await client.post(endpoint, json=body)
             assert second.status_code == 200, second.text
             assert second.json()["id"] != first_id

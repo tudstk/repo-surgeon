@@ -205,3 +205,47 @@ export async function removeProductSession(sessionId: string, csrfToken: string)
     );
   }
 }
+
+export type RepositoryTreeEntry = {
+  name: string;
+  path: string;
+  kind: 'directory' | 'file';
+};
+
+export type RepositoryTreePage = {
+  entries: RepositoryTreeEntry[];
+  next_offset: number | null;
+  scan_limit_reached: boolean;
+};
+
+export type RepositoryFilePreview = {
+  path: string;
+  start_line: number;
+  end_line: number;
+  lines: string[];
+  has_more: boolean;
+};
+
+export function getRepositoryTree(
+  repositoryId: string,
+  directory: string,
+  offset: number,
+  signal: AbortSignal,
+) {
+  const query = new URLSearchParams({ directory, offset: String(offset) });
+  return requestJson<RepositoryTreePage>(`/api/v1/repositories/${repositoryId}/tree?${query}`, {
+    signal,
+  });
+}
+
+export function getRepositoryFile(
+  repositoryId: string,
+  path: string,
+  startLine: number,
+  signal: AbortSignal,
+) {
+  const query = new URLSearchParams({ path, start_line: String(startLine) });
+  return requestJson<RepositoryFilePreview>(`/api/v1/repositories/${repositoryId}/file?${query}`, {
+    signal,
+  });
+}

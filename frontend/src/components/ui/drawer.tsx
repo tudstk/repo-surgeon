@@ -40,8 +40,11 @@ export function Drawer({
             'button:not(:disabled), a[href], textarea:not(:disabled), [tabindex="0"]',
           ),
         );
-        const first = controls[0];
-        const last = controls.at(-1);
+        const visible = controls.filter(
+          (control) => control.tabIndex >= 0 && control.getClientRects().length,
+        );
+        const first = visible[0];
+        const last = visible.at(-1);
         if (event.shiftKey && document.activeElement === first) {
           event.preventDefault();
           last?.focus();

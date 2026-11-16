@@ -7,7 +7,8 @@ import { Drawer } from '@/components/ui/drawer';
 import { RowActions } from '@/components/ui/row-actions';
 import { SessionActionDialog } from '@/components/ui/session-action-dialog';
 import { RepositoryRemovalDialog } from '@/components/ui/repository-removal-dialog';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { RepositoryCode } from './repository-code';
 import { GitHubRepositoryPicker } from './github-repository-picker';
 
 import {
@@ -69,6 +70,13 @@ function eventMessage(event: RunEvent) {
   return 'Saved run activity';
 }
 
+const minWorkWidth = 20;
+const maxWorkWidth = 50;
+
+function clampWorkWidth(width: number) {
+  return Math.min(maxWorkWidth, Math.max(minWorkWidth, width));
+}
+
 export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrfToken: string }) {
   const [removingId, setRemovingId] = useState<string | null>(null);
   const visibilityPending = useRef(false);
@@ -85,7 +93,12 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   const [repositoryActionError, setRepositoryActionError] = useState<string | null>(null);
   const [repositoriesExpanded, setRepositoriesExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
-  const [drawer, setDrawer] = useState<'repositories' | 'events' | null>(null);
+  const [drawer, setDrawer] = useState<'repositories' | 'work' | null>(null);
+  const [workTab, setWorkTab] = useState<'code' | 'activity'>('code');
+  const [workWidth, setWorkWidth] = useState(40);
+  const [resizingWork, setResizingWork] = useState(false);
+  const workDrag = useRef<{ pointerId: number; x: number; width: number } | null>(null);
+  const workTabsId = useId();
   const closeDrawer = useCallback(() => setDrawer(null), []);
   const [showRepositoryPicker, setShowRepositoryPicker] = useState(false);
   const [repositories, setRepositories] = useState<OwnedRepository[]>([]);
@@ -598,6 +611,22 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           <>
             <dl>
               <div>
+                <dt>Confidence</dt>
+                <dd>{summary.language_confidence ?? 'Unknown'}</dd>
+              </div>
+              <div>
+                <dt>Files</dt>
+                <dd>{summary.file_count}</dd>
+              </div>
+              <div>
+                <dt>Size</dt>
+                <dd>{formatLines(summary.approximate_lines)}</dd>
+              </div>
+              <div>
+                <dt>Tests detected</dt>
+                <dd>{summary.test_framework ?? 'Not detected'}</dd>
+              </div>
+              <div>
                 <dt>Languages</dt>
                 <dd className="language-list">
                   {Object.entries(summary.languages ?? {}).length
@@ -621,22 +650,6 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                       ))
                     : (summary.language ?? 'Not detected')}
                 </dd>
-              </div>
-              <div>
-                <dt>Confidence</dt>
-                <dd>{summary.language_confidence ?? 'Unknown'}</dd>
-              </div>
-              <div>
-                <dt>Files</dt>
-                <dd>{summary.file_count}</dd>
-              </div>
-              <div>
-                <dt>Size</dt>
-                <dd>{formatLines(summary.approximate_lines)}</dd>
-              </div>
-              <div>
-                <dt>Tests detected</dt>
-                <dd>{summary.test_framework ?? 'Not detected'}</dd>
               </div>
             </dl>
             {summary.test_command ? (
@@ -723,6 +736,68 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     </>
   );
 
+  const workPane = (
+    <>
+      <div className="work-tabs" role="tablist" aria-label="Repository work panel">
+        {(['code', 'activity'] as const).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            id={`${workTabsId}-${tab}`}
+            aria-controls={`${workTabsId}-${tab}-panel`}
+            aria-selected={workTab === tab}
+            tabIndex={workTab === tab ? 0 : -1}
+            onClick={() => setWorkTab(tab)}
+            onKeyDown={(event) => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              const next =
+                event.key === 'Home'
+                  ? 'code'
+                  : event.key === 'End'
+                    ? 'activity'
+                    : tab === 'code'
+                      ? 'activity'
+                      : 'code';
+              setWorkTab(next);
+              document.getElementById(`${workTabsId}-${next}`)?.focus();
+            }}
+          >
+            <Icon name={tab} />
+            {tab === 'code' ? 'Code' : 'Activity'}
+            {tab === 'activity' && events.length ? (
+              <span className="count" aria-hidden="true">
+                {events.length}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+      <div
+        className="work-tab-panel"
+        role="tabpanel"
+        id={`${workTabsId}-code-panel`}
+        aria-labelledby={`${workTabsId}-code`}
+        hidden={workTab !== 'code'}
+      >
+        <RepositoryCode
+          key={`${selectedRepositoryId ?? ''}-${attempt}`}
+          repositoryId={selectedRepositoryId ?? undefined}
+        />
+      </div>
+      <div
+        className="work-tab-panel"
+        role="tabpanel"
+        id={`${workTabsId}-activity-panel`}
+        aria-labelledby={`${workTabsId}-activity`}
+        hidden={workTab !== 'activity'}
+      >
+        {eventPane}
+      </div>
+    </>
+  );
+
   return (
     <main className="workspace-shell">
       <AppHeader active="workspace" user={user} />
@@ -752,12 +827,16 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           <Icon name="repo" />
           Repositories
         </button>
-        <button type="button" aria-haspopup="dialog" onClick={() => setDrawer('events')}>
-          <Icon name="activity" />
-          Run events<span className="count">{events.length}</span>
+        <button type="button" aria-haspopup="dialog" onClick={() => setDrawer('work')}>
+          <Icon name="code" />
+          Code &amp; activity
         </button>
       </div>
-      <div className="workspace-grid">
+      <div
+        className="workspace-grid"
+        style={{ '--work-width': `${workWidth}vw` } as React.CSSProperties}
+        data-resizing-work={resizingWork}
+      >
         <aside className="repo-panel" aria-label="Repositories and sessions">
           {drawer === 'repositories' ? null : repositoryPane}
         </aside>
@@ -918,16 +997,56 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             </div>
           </form>
         </section>
-        <section className="work-panel" aria-label="Run events">
-          {drawer === 'events' ? null : eventPane}
+        <section className="work-panel" aria-label="Code and activity" id={`${workTabsId}-pane`}>
+          <div
+            className="work-resize"
+            role="separator"
+            aria-orientation="vertical"
+            tabIndex={0}
+            aria-label="Resize Code and Activity"
+            aria-controls={`${workTabsId}-pane`}
+            aria-valuemin={minWorkWidth}
+            aria-valuemax={maxWorkWidth}
+            aria-valuenow={Math.round(workWidth)}
+            aria-valuetext={`${Math.round(workWidth)}% of viewport`}
+            onPointerDown={(event) => {
+              if (event.button !== 0 || workDrag.current) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              event.currentTarget.focus({ preventScroll: true });
+              workDrag.current = { pointerId: event.pointerId, x: event.clientX, width: workWidth };
+              setResizingWork(true);
+            }}
+            onPointerMove={(event) => {
+              const drag = workDrag.current;
+              if (drag?.pointerId !== event.pointerId) return;
+              setWorkWidth(
+                clampWorkWidth(drag.width + ((drag.x - event.clientX) / window.innerWidth) * 100),
+              );
+            }}
+            onLostPointerCapture={(event) => {
+              if (workDrag.current?.pointerId !== event.pointerId) return;
+              workDrag.current = null;
+              setResizingWork(false);
+            }}
+            onKeyDown={(event) => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+              event.preventDefault();
+              setWorkWidth((width) => {
+                if (event.key === 'Home') return minWorkWidth;
+                if (event.key === 'End') return maxWorkWidth;
+                return clampWorkWidth(width + (event.key === 'ArrowLeft' ? 2 : -2));
+              });
+            }}
+          />
+          {drawer === 'work' ? null : workPane}
         </section>
       </div>
       {drawer ? (
         <Drawer
-          title={drawer === 'repositories' ? 'Repositories and sessions' : 'Run events'}
+          title={drawer === 'repositories' ? 'Repositories and sessions' : 'Code and activity'}
           onClose={closeDrawer}
         >
-          {drawer === 'repositories' ? repositoryPane : eventPane}
+          {drawer === 'repositories' ? repositoryPane : workPane}
         </Drawer>
       ) : null}
       {sessionAction ? (

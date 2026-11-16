@@ -49,6 +49,9 @@ describe('authenticated workspace', () => {
         return Promise.resolve(json([]));
       }
       if (input === '/api/v1/sessions/session-1') return repositoryOneDetail;
+      if (typeof input === 'string' && input.includes('/tree?')) {
+        return Promise.resolve(json({ entries: [], next_offset: null, scan_limit_reached: false }));
+      }
       throw new Error(`Unexpected request: ${input}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -94,6 +97,9 @@ describe('authenticated workspace', () => {
       }
       if (input.startsWith('/api/v1/sessions?')) return Promise.resolve(json([]));
       if (input === '/api/v1/sessions' && init?.method === 'POST') return createSessionResponse;
+      if (typeof input === 'string' && input.includes('/tree?')) {
+        return Promise.resolve(json({ entries: [], next_offset: null, scan_limit_reached: false }));
+      }
       throw new Error(`Unexpected request: ${input}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -140,6 +146,9 @@ describe('authenticated workspace', () => {
       if (input === '/api/v1/sessions?repository_id=repository-1') {
         return Promise.resolve(json([]));
       }
+      if (typeof input === 'string' && input.includes('/tree?')) {
+        return Promise.resolve(json({ entries: [], next_offset: null, scan_limit_reached: false }));
+      }
       throw new Error(`Unexpected request: ${input}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -182,6 +191,9 @@ describe('authenticated workspace', () => {
       }
       if (input === '/api/v1/sessions/session-1') {
         return Promise.resolve(json({ ...persistedSession, turns: [] }));
+      }
+      if (typeof input === 'string' && input.includes('/tree?')) {
+        return Promise.resolve(json({ entries: [], next_offset: null, scan_limit_reached: false }));
       }
       throw new Error(`Unexpected request: ${input}`);
     });
@@ -273,6 +285,9 @@ describe('authenticated workspace', () => {
           }),
         );
       }
+      if (typeof input === 'string' && input.includes('/tree?')) {
+        return Promise.resolve(json({ entries: [], next_offset: null, scan_limit_reached: false }));
+      }
       throw new Error(`Unexpected request: ${input}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -290,7 +305,8 @@ describe('authenticated workspace', () => {
     );
 
     expect(await screen.findByText(/bounded read-only inspection/i)).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Run events' })).toHaveTextContent('run.completed');
+    fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
+    expect(screen.getByRole('tabpanel', { name: 'Activity' })).toHaveTextContent('run.completed');
     expect(screen.getByText(/Proposals and test execution are not available/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Send instruction' }));

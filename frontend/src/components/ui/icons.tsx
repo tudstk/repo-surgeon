@@ -5,6 +5,9 @@ export function Icon({
   name:
     | 'chevron'
     | 'repo'
+    | 'code'
+    | 'folder'
+    | 'file'
     | 'activity'
     | 'shield'
     | 'arrow'
@@ -19,6 +22,9 @@ export function Icon({
   className?: string;
 }) {
   const paths = {
+    code: 'm8 6-6 6 6 6m8-12 6 6-6 6m-2-15-4 18',
+    folder: 'M3 6h7l2 3h9v10H3z',
+    file: 'M6 3h8l4 4v14H6zm8 0v5h4',
     chevron: 'm9 5 7 7-7 7',
     user: 'M8 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0ZM4 21v-2a8 8 0 0 1 16 0v2',
     settings:
