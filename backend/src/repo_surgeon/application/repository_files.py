@@ -17,6 +17,7 @@ MAX_FILE_COUNT = 200
 MAX_DIRECTORY_COUNT = 2_000
 MAX_FILE_BYTES = 64 * 1024
 MAX_LINE_COUNT = 200
+MAX_PREVIEW_LINES = 500
 BROWSER_PAGE_SIZE = 100
 BROWSER_SCAN_LIMIT = 10_000
 _PRIVATE_KEY_HEADER = re.compile(
@@ -258,6 +259,7 @@ class ConfinedRepositoryFiles:
         end_line: int | None = None,
         *,
         allow_unicode_bom: bool = False,
+        max_lines: int = MAX_LINE_COUNT,
     ) -> FileRead:
         """Read from a root-anchored descriptor after canonical policy checks."""
         candidate, relative = self._resolve_requested_path(path)
@@ -283,8 +285,9 @@ class ConfinedRepositoryFiles:
             raise RepositoryFileError("unsafe_path", "The requested file is not available.")
 
         all_lines = text.splitlines()
-        requested_end = end_line if end_line is not None else start_line + MAX_LINE_COUNT - 1
-        selected_end = min(requested_end, start_line + MAX_LINE_COUNT - 1, len(all_lines))
+        last_allowed = start_line + min(max_lines, MAX_PREVIEW_LINES) - 1
+        requested_end = end_line if end_line is not None else last_allowed
+        selected_end = min(requested_end, last_allowed, len(all_lines))
         if start_line > len(all_lines):
             selected_end = start_line - 1
         lines = tuple(

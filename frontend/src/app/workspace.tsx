@@ -498,6 +498,22 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           <>
             <dl>
               <div>
+                <dt>Confidence</dt>
+                <dd>{summary.language_confidence ?? 'Unknown'}</dd>
+              </div>
+              <div>
+                <dt>Files</dt>
+                <dd>{summary.file_count}</dd>
+              </div>
+              <div>
+                <dt>Size</dt>
+                <dd>{formatLines(summary.approximate_lines)}</dd>
+              </div>
+              <div>
+                <dt>Tests detected</dt>
+                <dd>{summary.test_framework ?? 'Not detected'}</dd>
+              </div>
+              <div>
                 <dt>Languages</dt>
                 <dd className="language-list">
                   {Object.entries(summary.languages ?? {}).length
@@ -521,22 +537,6 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                       ))
                     : (summary.language ?? 'Not detected')}
                 </dd>
-              </div>
-              <div>
-                <dt>Confidence</dt>
-                <dd>{summary.language_confidence ?? 'Unknown'}</dd>
-              </div>
-              <div>
-                <dt>Files</dt>
-                <dd>{summary.file_count}</dd>
-              </div>
-              <div>
-                <dt>Size</dt>
-                <dd>{formatLines(summary.approximate_lines)}</dd>
-              </div>
-              <div>
-                <dt>Tests detected</dt>
-                <dd>{summary.test_framework ?? 'Not detected'}</dd>
               </div>
             </dl>
             {summary.test_command ? (

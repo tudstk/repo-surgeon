@@ -179,8 +179,8 @@ function FilePreview({ repositoryId, path }: { repositoryId: string; path: strin
   const [file, setFile] = useState<RepositoryFilePreview>();
   const [error, setError] = useState<string>();
   const scroll = useRef<HTMLDivElement>(null);
-  const more = useRef<HTMLButtonElement>(null);
-  const loading = !error && (!file || (file.has_more && start > file.end_line));
+  const pendingMore = useRef(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -197,12 +197,15 @@ function FilePreview({ repositoryId, path }: { repositoryId: string; path: strin
               }
             : next,
         );
-        if (!next.has_more && more.current === document.activeElement) {
-          scroll.current?.focus({ preventScroll: true });
-        }
+        pendingMore.current = false;
+        setLoadingMore(false);
+        setError(undefined);
       },
       (cause: unknown) => {
-        if (!controller.signal.aborted) setError(errorMessage(cause, 'Could not open this file.'));
+        if (controller.signal.aborted) return;
+        pendingMore.current = false;
+        setLoadingMore(false);
+        setError(errorMessage(cause, 'Could not open this file.'));
       },
     );
     return () => controller.abort();
@@ -234,45 +237,48 @@ function FilePreview({ repositoryId, path }: { repositoryId: string; path: strin
     return <p className="source-preview-message">This file has no previewable lines.</p>;
   }
   return (
-    <>
-      <div
-        className="source-code-scroll"
-        ref={scroll}
-        tabIndex={0}
-        role="region"
-        aria-label="File contents"
-      >
-        <div className="source-code-lines" aria-hidden="true">
-          {file.lines.map((_, index) => (
-            <div key={index}>{file.start_line + index}</div>
-          ))}
-        </div>
-        <pre>
-          <code>
-            {code}
-            {'\n'}
-          </code>
-        </pre>
+    <div
+      className="source-code-scroll"
+      ref={scroll}
+      tabIndex={0}
+      role="region"
+      aria-label="File contents"
+    >
+      <div className="source-code-lines" aria-hidden="true">
+        {file.lines.map((_, index) => (
+          <div key={index}>{file.start_line + index}</div>
+        ))}
       </div>
+      <pre>
+        <code>
+          {code}
+          {'\n'}
+        </code>
+      </pre>
       {file.has_more ? (
         <div className="source-code-more">
           {error ? <p role="alert">{error}</p> : null}
-          <button
-            ref={more}
-            type="button"
-            className="secondary-button"
-            aria-disabled={loading}
-            onClick={() => {
-              if (loading) return;
-              if (error) retry();
-              else setStart(file.end_line + 1);
-            }}
-          >
-            {loading ? 'Loading lines…' : 'View more'}
-          </button>
+          {loadingMore ? (
+            <span role="status">Loading lines…</span>
+          ) : (
+            <button
+              type="button"
+              className="source-more-link"
+              onClick={() => {
+                if (pendingMore.current) return;
+                pendingMore.current = true;
+                setLoadingMore(true);
+                scroll.current?.focus({ preventScroll: true });
+                if (error) setAttempt((value) => value + 1);
+                else setStart(file.end_line + 1);
+              }}
+            >
+              View more
+            </button>
+          )}
         </div>
       ) : null}
-    </>
+    </div>
   );
 }
 

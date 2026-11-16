@@ -124,7 +124,7 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
                 "-----BEGIN OPENSSH PRIVATE KEY-----\nprivate-value"
             )
             (root / "src" / "unicode.md").write_text("# Unicode", encoding="utf-16")
-            (root / "src" / "long.txt").write_text("line\n" * 201)
+            (root / "src" / "long.txt").write_text("line\n" * 501)
             (root / "src" / "large.txt").write_bytes(b"a" * (64 * 1024 + 1))
             tree = await client.get(repository_url + "/tree")
             assert tree.headers["cache-control"] == "no-store"
@@ -148,10 +148,10 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
             )
             assert unicode_preview.json()["lines"] == ["# Unicode"]
             long = await client.get(repository_url + "/file", params={"path": "src/long.txt"})
-            assert len(long.json()["lines"]) == 200 and long.json()["has_more"]
+            assert len(long.json()["lines"]) == 500 and long.json()["has_more"]
             last = await client.get(
                 repository_url + "/file",
-                params={"path": "src/long.txt", "start_line": 201},
+                params={"path": "src/long.txt", "start_line": 501},
             )
             assert last.json()["lines"] == ["line"] and not last.json()["has_more"]
             for path, status in [

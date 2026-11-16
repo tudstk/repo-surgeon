@@ -623,6 +623,13 @@ for (const width of [1440, 390]) {
     if (width === 390)
       await page.getByRole('button', { name: 'Repositories', exact: true }).click();
     const summary = page.getByRole('region', { name: 'Repository summary' });
+    await expect(summary.locator('dt')).toHaveText([
+      'Confidence',
+      'Files',
+      'Size',
+      'Tests detected',
+      'Languages',
+    ]);
     await expect(summary.getByText('75.0%')).toBeVisible();
     await expect(summary.getByText('25.0%')).toBeVisible();
     await expect(summary.getByText('Partial scan', { exact: true })).toHaveCount(0);
@@ -793,22 +800,40 @@ for (const width of [1440, 390]) {
       return route.fulfill({ json: { entries, next_offset: null, scan_limit_reached: false } });
     });
     let failNext = true;
-    await page.route('**/api/v1/repositories/*/file?*', (route) => {
+    let requestsForSecondBatch = 0;
+    let finishFirstRequest!: () => void;
+    const firstRequest = new Promise<void>((resolve) => {
+      finishFirstRequest = resolve;
+    });
+    await page.route('**/api/v1/repositories/*/file?*', async (route) => {
       const query = new URL(route.request().url()).searchParams;
       const path = query.get('path');
       if (path === 'src/logo.png') {
         return route.fulfill({ status: 415, json: { detail: 'The requested file is binary.' } });
       }
-      if (query.get('start_line') === '201') {
+      if (query.get('start_line') === '501') {
+        requestsForSecondBatch++;
         if (failNext) {
           failNext = false;
+          await firstRequest;
           return route.fulfill({ status: 503, json: { detail: 'Could not load more lines.' } });
         }
         return route.fulfill({
           json: {
             path,
-            start_line: 201,
-            end_line: 201,
+            start_line: 501,
+            end_line: 1000,
+            has_more: true,
+            lines: Array.from({ length: 500 }, (_, index) => `// Example line ${index + 501}`),
+          },
+        });
+      }
+      if (query.get('start_line') === '1001') {
+        return route.fulfill({
+          json: {
+            path,
+            start_line: 1001,
+            end_line: 1001,
             has_more: false,
             lines: ['export const lastLine = true;'],
           },
@@ -819,14 +844,14 @@ for (const width of [1440, 390]) {
         json: {
           path,
           start_line: 1,
-          end_line: 200,
+          end_line: 500,
           has_more: true,
           lines: [
             'export function describeRepository(name: string) {',
             '  const message = "Inspecting repository";',
             '  return { name, message, readOnly: true };',
             '}',
-            ...Array.from({ length: 196 }, (_, index) => `// Example line ${index + 5}`),
+            ...Array.from({ length: 496 }, (_, index) => `// Example line ${index + 5}`),
           ],
         },
       });
@@ -854,22 +879,38 @@ for (const width of [1440, 390]) {
     ).toHaveText('export');
     const contents = page.getByRole('region', { name: 'File contents' });
     const viewMore = page.getByRole('button', { name: 'View more' });
-    if (!mobile) {
-      await expect(viewMore).toBeVisible();
-      await capture(page, testInfo, 'work-pane-view-more');
-    }
-    await contents.evaluate((element) => {
-      element.scrollTop = 200;
+    const scrollToEnd = () =>
+      contents.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+    await expect(viewMore).not.toBeInViewport();
+    await scrollToEnd();
+    await expect(viewMore).toBeInViewport();
+    if (!mobile) await capture(page, testInfo, 'work-pane-view-more');
+    await viewMore.evaluate((element: HTMLButtonElement) => {
+      element.click();
+      element.click();
     });
+    try {
+      await expect(viewMore).toHaveCount(0);
+      await expect(contents.getByRole('status')).toHaveText('Loading lines…');
+      await expect.poll(() => requestsForSecondBatch).toBe(1);
+    } finally {
+      finishFirstRequest();
+    }
+    await expect(contents.getByRole('alert')).toHaveText('Could not load more lines.');
+    await expect(contents).toContainText('Example line 500');
+    await scrollToEnd();
+    const position = await contents.evaluate((element) => element.scrollTop);
     await viewMore.click();
-    await expect(page.getByRole('region', { name: 'Code preview' }).getByRole('alert')).toHaveText(
-      'Could not load more lines.',
-    );
-    await expect(contents).toContainText('Example line 200');
+    await expect(contents).toContainText('Example line 1000');
+    await expect(contents).toContainText('describeRepository');
+    expect(await contents.evaluate((element) => element.scrollTop)).toBe(position);
+    await expect(viewMore).not.toBeInViewport();
+    await scrollToEnd();
+    await expect(viewMore).toBeInViewport();
     await viewMore.click();
     await expect(contents).toContainText('lastLine');
-    await expect(contents).toContainText('describeRepository');
-    expect(await contents.evaluate((element) => element.scrollTop)).toBe(200);
     await expect(viewMore).toHaveCount(0);
     await contents.evaluate((element) => {
       element.scrollTop = 0;

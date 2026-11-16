@@ -21,6 +21,7 @@ from repo_surgeon.application.repositories import (
 from repo_surgeon.application.repository_files import (
     BROWSER_SCAN_LIMIT,
     MAX_FILE_BYTES,
+    MAX_PREVIEW_LINES,
     ConfinedRepositoryFiles,
     DirectoryPage,
     FileRead,
@@ -276,7 +277,9 @@ async def preview_owned_repository_file(
         raise _not_found()
 
     def read() -> FileRead:
-        return _repository_browser(repository).read_file(path, start_line, allow_unicode_bom=True)
+        return _repository_browser(repository).read_file(
+            path, start_line, allow_unicode_bom=True, max_lines=MAX_PREVIEW_LINES
+        )
 
     try:
         return FilePreviewResponse.from_read(await asyncio.to_thread(read))

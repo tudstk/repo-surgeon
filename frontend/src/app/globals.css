@@ -1742,10 +1742,12 @@ code {
   font-weight: 600;
 }
 .source-code-scroll {
-  display: flex;
+  display: grid;
+  grid-template-columns: max-content max-content;
+  align-content: start;
   flex: 1;
-  align-items: flex-start;
   overflow: auto;
+  overflow-anchor: none;
   min-height: 0;
   min-width: 0;
   font: 12px/22px var(--font-mono);
@@ -1771,19 +1773,27 @@ code {
   font: inherit;
 }
 .source-code-more {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 8px;
-  border-top: 1px solid var(--border);
+  position: sticky;
+  left: 0;
+  grid-column: 1 / -1;
+  justify-self: start;
+  padding: 0 12px 8px 40px;
   color: var(--muted);
-  font-size: 12px;
+  font: 12px/22px var(--font-sans);
 }
-.source-code-more [aria-disabled='true'] {
-  cursor: wait;
-  color: var(--muted);
+.source-code-more [role='status'],
+.source-more-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+}
+.source-more-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.source-more-link:hover {
+  color: var(--text);
 }
 .source-code-scroll .hljs-keyword,
 .source-code-scroll .hljs-selector-tag,
