@@ -10,6 +10,8 @@ import stat
 import tempfile
 import zipfile
 import zlib
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import UUID
@@ -116,96 +118,140 @@ class GitHubImporter:
 
     async def import_public(self, full_name: str, user_id: UUID) -> ImportedSnapshot:
         """Validate visibility, pin the default revision and download within a deadline."""
-        return await self._fetch_snapshot(full_name, user_id)
+        async with self._operation():
+            name, repository_id = await self._public_repository(full_name)
+            commit = await self._default_commit(name)
+            return await self._download_snapshot(user_id, repository_id, name, commit)
+
+    async def latest_commit(self, repository: Repository) -> str:
+        """Read the default branch tip of the same registered public repository."""
+        async with self._operation():
+            name, _ = await self._registered_public_repository(repository)
+            return await self._default_commit(name)
+
+    async def sync_public(self, repository: Repository) -> ImportedSnapshot | None:
+        """Import the latest revision only if it differs from the saved snapshot."""
+        async with self._operation():
+            name, repository_id = await self._registered_public_repository(repository)
+            latest = await self._default_commit(name)
+            if latest == repository.github_commit:
+                return None
+            return await self._download_snapshot(
+                repository.owner_user_id, repository_id, name, latest
+            )
 
     async def verify_saved(self, repository: Repository) -> ResolvedLocalRepositoryRoot:
         """Verify a stale binding against a fresh archive of the original public commit."""
+        commit = repository.github_commit
+        if commit is None or repository.root_inode is None:
+            raise GitHubImportError("This snapshot cannot be verified.")
+        async with self._operation():
+            name, repository_id = await self._registered_public_repository(repository)
+            snapshot = await self._download_snapshot(
+                repository.owner_user_id, repository_id, name, commit, verify=repository
+            )
+            return snapshot.root
+
+    async def _registered_public_repository(self, repository: Repository) -> tuple[str, int]:
+        commit = repository.github_commit
         if (
             repository.github_full_name is None
-            or repository.github_commit is None
-            or repository.root_inode is None
+            or not commit
+            or not re.fullmatch(r"[a-f0-9]{40}", commit)
         ):
-            raise GitHubImportError("This snapshot cannot be verified.")
-        result = await self._fetch_snapshot(
-            repository.github_full_name, repository.owner_user_id, verify=repository
-        )
-        return result.root
+            raise GitHubImportError("This GitHub snapshot has no valid saved revision.")
+        name, repository_id = await self._public_repository(repository.github_full_name)
+        registered_path = self.storage / str(repository.owner_user_id) / str(repository_id) / commit
+        if str(registered_path) != repository.canonical_root:
+            raise GitHubImportError("GitHub no longer matches the saved repository registration.")
+        return name, repository_id
 
-    async def _fetch_snapshot(
-        self, full_name: str, user_id: UUID, *, verify: Repository | None = None
-    ) -> ImportedSnapshot:
+    async def _public_repository(self, full_name: str) -> tuple[str, int]:
         if not re.fullmatch(FULL_NAME_PATTERN, full_name) or full_name.split("/")[1] in {".", ".."}:
             raise GitHubImportError("Choose an available public GitHub repository.")
+        metadata = await self.client.get(
+            f"https://api.github.com/repos/{full_name}",
+            headers={"Accept": "application/vnd.github+json"},
+        )
+        metadata.raise_for_status()
+        repo = metadata.json()
+        if (
+            not isinstance(repo, dict)
+            or repo.get("private") is not False
+            or repo.get("visibility") != "public"
+            or type(repo.get("id")) is not int
+            or repo["id"] <= 0
+            or not isinstance(repo.get("full_name"), str)
+            or not re.fullmatch(FULL_NAME_PATTERN, repo["full_name"])
+            or repo["full_name"].lower() != full_name.lower()
+        ):
+            raise GitHubImportError("Choose an available public GitHub repository.")
+        return str(repo["full_name"]), int(repo["id"])
+
+    async def _default_commit(self, name: str) -> str:
+        revision = await self.client.get(
+            f"https://api.github.com/repos/{name}/commits",
+            params={"per_page": 1},
+            headers={"Accept": "application/vnd.github+json"},
+        )
+        revision.raise_for_status()
+        revisions = revision.json()
+        commit = (
+            revisions[0].get("sha")
+            if isinstance(revisions, list) and revisions and isinstance(revisions[0], dict)
+            else None
+        )
+        if not isinstance(commit, str) or not re.fullmatch(r"[a-f0-9]{40}", commit):
+            raise GitHubImportError("The repository has no importable revision.")
+        return commit
+
+    async def _download_snapshot(
+        self,
+        user_id: UUID,
+        repository_id: int,
+        name: str,
+        commit: str,
+        *,
+        verify: Repository | None = None,
+    ) -> ImportedSnapshot:
+        payload = bytearray()
+        async with self.client.stream(
+            "GET", f"https://codeload.github.com/{name}/zip/{commit}"
+        ) as response:
+            response.raise_for_status()
+            length = response.headers.get("content-length", "")
+            if length.isdigit() and int(length) > MAX_ARCHIVE_BYTES:
+                raise GitHubImportError(
+                    f"Archive download is {int(length):,} bytes; "
+                    f"the limit is {MAX_ARCHIVE_BYTES:,} bytes (25 MiB)."
+                )
+            async for chunk in response.aiter_bytes(64 * 1024):
+                payload.extend(chunk)
+                if len(payload) > MAX_ARCHIVE_BYTES:
+                    raise GitHubImportError(
+                        f"Download exceeds the 25 MiB limit ({MAX_ARCHIVE_BYTES:,} bytes). "
+                        f"At least {len(payload):,} bytes were received; "
+                        "the full archive size is unknown because the download was stopped."
+                    )
+        # The deterministic destination makes retries and concurrent imports converge.
+        publication = asyncio.create_task(
+            asyncio.to_thread(
+                self._publish, bytes(payload), user_id, repository_id, name, commit, verify
+            )
+        )
+        try:
+            return await asyncio.shield(publication)
+        except asyncio.CancelledError:
+            # Keep the slot until bounded filesystem work and cleanup finish.
+            # Cancelling to_thread alone does not stop its worker thread.
+            await publication
+            raise
+
+    @asynccontextmanager
+    async def _operation(self) -> AsyncIterator[None]:
         try:
             async with asyncio.timeout(60), self.slots:
-                metadata = await self.client.get(
-                    f"https://api.github.com/repos/{full_name}",
-                    headers={"Accept": "application/vnd.github+json"},
-                )
-                metadata.raise_for_status()
-                repo = metadata.json()
-                if (
-                    not isinstance(repo, dict)
-                    or repo.get("private") is not False
-                    or repo.get("visibility") != "public"
-                    or type(repo.get("id")) is not int
-                    or repo["id"] <= 0
-                    or not isinstance(repo.get("full_name"), str)
-                    or not re.fullmatch(FULL_NAME_PATTERN, repo["full_name"])
-                ):
-                    raise GitHubImportError("Choose an available public GitHub repository.")
-                name = repo["full_name"]
-                if verify is not None:
-                    commit = verify.github_commit
-                else:
-                    revision = await self.client.get(
-                        f"https://api.github.com/repos/{name}/commits",
-                        params={"per_page": 1},
-                        headers={"Accept": "application/vnd.github+json"},
-                    )
-                    revision.raise_for_status()
-                    revisions = revision.json()
-                    commit = (
-                        revisions[0].get("sha")
-                        if isinstance(revisions, list)
-                        and revisions
-                        and isinstance(revisions[0], dict)
-                        else None
-                    )
-                if not isinstance(commit, str) or not re.fullmatch(r"[a-f0-9]{40}", commit):
-                    raise GitHubImportError("The repository has no importable revision.")
-                payload = bytearray()
-                async with self.client.stream(
-                    "GET", f"https://codeload.github.com/{name}/zip/{commit}"
-                ) as response:
-                    response.raise_for_status()
-                    length = response.headers.get("content-length", "")
-                    if length.isdigit() and int(length) > MAX_ARCHIVE_BYTES:
-                        raise GitHubImportError(
-                            f"Archive download is {int(length):,} bytes; "
-                            f"the limit is {MAX_ARCHIVE_BYTES:,} bytes (25 MiB)."
-                        )
-                    async for chunk in response.aiter_bytes(64 * 1024):
-                        payload.extend(chunk)
-                        if len(payload) > MAX_ARCHIVE_BYTES:
-                            raise GitHubImportError(
-                                f"Download exceeds the 25 MiB limit ({MAX_ARCHIVE_BYTES:,} bytes). "
-                                f"At least {len(payload):,} bytes were received; "
-                                "the full archive size is unknown because the download was stopped."
-                            )
-                # The deterministic destination makes retries and concurrent imports converge.
-                publication = asyncio.create_task(
-                    asyncio.to_thread(
-                        self._publish, bytes(payload), user_id, repo["id"], name, commit, verify
-                    )
-                )
-                try:
-                    return await asyncio.shield(publication)
-                except asyncio.CancelledError:
-                    # Keep the slot until bounded filesystem work and cleanup finish.
-                    # Cancelling to_thread alone does not stop its worker thread.
-                    await publication
-                    raise
+                yield
         except GitHubImportError:
             raise
         except httpx.HTTPStatusError as error:
@@ -220,7 +266,7 @@ class GitHubImporter:
                 messages.get(status, f"GitHub returned HTTP {status}. Retry later.")
             ) from None
         except httpx.TimeoutException, TimeoutError:
-            raise GitHubImportError("GitHub import timed out. Retry the import.") from None
+            raise GitHubImportError("The GitHub request timed out. Please retry.") from None
         except httpx.RequestError:
             raise GitHubImportError(
                 "The server could not connect to GitHub. Retry when the connection is available."

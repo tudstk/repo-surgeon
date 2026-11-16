@@ -1,6 +1,6 @@
 """SQLAlchemy adapter for registered repositories."""
 
-from datetime import UTC
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import select, update
@@ -81,6 +81,9 @@ class SqlAlchemyRepositoryStore:
             root_device=root.root_device,
             root_inode=root.root_inode,
         )
+        if source == RepositorySource.GITHUB:
+            # Keep successive snapshot registrations ordered even within the same second.
+            record.created_at = datetime.now(UTC)
         self._session.add(record)
         try:
             await self._session.commit()

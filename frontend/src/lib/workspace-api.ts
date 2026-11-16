@@ -249,3 +249,16 @@ export function getRepositoryFile(
     signal,
   });
 }
+
+export function getSnapshotSyncStatus(repositoryId: string, signal: AbortSignal) {
+  return requestJson<{ up_to_date: boolean }>(`/api/v1/repositories/${repositoryId}/sync-status`, {
+    signal,
+  });
+}
+
+export function syncRepositorySnapshot(repositoryId: string, csrfToken: string) {
+  return requestJson<OwnedRepository>(
+    `/api/v1/repositories/${repositoryId}/sync`,
+    mutationInit(csrfToken, {}),
+  );
+}

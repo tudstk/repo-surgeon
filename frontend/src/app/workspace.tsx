@@ -9,6 +9,7 @@ import { SessionActionDialog } from '@/components/ui/session-action-dialog';
 import { RepositoryRemovalDialog } from '@/components/ui/repository-removal-dialog';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { RepositoryCode } from './repository-code';
+import { GitHubSync } from './github-sync';
 import { GitHubRepositoryPicker } from './github-repository-picker';
 
 import {
@@ -118,6 +119,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   const [attempt, setAttempt] = useState(0);
   const workspaceRequestGeneration = useRef(0);
   const selectedRepositoryIdRef = useRef<string | null>(null);
+  const repositoryName = useRef<HTMLSpanElement>(null);
 
   const clearPrivateWorkspace = useCallback(() => {
     workspaceRequestGeneration.current += 1;
@@ -134,6 +136,24 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     () => repositories.find((repository) => repository.id === selectedRepositoryId) ?? null,
     [repositories, selectedRepositoryId],
   );
+  function openSnapshot(repository: OwnedRepository) {
+    workspaceRequestGeneration.current += 1;
+    selectedRepositoryIdRef.current = repository.id;
+    setRepositories((current) => [
+      ...current.filter((entry) => entry.id !== repository.id),
+      repository,
+    ]);
+    setSelectedRepositoryId(repository.id);
+    setSummary(null);
+    setSessions([]);
+    setSession(null);
+    setEvents([]);
+    setError(null);
+    setUnavailableRepositoryId(null);
+    setRepositoriesExpanded(true);
+    setAttempt((current) => current + 1);
+  }
+
   const latestTurn = session?.turns.at(-1) ?? null;
 
   const restoreSession = useCallback(
@@ -161,10 +181,16 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       .then((owned) => {
         if (controller.signal.aborted) return;
         const currentSelection = selectedRepositoryIdRef.current;
+        const first = owned[0];
+        const defaultSnapshot = first?.github_commit
+          ? owned
+              .filter((repository) => repository.github_commit && repository.name === first.name)
+              .at(-1)
+          : first;
         const nextSelection =
           currentSelection && owned.some((repository) => repository.id === currentSelection)
             ? currentSelection
-            : (owned[0]?.id ?? null);
+            : (defaultSnapshot?.id ?? null);
         if (nextSelection !== currentSelection) {
           workspaceRequestGeneration.current += 1;
           setSummary(null);
@@ -803,12 +829,28 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       <AppHeader active="workspace" user={user} />
       <div className="repository-context">
         <Icon name="repo" />
-        <span title={selectedRepository?.name}>{selectedRepository?.name ?? 'Your workspace'}</span>
-        <span className="context-caption">
-          {selectedRepository?.github_commit
-            ? `Snapshot ${selectedRepository.github_commit.slice(0, 7)} · Read-only`
-            : 'Repository files stay unchanged'}
+        <span ref={repositoryName} tabIndex={-1} title={selectedRepository?.name}>
+          {selectedRepository?.name ?? 'Your workspace'}
         </span>
+        <div className="context-details">
+          <span className="context-caption">
+            {selectedRepository?.github_commit
+              ? `Snapshot ${selectedRepository.github_commit.slice(0, 7)} · Read-only`
+              : 'Repository files stay unchanged'}
+          </span>
+          {selectedRepository?.github_commit ? (
+            <GitHubSync
+              key={selectedRepository.id}
+              repositoryId={selectedRepository.id}
+              csrfToken={csrfToken}
+              disabled={submitting || removingId !== null}
+              onSynced={(snapshot) => {
+                if (selectedRepositoryIdRef.current === selectedRepository.id)
+                  openSnapshot(snapshot);
+              }}
+            />
+          ) : null}
+        </div>
         <button
           className="secondary-button add-repository"
           type="button"
@@ -1080,22 +1122,9 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           csrfToken={csrfToken}
           onClose={() => setShowRepositoryPicker(false)}
           onImported={(repository) => {
-            workspaceRequestGeneration.current += 1;
-            selectedRepositoryIdRef.current = repository.id;
-            setRepositories((current) => [
-              ...current.filter((entry) => entry.id !== repository.id),
-              repository,
-            ]);
-            setSelectedRepositoryId(repository.id);
-            setSummary(null);
-            setSessions([]);
-            setSession(null);
-            setEvents([]);
-            setError(null);
+            openSnapshot(repository);
             setShowRepositoryPicker(false);
-            setRepositoriesExpanded(true);
             closeDrawer();
-            setAttempt((current) => current + 1);
           }}
         />
       ) : null}

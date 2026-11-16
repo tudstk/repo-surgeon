@@ -14,7 +14,7 @@ Downloaded archives are capped at 25 MiB, expanded source at 100 MiB and entries
 
 ## Consequences
 
-The database migration is additive. Storage must persist alongside the database and be shared between workers. Publication followed by a database failure can leave an unregistered snapshot; retries reuse it. There is no automatic cleanup of registered directories. Tenant quotas, retention, refresh, deletion, private authorization and full Git history need explicit follow-up work. Per-import size limits do not provide a cumulative disk quota.
+The database migration is additive. Storage must persist alongside the database and be shared between workers. Publication followed by a database failure can leave an unregistered snapshot; retries reuse it. There is no automatic cleanup of registered directories. Tenant quotas, retention, automatic refresh, deletion, private authorization and full Git history need explicit follow-up work. Per-import size limits do not provide a cumulative disk quota.
 
 This initial importer rejects symlink-containing repositories. Submodule sources are absent and LFS inclusion depends on upstream archive settings. Product copy calls the result a snapshot, not a clone or a complete repository history. No change to identity-only OAuth or provider-token retention is needed.
 
@@ -31,3 +31,7 @@ An owner-scoped, CSRF-protected visibility mutation hides a registration from th
 ## Recover a stale device binding
 
 A filesystem remount can change the device number of an existing snapshot directory. The owner can request recovery through a CSRF-protected mutation. The importer fetches the pinned public commit within the existing limits and compares the managed snapshot tree with the fresh archive without following links. Recovery requires the original canonical path, root inode and matching file contents. A conditional update changes only the saved device number, preserving sessions and the full device/inode check for later reads.
+
+## Manual synchronization
+
+The workspace status compares the registered SHA against the selected repository's default branch tip. It verifies public visibility and the original numeric GitHub ID encoded in the managed storage path before trusting that tip. The status request downloads metadata only. The owner-scoped, CSRF-protected Sync request resolves the tip again and reuses the bounded import path to register a distinct revision when needed. Source snapshots and sessions retain their existing IDs and bindings.

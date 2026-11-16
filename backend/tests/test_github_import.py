@@ -62,19 +62,31 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
     )
     app = create_app(settings)
     sha = "a" * 40
+    latest = sha
+    repository_id_on_github = 42
+    fail_new_archive = False
     requests: list[httpx.Request] = []
 
     def upstream(request: httpx.Request) -> httpx.Response:
         requests.append(request)
         assert "Authorization" not in request.headers
         if request.url.host == "codeload.github.com":
-            assert request.url.path == f"/owner/project/zip/{sha}"
-            return httpx.Response(200, content=archive())
+            if request.url.path == f"/owner/project/zip/{sha}":
+                return httpx.Response(200, content=archive())
+            assert request.url.path == f"/owner/project/zip/{latest}"
+            return httpx.Response(
+                200, content=b"not a zip" if fail_new_archive else archive(content="print('new')")
+            )
         if request.url.path.endswith("/commits"):
-            return httpx.Response(200, json=[{"sha": sha}])
+            return httpx.Response(200, json=[{"sha": latest}])
         return httpx.Response(
             200,
-            json={"id": 42, "full_name": "owner/project", "private": False, "visibility": "public"},
+            json={
+                "id": repository_id_on_github,
+                "full_name": "owner/project",
+                "private": False,
+                "visibility": "public",
+            },
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as github:
@@ -205,7 +217,43 @@ async def test_import_persists_and_supports_summary_and_retry(tmp_path: Path) ->
             assert (await client.post(visibility, json={"hidden": True})).status_code == 204
             assert (await client.post(visibility, json={"hidden": False})).status_code == 204
             assert (await client.get("/api/v1/repositories")).json() == [repository]
-    assert len(requests) == 15
+            assert len(requests) == 15
+            status_url = repository_url + "/sync-status"
+            sync_url = repository_url + "/sync"
+            before = len(requests)
+            current = await client.get(status_url)
+            assert current.headers["cache-control"] == "no-store"
+            assert current.json() == {"up_to_date": True}
+            assert (await client.post(sync_url)).json() == repository
+            assert all(item.url.host == "api.github.com" for item in requests[before:])
+
+            latest = "b" * 40
+            assert (await client.get(status_url)).json() == {"up_to_date": False}
+            repository_id_on_github = 43
+            before = len(requests)
+            assert (await client.get(status_url)).status_code == 502
+            assert (await client.post(sync_url)).status_code == 422
+            assert len(requests) == before + 2  # Stop at metadata when the repository ID changed.
+            repository_id_on_github = 42
+
+            fail_new_archive = True
+            assert (await client.post(sync_url)).status_code == 422
+            assert (await client.get("/api/v1/repositories")).json() == [repository]
+            fail_new_archive = False
+            synced = await client.post(sync_url)
+            assert synced.status_code == 200, synced.text
+            snapshot = synced.json()
+            assert snapshot["id"] != repository["id"]
+            assert snapshot["github_commit"] == latest
+            assert (await client.post(sync_url)).json() == snapshot
+            assert (await client.get("/api/v1/repositories")).json() == [repository, snapshot]
+            refreshed = f"/api/v1/repositories/{snapshot['id']}"
+            assert (await client.get(refreshed + "/sync-status")).json() == {"up_to_date": True}
+            fresh = await client.get(refreshed + "/file", params={"path": "src/main.py"})
+            assert fresh.json()["lines"] == ["print('new')"]
+            preserved = await client.get(repository_url + "/file", params={"path": "src/main.py"})
+            assert preserved.json()["lines"] == ["print('hello')"]
+            assert (await client.get(f"/api/v1/sessions/{session_id}")).json() == restored.json()
     assert not list(settings.repository_storage.rglob(".import-*"))
 
 
@@ -329,6 +377,10 @@ async def test_public_import_requires_csrf_and_isolates_accounts(tmp_path: Path)
                     f"/api/v1/repositories/{first_id}/recover", headers={"X-CSRF-Token": "wrong"}
                 )
             ).status_code == 403
+            bad_sync = await client.post(
+                f"/api/v1/repositories/{first_id}/sync", headers={"X-CSRF-Token": "wrong"}
+            )
+            assert bad_sync.status_code == 403
             assert "canonical_root" not in first.text
             token, csrf = credentials[1]
             client.cookies.set("__Host-repo_surgeon_session", token)
@@ -348,6 +400,11 @@ async def test_public_import_requires_csrf_and_isolates_accounts(tmp_path: Path)
                 f"/api/v1/repositories/{first_id}/file", params={"path": "src/main.py"}
             )
             assert foreign_file.status_code == 404
+            foreign_url = f"/api/v1/repositories/{first_id}"
+            before = len(requests)
+            assert (await client.get(foreign_url + "/sync-status")).status_code == 404
+            assert (await client.post(foreign_url + "/sync")).status_code == 404
+            assert len(requests) == before
             second = await client.post(endpoint, json=body)
             assert second.status_code == 200, second.text
             assert second.json()["id"] != first_id

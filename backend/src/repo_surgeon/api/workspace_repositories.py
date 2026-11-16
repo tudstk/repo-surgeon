@@ -159,6 +159,87 @@ async def import_github_repository(
     )
 
 
+class SnapshotSyncStatus(BaseModel):
+    up_to_date: bool
+
+
+async def _owned_github_snapshot(
+    store: SqlAlchemyRepositoryStore, repository_id: UUID
+) -> Repository:
+    repository = await store.get(repository_id)
+    if (
+        repository is None
+        or repository.source != RepositorySource.GITHUB
+        or not repository.github_full_name
+        or not repository.github_commit
+    ):
+        raise _not_found()
+    return repository
+
+
+@router.get("/{repository_id}/sync-status")
+async def get_snapshot_sync_status(
+    repository_id: UUID,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    database: DatabaseSession,
+) -> SnapshotSyncStatus:
+    response.headers["Cache-Control"] = "no-store"
+    repository = await _owned_github_snapshot(
+        SqlAlchemyRepositoryStore(database, principal.user_id), repository_id
+    )
+    importer: GitHubImporter = request.app.state.github_importer
+    try:
+        latest = await importer.latest_commit(repository)
+    except GitHubImportError as error:
+        raise problem(
+            code="repository_sync_status_failed",
+            title="Could not check GitHub",
+            status=502,
+            detail=str(error),
+        ) from error
+    return SnapshotSyncStatus(up_to_date=latest == repository.github_commit)
+
+
+@router.post("/{repository_id}/sync", response_model_exclude_none=True)
+async def sync_owned_snapshot(
+    repository_id: UUID,
+    request: Request,
+    response: Response,
+    principal: MutationPrincipal,
+    database: DatabaseSession,
+) -> WorkspaceRepositoryResponse:
+    """Register a new pinned revision while retaining existing session references."""
+    response.headers["Cache-Control"] = "no-store"
+    store = SqlAlchemyRepositoryStore(database, principal.user_id)
+    repository = await _owned_github_snapshot(store, repository_id)
+    importer: GitHubImporter = request.app.state.github_importer
+    try:
+        snapshot = await importer.sync_public(repository)
+        if snapshot is not None:
+            repository = await store.add_github(snapshot.root, snapshot.full_name, snapshot.commit)
+    except GitHubImportError as error:
+        raise problem(
+            code="repository_sync_failed",
+            title="Could not sync repository",
+            status=422,
+            detail=str(error),
+        ) from error
+    except RepositoryRegistrationError as error:
+        raise problem(
+            code="repository_unavailable",
+            title="Repository unavailable",
+            status=409,
+            detail="The latest snapshot directory has changed. Contact the service operator.",
+        ) from error
+    return WorkspaceRepositoryResponse(
+        id=repository.id,
+        name=repository.github_full_name or Path(repository.canonical_root).name,
+        github_commit=repository.github_commit,
+    )
+
+
 @router.post("/{repository_id}/recover", status_code=204)
 async def recover_owned_snapshot(
     repository_id: UUID,
