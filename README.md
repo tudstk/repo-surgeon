@@ -197,3 +197,5 @@ Repository search accepts an owner prefix such as `tudstk/` and a partial reposi
 Language percentages use detected source-file bytes from the confined, bounded file listing, excluding ignored directories. They are independent of the weighted primary-language confidence heuristic and do not claim GitHub Linguist parity. Local Devicon assets provide language logos without browser requests to third parties.
 
 Each repository has a three-dot actions menu. **Remove** opens a confirmation for the repository and its associated sessions. Confirming hides it from your workspace list; it does not delete source snapshots, saved sessions or anything on GitHub. **Undo removal** restores the last removed entry. Importing the same public repository commit again also restores its entry. Visibility changes are owner-scoped and require the same CSRF protection as other workspace mutations.
+
+New session names use the repository name without its GitHub owner. Repeated names get a numeric suffix such as `-1`. Use the session row’s three-dot menu to rename it or confirm removal. Removal archives the session and keeps its saved history.

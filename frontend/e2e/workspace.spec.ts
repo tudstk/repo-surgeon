@@ -143,7 +143,9 @@ for (const viewport of [
         page.getByRole('button', { name: 'Close Repositories and sessions' }),
       ).toBeFocused();
       await page.keyboard.press('Shift+Tab');
-      await expect(page.getByRole('button', { name: 'Read-only review' })).toBeFocused();
+      await expect(
+        page.getByRole('button', { name: 'Actions for session Read-only review' }),
+      ).toBeFocused();
       await page.keyboard.press('Escape');
       await expect(dialog).toHaveCount(0);
       await expect(trigger).toBeFocused();
@@ -283,7 +285,7 @@ test('a new session stays selected when an older session restore finishes late',
   await page.goto('/');
   await expect(page.getByRole('button', { name: session.title, exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Start read-only session' }).click();
-  await expect(page.getByRole('button', { name: created.title })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: created.title, exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
@@ -297,7 +299,7 @@ test('a new session stays selected when an older session restore finishes late',
         requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
       ),
   );
-  await expect(page.getByRole('button', { name: created.title })).toHaveAttribute(
+  await expect(page.getByRole('button', { name: created.title, exact: true })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
@@ -763,5 +765,124 @@ for (const width of [1440, 390]) {
     if (width === 390)
       await page.getByRole('button', { name: 'Repositories', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Repositories 0' })).toBeVisible();
+  });
+}
+
+for (const width of [1440, 390]) {
+  test(`session names and actions persist at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+    await fixture(page);
+    let saved = [{ ...session, title: 'sample/inspection-fixture read-only review' }];
+    let renameFailure = true;
+    await page.route('**/api/v1/sessions?*', (route) => route.fulfill({ json: saved }));
+    await page.route('**/api/v1/sessions', (route) => {
+      expect(route.request().postDataJSON()).toEqual({ repository_id: repository.id });
+      const created = {
+        ...session,
+        id: 'session-2',
+        title: 'inspection-fixture read-only review-1',
+      };
+      saved = [created, ...saved];
+      return route.fulfill({ status: 201, json: created });
+    });
+    await page.route('**/api/v1/sessions/*', (route) => {
+      const item = saved.find((entry) =>
+        route
+          .request()
+          .url()
+          .endsWith('/' + entry.id),
+      );
+      if (!item) return route.fulfill({ status: 404, json: {} });
+      if (route.request().method() === 'PATCH') {
+        expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
+        if (renameFailure) {
+          renameFailure = false;
+          return route.fulfill({ status: 409, json: { detail: 'Choose another session name.' } });
+        }
+        item.title = route.request().postDataJSON().title;
+      }
+      return route.fulfill({ json: { ...item, turns: [] } });
+    });
+    await page.route('**/api/v1/sessions/*/archive', (route) => {
+      expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
+      saved = saved.filter(
+        (item) =>
+          !route
+            .request()
+            .url()
+            .endsWith('/' + item.id + '/archive'),
+      );
+      return route.fulfill({ status: 204 });
+    });
+    await page.goto('/');
+    const showSessions = async () => {
+      if (width === 390)
+        await page.getByRole('button', { name: 'Repositories', exact: true }).click();
+    };
+    await showSessions();
+    await expect(
+      page.getByRole('button', { name: 'inspection-fixture read-only review', exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'sample/inspection-fixture read-only review', exact: true }),
+    ).toHaveCount(0);
+    await page.getByRole('button', { name: 'Start read-only session' }).click();
+    const actions = page.getByRole('button', {
+      name: 'Actions for session inspection-fixture read-only review-1',
+    });
+    await actions.click();
+    await expect(page.getByRole('menuitem', { name: 'Rename' })).toBeFocused();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.getByRole('menuitem', { name: 'Remove' })).toBeFocused();
+    await capture(page, testInfo, `session-menu-${width}`);
+    await page.getByRole('menuitem', { name: 'Rename' }).click();
+    const rename = page.getByRole('dialog', { name: 'Rename session', exact: true });
+    await expect(rename.getByLabel('Session name')).toBeFocused();
+    await rename.getByLabel('Session name').fill('  ');
+    await expect(rename.getByRole('button', { name: 'Save name' })).toBeDisabled();
+    await rename.getByLabel('Session name').fill('Review authentication');
+    await rename.getByRole('button', { name: 'Save name' }).click();
+    await expect(rename.getByRole('alert')).toHaveText('Choose another session name.');
+    await rename.getByRole('button', { name: 'Save name' }).click();
+    await expect(rename).toHaveCount(0);
+    await page.reload();
+    await showSessions();
+    await expect(
+      page.getByRole('button', { name: 'Review authentication', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await page
+      .getByRole('button', {
+        name: 'Actions for session inspection-fixture read-only review',
+        exact: true,
+      })
+      .click();
+    await page.getByRole('menuitem', { name: 'Remove' }).click();
+    const remove = page.getByRole('dialog', { name: 'Remove session?', exact: true });
+    await expect(remove.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await page.keyboard.press('Escape');
+    expect(saved).toHaveLength(2);
+    await page
+      .getByRole('button', {
+        name: 'Actions for session inspection-fixture read-only review',
+        exact: true,
+      })
+      .click();
+    await page.getByRole('menuitem', { name: 'Remove' }).click();
+    await capture(page, testInfo, `session-removal-${width}`);
+    await remove.getByRole('button', { name: 'Remove session', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Sessions 1' })).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: 'Review authentication', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Actions for session Review authentication' }).click();
+    await page.getByRole('menuitem', { name: 'Remove' }).click();
+    await remove.getByRole('button', { name: 'Remove session', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Sessions 0' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Repositories 1' })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
+    await showSessions();
+    await expect(page.getByRole('button', { name: 'Sessions 0' })).toBeVisible();
   });
 }
