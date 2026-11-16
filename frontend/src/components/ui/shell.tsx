@@ -4,9 +4,20 @@ import { AccountMenu } from './account-menu';
 import { Icon } from './icons';
 export { Icon } from './icons';
 
-export function Brand({ href = '/landing' }: { href?: string }) {
+export function Brand({
+  href = '/landing',
+  iconOnly = false,
+}: {
+  href?: string;
+  iconOnly?: boolean;
+}) {
   return (
-    <Link href={href} className="brand">
+    <Link
+      href={href}
+      className={iconOnly ? 'brand icon-button' : 'brand'}
+      aria-label={iconOnly ? 'Repo Surgeon' : undefined}
+      title={iconOnly ? 'Repo Surgeon' : undefined}
+    >
       <svg
         viewBox="0 0 24 24"
         className="brand-symbol"
@@ -17,7 +28,7 @@ export function Brand({ href = '/landing' }: { href?: string }) {
       >
         <path d="M8 4H4v16h4m8-16h4v16h-4M8 12h8m-4-4v8" />
       </svg>
-      <span>Repo Surgeon</span>
+      {iconOnly ? null : <span>Repo Surgeon</span>}
     </Link>
   );
 }
@@ -26,16 +37,14 @@ export function AppHeader({
   active,
   user,
 }: {
-  active?: 'workspace' | 'profile' | 'settings';
+  active?: 'profile' | 'settings';
   user?: SafeProfile;
 }) {
   return (
     <header className="app-header">
       <Brand />
       <nav aria-label="Main navigation">
-        <Link href="/" aria-current={active === 'workspace' ? 'page' : undefined}>
-          Workspace
-        </Link>
+        <Link href="/">Workspace</Link>
       </nav>
       {user ? (
         <AccountMenu user={user} active={active} />

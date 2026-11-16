@@ -113,7 +113,7 @@ Code uses the code role. Conversation copy is constrained to 70ch and explanator
 
 ## Layout
 
-The shared header is at least 56px high; a separate repository context row keeps the selection visible. Desktop uses 280px repositories/sessions, a fluid center, and 420px saved events. From 1101px through 1280px the left pane is 260px. Dividers are fixed 1px rules.
+The workspace opens with a single repository toolbar. The compact brand link and active repository name lead, with the snapshot status, Sync controls and account avatar grouped at the right. Desktop uses a 280px repositories and sessions pane, a fluid center, and a resizable Code and Activity pane. From 1101px through 1280px the left pane is 260px.
 At 1100px and below only the conversation is shown in the main grid; labelled buttons open repository/session and event drawers. At 600px and below, spacing tightens, context wraps, and primary controls have a 44px minimum height. The shell uses dynamic viewport height. Conversation and event content scroll within their own areas; the composer stays in view.
 Spacing mostly follows 8/12/16/20/24/32px steps. Login content is capped at 440px; account content at 720px. Keep all grid/flex children shrinkable and wrap long user data.
 
@@ -129,7 +129,7 @@ Controls and messages use the control radius; small badges use the badge radius.
 
 ## Components
 
-- **Header:** The brand returns to `/landing`; Workspace opens `/`. The landing page's own brand links use `#top`. The app header has a circular GitHub avatar at the right. Hover/focus reveals the username; click opens icon-labelled Profile and Settings links. Menus support arrows, Home/End, Escape, Tab exit and outside dismissal. The trigger is 44px with a 32px image and an initial fallback. Source-file safety remains stated in repository context.
+- **Header and account menu:** The workspace brand icon returns to `/landing`. Profile and Settings use the shared header with a Workspace return link. The landing page's own brand links use `#top`. Hover or focus on the circular GitHub avatar reveals the username. Click opens Profile and Settings links with icons. The menu supports arrows, Home/End, Escape, Tab exit and outside dismissal. The trigger is 44px with a 32px image and an initial fallback.
 - **Buttons:** Teal primary and outlined neutral secondary actions; stable hover treatments, explicit disabled states, and 2px accent focus outlines with 3px offset. Principal phone actions are at least 44px high.
 - **Selection rows:** Native buttons use `aria-pressed`, teal text and a selected surface. Full names remain available through wrapping and titles.
 - **Composer:** Textarea focus outlines the shared input container, including its footer, without a nested textarea ring. Inspect keeps its own keyboard focus outline. A visible demo-provider disclosure precedes the bordered textarea. Inspect is disabled without a session, during submission and for instructions shorter than three trimmed characters. Input is capped at 8000 characters.

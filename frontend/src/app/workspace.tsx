@@ -1,7 +1,8 @@
 'use client';
 
 import Image from 'next/image';
-import { AppHeader, Icon } from '@/components/ui/shell';
+import { Brand, Icon } from '@/components/ui/shell';
+import { AccountMenu } from '@/components/ui/account-menu';
 import type { SafeProfile } from '@/lib/auth-api';
 import { Drawer } from '@/components/ui/drawer';
 import { RowActions } from '@/components/ui/row-actions';
@@ -829,43 +830,9 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
 
   return (
     <main className="workspace-shell">
-      <AppHeader active="workspace" user={user} />
-      <div className="repository-context">
-        <Icon name="repo" />
-        <span title={selectedRepository?.name}>{selectedRepository?.name ?? 'Your workspace'}</span>
-        <div className="context-details">
-          <span className="context-caption">
-            {selectedRepository?.github_commit
-              ? `Snapshot ${selectedRepository.github_commit.slice(0, 7)} · Read-only`
-              : 'Repository files stay unchanged'}
-          </span>
-          {selectedRepository?.github_commit ? (
-            <GitHubSync
-              key={selectedRepository.id}
-              repositoryId={selectedRepository.id}
-              csrfToken={csrfToken}
-              disabled={submitting || removingId !== null}
-              onSynced={(snapshot) => {
-                if (
-                  selectedRepositoryIdRef.current !== snapshot.id ||
-                  selectedRepository.github_commit === snapshot.github_commit
-                )
-                  return;
-                workspaceRequestGeneration.current += 1;
-                sessionToRestoreAfterSync.current = session
-                  ? { repositoryId: snapshot.id, sessionId: session.id }
-                  : null;
-                setRepositories((current) =>
-                  current.map((item) => (item.id === snapshot.id ? snapshot : item)),
-                );
-                setSummary(null);
-                setError(null);
-                setUnavailableRepositoryId(null);
-                setAttempt((value) => value + 1);
-              }}
-            />
-          ) : null}
-        </div>
+      <header className="repository-context">
+        <Brand iconOnly />
+        <span className="context-name">{selectedRepository?.name ?? 'Your workspace'}</span>
         <button
           className="secondary-button add-repository"
           type="button"
@@ -878,7 +845,43 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           <Icon name="plus" />
           Add repository
         </button>
-      </div>
+        <div className="context-actions">
+          <div className="context-details">
+            <span className="context-caption">
+              {selectedRepository?.github_commit
+                ? `Snapshot ${selectedRepository.github_commit.slice(0, 7)} · Read-only`
+                : 'Repository files stay unchanged'}
+            </span>
+            {selectedRepository?.github_commit ? (
+              <GitHubSync
+                key={selectedRepository.id}
+                repositoryId={selectedRepository.id}
+                csrfToken={csrfToken}
+                disabled={submitting || removingId !== null}
+                onSynced={(snapshot) => {
+                  if (
+                    selectedRepositoryIdRef.current !== snapshot.id ||
+                    selectedRepository.github_commit === snapshot.github_commit
+                  )
+                    return;
+                  workspaceRequestGeneration.current += 1;
+                  sessionToRestoreAfterSync.current = session
+                    ? { repositoryId: snapshot.id, sessionId: session.id }
+                    : null;
+                  setRepositories((current) =>
+                    current.map((item) => (item.id === snapshot.id ? snapshot : item)),
+                  );
+                  setSummary(null);
+                  setError(null);
+                  setUnavailableRepositoryId(null);
+                  setAttempt((value) => value + 1);
+                }}
+              />
+            ) : null}
+          </div>
+          <AccountMenu user={user} />
+        </div>
+      </header>
       <div className="mobile-pane-controls">
         <button type="button" aria-haspopup="dialog" onClick={() => setDrawer('repositories')}>
           <Icon name="repo" />

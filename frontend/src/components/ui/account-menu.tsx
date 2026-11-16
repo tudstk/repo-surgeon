@@ -11,7 +11,7 @@ export function AccountMenu({
   active,
 }: {
   user: SafeProfile;
-  active?: 'workspace' | 'profile' | 'settings';
+  active?: 'profile' | 'settings';
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);

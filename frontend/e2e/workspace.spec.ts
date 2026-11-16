@@ -450,12 +450,8 @@ for (const colorScheme of ['dark', 'light'] as const) {
     await expect
       .poll(() => trigger.locator('img').evaluate((img: HTMLImageElement) => img.naturalWidth))
       .toBeGreaterThan(0);
-    await expect(
-      page
-        .getByRole('navigation', { name: 'Main navigation' })
-        .getByRole('link', { name: 'Profile' }),
-    ).toHaveCount(0);
-    await expect(page.locator('.app-header')).not.toContainText('Read-only');
+    await expect(page.getByRole('navigation', { name: 'Main navigation' })).toHaveCount(0);
+    await expect(page.locator('.repository-context').locator(trigger)).toBeVisible();
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await trigger.hover();
@@ -1151,6 +1147,14 @@ for (const width of [1440, 390]) {
     await page.getByRole('button', { name: 'Check GitHub for updates' }).click();
     await expect(page.getByText('Behind GitHub', { exact: true })).toBeVisible();
     await expect(sync).toBeVisible();
+    const actions = page.locator('.context-actions');
+    const avatar = actions.getByRole('button', { name: 'Account menu for @ada' });
+    await expect(actions.locator(sync)).toBeVisible();
+    await expect(avatar).toBeVisible();
+    await avatar.click();
+    await expect(page.getByRole('menuitem', { name: 'Profile' })).toBeInViewport();
+    await capture(page, testInfo, `workspace-toolbar-${width}`);
+    await page.keyboard.press('Escape');
     await capture(page, testInfo, `snapshot-behind-${width}`);
     await sync.click();
     await expect(page.getByText('The archive could not be downloaded.')).toBeVisible();
