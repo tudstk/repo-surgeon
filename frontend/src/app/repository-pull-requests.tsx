@@ -23,23 +23,28 @@ function usePullRequestData<T>(
   active: boolean,
   fallbackError: string,
 ) {
-  const [result, setResult] = useState<LoadResult<T>>();
+  const [settled, setSettled] = useState<{ load: typeof load; result: LoadResult<T> }>();
+  const result = settled?.load === load ? settled.result : undefined;
   useEffect(() => {
     if (!active || result) return;
     const controller = new AbortController();
     void load(controller.signal).then(
       (value) => {
-        if (!controller.signal.aborted) setResult({ value });
+        if (!controller.signal.aborted) setSettled({ load, result: { value } });
       },
       (reason: unknown) => {
         if (controller.signal.aborted) return;
         const error = reason instanceof WorkspaceRequestError ? reason.detail : undefined;
-        setResult({ error: error || fallbackError });
+        setSettled({ load, result: { error: error || fallbackError } });
       },
     );
     return () => controller.abort();
   }, [active, fallbackError, load, result]);
-  return { result, retry: () => setResult(undefined) };
+  return {
+    result,
+    lastValue: settled && 'value' in settled.result ? settled.result.value : undefined,
+    retry: () => setSettled(undefined),
+  };
 }
 
 function LoadFailure({ text, retry }: { text: string; retry: () => void }) {
@@ -177,7 +182,15 @@ function PullStatus({ pull }: { pull: GitHubPullRequest }) {
   );
 }
 
-function FileChanges({ changes, layout }: { changes: PullRequestChanges; layout: DiffLayout }) {
+function FileChanges({
+  changes,
+  layout,
+  onLayout,
+}: {
+  changes: PullRequestChanges;
+  layout: DiffLayout;
+  onLayout: (layout: DiffLayout) => void;
+}) {
   const [fileIndex, setFileIndex] = useState(0);
   const file = changes.files[fileIndex];
   return (
@@ -201,7 +214,9 @@ function FileChanges({ changes, layout }: { changes: PullRequestChanges; layout:
           rules.
         </p>
       ) : null}
-      {file ? <PullRequestDiff key={file.path} file={file} layout={layout} /> : null}
+      {file ? (
+        <PullRequestDiff key={file.path} file={file} layout={layout} onLayout={onLayout} />
+      ) : null}
       {!file && !changes.restricted_files ? (
         <p className={styles.message}>No changed files on this page.</p>
       ) : null}
@@ -218,59 +233,93 @@ function PullDetails({
   repositoryId,
   selection,
   active,
-  page,
-  onPage,
   layout,
   onLayout,
+  onBack,
 }: {
   repositoryId: string;
   selection: GitHubPullRequest;
   active: boolean;
-  page: number;
-  onPage: (page: number) => void;
   layout: DiffLayout;
   onLayout: (layout: DiffLayout) => void;
+  onBack: () => void;
 }) {
+  const [page, setPage] = useState(1);
+  const reviewNote = useId();
+  const heading = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    heading.current?.focus({ preventScroll: true });
+  }, []);
+
   const load = useCallback(
     (signal: AbortSignal) => getPullRequestChanges(repositoryId, selection.number, page, signal),
     [repositoryId, selection.number, page],
   );
-  const { result, retry } = usePullRequestData(load, active, 'Could not load changed files.');
-  if (!result)
-    return (
-      <p className={styles.message} role="status">
-        Loading changed files…
-      </p>
-    );
-  if ('error' in result) return <LoadFailure text={result.error} retry={retry} />;
-  const changes = result.value;
+  const { result, lastValue, retry } = usePullRequestData(
+    load,
+    active,
+    'Could not load changed files.',
+  );
   return (
-    <>
-      <div className={styles.diffToolbar}>
-        <div className={styles.changesSummary}>
-          <span>
-            {changes.changed_files.toLocaleString()}{' '}
-            {changes.changed_files === 1 ? 'file' : 'files'} changed
+    <div className={styles.view}>
+      <header className={styles.detailHeader}>
+        <div className={styles.detailNav}>
+          <button type="button" className={styles.back} onClick={onBack}>
+            <Icon name="chevron" /> All pull requests
+          </button>
+          <a href={selection.url} target="_blank" rel="noreferrer">
+            GitHub <Icon name="external" />
+          </a>
+        </div>
+        <div className={styles.detailTitle}>
+          <h3 ref={heading} tabIndex={-1}>
+            <bdi>{selection.title}</bdi> <span>#{selection.number}</span>
+          </h3>
+          {lastValue ? (
+            <div className={styles.changesSummary} role="group" aria-label="Pull request totals">
+              <span>
+                {lastValue.changed_files.toLocaleString()}{' '}
+                {lastValue.changed_files === 1 ? 'file' : 'files'} changed
+              </span>
+              <DiffCounts additions={lastValue.additions} deletions={lastValue.deletions} />
+            </div>
+          ) : null}
+        </div>
+        <div className={styles.detailMeta}>
+          <PullStatus pull={selection} />
+          {selection.author ? <bdi>{selection.author}</bdi> : null}
+          <span className={styles.branchPair}>
+            <bdi>{selection.head_ref}</bdi>
+            <Icon name="arrow" />
+            <bdi>{selection.base_ref}</bdi>
           </span>
-          <DiffCounts additions={changes.additions} deletions={changes.deletions} />
         </div>
-
-        <div className={styles.diffModes} role="group" aria-label="Diff layout">
-          <button
-            type="button"
-            aria-pressed={layout === 'unified'}
-            onClick={() => onLayout('unified')}
-          >
-            Unified
+        <div className={styles.review}>
+          <button type="button" className="secondary-button" disabled aria-describedby={reviewNote}>
+            <Icon name="check" /> Code Review this PR
           </button>
-          <button type="button" aria-pressed={layout === 'split'} onClick={() => onLayout('split')}>
-            Side by side
-          </button>
+          <span id={reviewNote}>Code review is coming in a later release.</span>
         </div>
-      </div>
-      <Pagination page={page} nextPage={changes.next_page} onPage={onPage} subject="Changed file" />
-      <FileChanges changes={changes} layout={layout} />
-    </>
+      </header>
+      {!result ? (
+        <p className={styles.message} role="status">
+          Loading changed files…
+        </p>
+      ) : 'error' in result ? (
+        <LoadFailure text={result.error} retry={retry} />
+      ) : (
+        <>
+          <Pagination
+            page={page}
+            nextPage={result.value.next_page}
+            onPage={setPage}
+            subject="Changed file"
+          />
+          <FileChanges key={page} changes={result.value} layout={layout} onLayout={onLayout} />
+        </>
+      )}
+    </div>
   );
 }
 
@@ -284,15 +333,11 @@ export function RepositoryPullRequests({
   const [category, setCategory] = useState<PullRequestState>('open');
   const [listPage, setListPage] = useState(1);
   const [selection, setSelection] = useState<GitHubPullRequest>();
-  const [filePage, setFilePage] = useState(1);
   const [layout, setLayout] = useState<DiffLayout>('unified');
-  const reviewNote = useId();
-  const heading = useRef<HTMLHeadingElement>(null);
   const lastRow = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (selection) heading.current?.focus({ preventScroll: true });
-    else lastRow.current?.focus({ preventScroll: true });
+    if (!selection) lastRow.current?.focus({ preventScroll: true });
   }, [selection]);
 
   if (!repositoryId) {
@@ -331,57 +376,20 @@ export function RepositoryPullRequests({
           onPage={setListPage}
           onSelect={(pull, trigger) => {
             lastRow.current = trigger;
-            setFilePage(1);
             setSelection(pull);
           }}
         />
       </div>
       {selection ? (
-        <div className={styles.view} key={selection.number}>
-          <header className={styles.detailHeader}>
-            <div className={styles.detailNav}>
-              <button type="button" className={styles.back} onClick={() => setSelection(undefined)}>
-                <Icon name="chevron" /> All pull requests
-              </button>
-              <a href={selection.url} target="_blank" rel="noreferrer">
-                GitHub <Icon name="external" />
-              </a>
-            </div>
-            <h3 ref={heading} tabIndex={-1}>
-              <bdi>{selection.title}</bdi> <span>#{selection.number}</span>
-            </h3>
-            <div className={styles.detailMeta}>
-              <PullStatus pull={selection} />
-              {selection.author ? <bdi>{selection.author}</bdi> : null}
-              <span className={styles.branchPair}>
-                <bdi>{selection.head_ref}</bdi>
-                <Icon name="arrow" />
-                <bdi>{selection.base_ref}</bdi>
-              </span>
-            </div>
-            <div className={styles.review}>
-              <button
-                type="button"
-                className="secondary-button"
-                disabled
-                aria-describedby={reviewNote}
-              >
-                <Icon name="check" /> Code Review this PR
-              </button>
-              <span id={reviewNote}>Code review is coming in a later release.</span>
-            </div>
-          </header>
-          <PullDetails
-            key={filePage}
-            repositoryId={repositoryId}
-            selection={selection}
-            active={active}
-            page={filePage}
-            onPage={setFilePage}
-            layout={layout}
-            onLayout={setLayout}
-          />
-        </div>
+        <PullDetails
+          key={selection.number}
+          repositoryId={repositoryId}
+          selection={selection}
+          active={active}
+          layout={layout}
+          onLayout={setLayout}
+          onBack={() => setSelection(undefined)}
+        />
       ) : null}
     </>
   );

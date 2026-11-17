@@ -153,14 +153,23 @@
   transform: rotate(180deg);
 }
 
-.detailHeader h3 {
+.detailTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.detailTitle h3 {
+  min-width: 0;
   font-size: 18px;
   line-height: 1.3;
   font-weight: 650;
   overflow-wrap: anywhere;
 }
 
-.detailHeader h3 span {
+.detailTitle h3 span {
   color: var(--muted);
   font-size: 14px;
   font-weight: 500;
@@ -198,17 +207,6 @@
   min-height: 34px;
   padding: 4px 9px;
   font-size: 12px;
-}
-
-.diffToolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 14px;
-  border-block: 1px solid var(--border);
-  background: var(--panel);
 }
 
 .diffModes {
@@ -284,21 +282,40 @@
 .fileHeader {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px 8px;
   padding: 9px 14px;
   background: var(--panel);
 }
 
-.fileHeader > :global(.icon) {
+.fileIdentity {
+  display: flex;
+  flex: 1 1 max-content;
+  min-width: 0;
+  max-width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.fileIdentity > :global(.icon) {
+  flex-shrink: 0;
   color: var(--muted);
 }
 
-.fileHeader h4 {
-  flex: 1;
-  min-width: min(80px, 100%);
+.fileIdentity h4 {
+  min-width: 0;
   font: 600 12px/1.5 var(--font-mono);
   overflow-wrap: anywhere;
+}
+
+.fileTools {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 10px;
+  margin-inline-start: auto;
 }
 
 .diffScroll {

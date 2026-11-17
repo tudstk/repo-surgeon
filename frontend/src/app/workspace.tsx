@@ -55,8 +55,8 @@ const minWorkWidth = 20;
 const maxWorkWidth = 50;
 const workTabs = [
   { id: 'code', label: 'Code' },
-  { id: 'activity', label: 'Activity' },
   { id: 'pull-request', label: 'Pull Request' },
+  { id: 'activity', label: 'Activity' },
 ] as const;
 type WorkTab = (typeof workTabs)[number]['id'];
 
@@ -801,15 +801,6 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       <div
         className="work-tab-panel"
         role="tabpanel"
-        id={`${workTabsId}-activity-panel`}
-        aria-labelledby={`${workTabsId}-activity`}
-        hidden={workTab !== 'activity'}
-      >
-        {eventPane}
-      </div>
-      <div
-        className="work-tab-panel"
-        role="tabpanel"
         id={`${workTabsId}-pull-request-panel`}
         aria-labelledby={`${workTabsId}-pull-request`}
         hidden={workTab !== 'pull-request'}
@@ -819,6 +810,15 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           repositoryId={selectedRepository?.github_commit ? selectedRepository.id : undefined}
           active={workTab === 'pull-request'}
         />
+      </div>
+      <div
+        className="work-tab-panel"
+        role="tabpanel"
+        id={`${workTabsId}-activity-panel`}
+        aria-labelledby={`${workTabsId}-activity`}
+        hidden={workTab !== 'activity'}
+      >
+        {eventPane}
       </div>
     </>
   );

@@ -1093,10 +1093,10 @@ for (const width of [1440, 390]) {
     });
     await capture(page, testInfo, `repository-code-${width}`);
     await codeTab.focus();
-    await page.keyboard.press('ArrowRight');
+    await page.keyboard.press('End');
     await expect(page.getByRole('tab', { name: 'Activity' })).toBeFocused();
     await expect(page.getByRole('tabpanel', { name: 'Activity' })).toContainText('run.completed');
-    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('Home');
     await expect(page.getByRole('heading', { name: 'src/main.ts' })).toBeVisible();
     if (mobile) {
       await page.getByRole('button', { name: 'Files', exact: true }).click();
@@ -1482,9 +1482,15 @@ test('browses open and merged GitHub pull requests and both diff layouts', async
   const code = page.getByRole('tab', { name: 'Code', exact: true });
   await expect(code).toHaveAttribute('aria-selected', 'true');
   expect(countRequests()).toBe(0);
+  const tabs = page.getByRole('tablist', { name: 'Repository work panel' });
+  await expect(tabs.getByRole('tab')).toHaveText(['Code', 'Pull Request', 'Activity']);
   await code.focus();
-  await page.keyboard.press('End');
-  await expect(page.getByRole('tab', { name: 'Pull Request', exact: true })).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(tabs.getByRole('tab', { name: 'Pull Request', exact: true })).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(tabs.getByRole('tab', { name: 'Activity' })).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(tabs.getByRole('tab', { name: 'Pull Request', exact: true })).toBeFocused();
   const panel = page.getByRole('tabpanel', { name: 'Pull Request' });
   const row = panel.getByRole('button', { name: /Validate the catalog price filter/ });
   await expect(row).toBeVisible();
@@ -1500,11 +1506,27 @@ test('browses open and merged GitHub pull requests and both diff layouts', async
     panel.getByRole('heading', { name: /Validate the catalog price filter/ }),
   ).toBeFocused();
   await expect(panel.getByRole('button', { name: 'Code Review this PR' })).toBeDisabled();
-  const unified = panel.getByRole('region', { name: 'Unified diff' });
+  const totals = panel.getByRole('group', { name: 'Pull request totals' });
+  await expect(totals).toContainText('2 files changed');
+  const title = panel.getByRole('heading', { name: /Validate the catalog price filter/ });
+  const [titleBounds, totalsBounds] = await Promise.all([
+    title.boundingBox(),
+    totals.boundingBox(),
+  ]);
+  expect(totalsBounds!.x).toBeGreaterThanOrEqual(titleBounds!.x + titleBounds!.width);
+  const file = panel.getByRole('region', { name: 'File diff' });
+  const layouts = file.getByRole('group', { name: 'Diff layout' });
+  await expect(file.getByLabel('1 deletions')).toBeVisible();
+  const [countBounds, layoutsBounds] = await Promise.all([
+    file.getByLabel('1 deletions').boundingBox(),
+    layouts.boundingBox(),
+  ]);
+  expect(layoutsBounds!.x).toBeGreaterThanOrEqual(countBounds!.x + countBounds!.width);
+  const unified = file.getByRole('region', { name: 'Unified diff' });
   await expect(unified).toContainText('const price = Number(input);');
   await expect(unified).toContainText('const price = parseFloat(input);');
   await capture(page.getByRole('region', { name: 'Repository tools' }), testInfo, 'unified-diff');
-  await panel.getByRole('button', { name: 'Side by side' }).click();
+  await layouts.getByRole('button', { name: 'Side by side' }).click();
   const split = panel.getByRole('region', { name: 'Side-by-side diff' });
   await expect(split.getByRole('columnheader', { name: 'Before' })).toBeVisible();
   await expect(split.getByRole('columnheader', { name: 'After' })).toBeVisible();
@@ -1517,6 +1539,7 @@ test('browses open and merged GitHub pull requests and both diff layouts', async
   );
   await panel.getByLabel('Changed files on this page').selectOption('1');
   await expect(panel.getByText('GitHub did not include a text patch for this file.')).toBeVisible();
+  await expect(layouts).toHaveCount(0);
   await panel.getByRole('button', { name: 'All pull requests' }).click();
   await expect(row).toBeFocused();
   await panel.getByRole('button', { name: 'Closed', exact: true }).click();
@@ -1528,6 +1551,7 @@ test('browses open and merged GitHub pull requests and both diff layouts', async
     .getByRole('button', { name: 'Next' })
     .click();
   await expect(panel.getByRole('heading', { name: 'src/catalog/sort.ts' })).toBeVisible();
+  await expect(totals).toContainText('8 files changed');
   await expect(split).toBeVisible();
 });
 

@@ -37,7 +37,15 @@ export function DiffCounts({ additions, deletions }: { additions: number; deleti
   );
 }
 
-export function PullRequestDiff({ file, layout }: { file: PullRequestFile; layout: DiffLayout }) {
+export function PullRequestDiff({
+  file,
+  layout,
+  onLayout,
+}: {
+  file: PullRequestFile;
+  layout: DiffLayout;
+  onLayout: (layout: DiffLayout) => void;
+}) {
   const patch = useMemo(() => (file.patch ? parsePatch(file.patch) : null), [file.patch]);
   const split = layout === 'split';
   const incomplete =
@@ -53,17 +61,31 @@ export function PullRequestDiff({ file, layout }: { file: PullRequestFile; layou
   return (
     <section className={styles.file} aria-label="File diff">
       <header className={styles.fileHeader}>
-        <Icon name="file" />
-        <h4>
-          {file.previous_path ? (
-            <>
-              <bdi>{file.previous_path}</bdi>
-              <span aria-label=" renamed to "> → </span>
-            </>
+        <div className={styles.fileIdentity}>
+          <Icon name="file" />
+          <h4>
+            {file.previous_path ? (
+              <>
+                <bdi>{file.previous_path}</bdi>
+                <span aria-label=" renamed to "> → </span>
+              </>
+            ) : null}
+            <bdi>{file.path}</bdi>
+          </h4>
+        </div>
+        <div className={styles.fileTools}>
+          <DiffCounts additions={file.additions} deletions={file.deletions} />
+          {patch ? (
+            <div className={styles.diffModes} role="group" aria-label="Diff layout">
+              <button type="button" aria-pressed={!split} onClick={() => onLayout('unified')}>
+                Unified
+              </button>
+              <button type="button" aria-pressed={split} onClick={() => onLayout('split')}>
+                Side by side
+              </button>
+            </div>
           ) : null}
-          <bdi>{file.path}</bdi>
-        </h4>
-        <DiffCounts additions={file.additions} deletions={file.deletions} />
+        </div>
       </header>
       {patch ? (
         <>
