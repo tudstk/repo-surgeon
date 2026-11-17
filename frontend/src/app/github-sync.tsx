@@ -78,9 +78,11 @@ export function useGitHubSync(
 
 export function GitHubSync({
   commit,
+  previewingHistory = false,
   state: { check, error, syncing, disabled, sync, checkAgain },
 }: {
   commit: string;
+  previewingHistory?: boolean;
   state: ReturnType<typeof useGitHubSync>;
 }) {
   const statusText = useRef<HTMLSpanElement>(null);
@@ -94,7 +96,9 @@ export function GitHubSync({
   return (
     <div className="github-sync">
       <div className="github-sync-controls">
-        <span className="snapshot-caption">Snapshot {commit.slice(0, 7)} · Read-only</span>
+        <span className="snapshot-caption">
+          {previewingHistory ? 'Saved snapshot' : 'Snapshot'} {commit.slice(0, 7)} · Read-only
+        </span>
         <div className="github-sync-actions">
           <span
             ref={statusText}

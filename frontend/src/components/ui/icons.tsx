@@ -5,6 +5,8 @@ export function Icon({
   name:
     | 'chevron'
     | 'repo'
+    | 'branch'
+    | 'commit'
     | 'code'
     | 'folder'
     | 'file'
@@ -31,6 +33,9 @@ export function Icon({
     settings:
       'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM9.7 3.3l-.5 2-1.8 1-2-.6-2.3 4 1.5 1.4v2l-1.5 1.4 2.3 4 2-.6 1.8 1 .5 2h4.6l.5-2 1.8-1 2 .6 2.3-4-1.5-1.4v-2l1.5-1.4-2.3-4-2 .6-1.8-1-.5-2Z',
     repo: 'M4 3h13v16H4a2 2 0 0 1 0-4h13M4 3a2 2 0 0 0-2 2v12M7 7h6M7 10h4',
+    branch:
+      'M6 8v8m0 0c0-5 12-2 12-8M4 6a2 2 0 1 0 4 0 2 2 0 0 0-4 0Zm0 12a2 2 0 1 0 4 0 2 2 0 0 0-4 0ZM16 6a2 2 0 1 0 4 0 2 2 0 0 0-4 0Z',
+    commit: 'M3 12h5m8 0h5m-13 0a4 4 0 1 0 8 0 4 4 0 0 0-8 0Z',
     sync: 'M20 10a8 8 0 0 0-14-4L3 9m0-5v5h5m-4 5a8 8 0 0 0 14 4l3-3m0 5v-5h-5',
     activity: 'M3 12h4l3-7 4 14 3-7h4',
     shield: 'M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Zm-4 9 3 3 5-6',
