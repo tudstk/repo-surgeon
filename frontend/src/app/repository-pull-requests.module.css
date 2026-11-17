@@ -1,0 +1,438 @@
+.view {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--canvas);
+}
+
+.listHeader {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.listHeader button,
+.diffModes button {
+  min-height: 34px;
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.listHeader button:hover,
+.diffModes button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.listHeader button[aria-pressed='true'],
+.diffModes button[aria-pressed='true'] {
+  border-color: var(--border);
+  background: var(--selected);
+  color: var(--accent);
+}
+
+.pullList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pullList li {
+  border-bottom: 1px solid var(--border);
+}
+
+.pullRow {
+  display: flex;
+  width: 100%;
+  gap: 10px;
+  align-items: center;
+  padding: 14px;
+  text-align: start;
+}
+
+.pullRow:hover {
+  background: var(--panel);
+}
+
+.pullRow:focus-visible {
+  outline-offset: -3px;
+}
+
+.pullRow > :global(.icon) {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
+.pullRow > .pullIcon {
+  align-self: flex-start;
+  margin-top: 2px;
+  color: var(--accent);
+}
+
+.rowBody {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  overflow-wrap: anywhere;
+}
+
+.rowMeta,
+.detailMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rowMeta time {
+  margin-inline-start: auto;
+}
+
+.pullStatus {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.pullStatus[data-status='open'] {
+  color: var(--success);
+}
+
+.pullStatus[data-status='merged'] {
+  color: var(--accent);
+}
+
+.pullStatus[data-status='closed'] {
+  color: var(--danger);
+}
+
+.detailHeader {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px 14px;
+}
+
+.detailNav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.back,
+.detailNav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.back:hover,
+.detailNav a:hover {
+  color: var(--accent);
+}
+
+.back :global(.icon) {
+  transform: rotate(180deg);
+}
+
+.detailHeader h3 {
+  font-size: 18px;
+  line-height: 1.3;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.detailHeader h3 span {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.branchPair {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-family: var(--font-mono);
+}
+
+.branchPair bdi {
+  max-width: 100%;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--raised);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 12px;
+  padding-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.review button {
+  min-height: 34px;
+  padding: 4px 9px;
+  font-size: 12px;
+}
+
+.diffToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  border-block: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.diffModes {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--canvas);
+}
+
+.diffModes button {
+  min-height: 30px;
+  padding-inline: 8px;
+  font-size: 12px;
+}
+
+.changesSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.counts {
+  display: inline-flex;
+  gap: 8px;
+  font: 12px/1.5 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.addText {
+  color: var(--success);
+}
+
+.removeText {
+  color: var(--danger);
+}
+
+.filePicker {
+  display: grid;
+  gap: 4px;
+  padding: 10px 14px 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.filePicker select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 36px;
+  padding-inline: 8px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font: 12px var(--font-mono);
+  text-overflow: ellipsis;
+}
+
+.filePicker select:focus-visible,
+.diffScroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.file {
+  border-block: 1px solid var(--border);
+}
+
+.fileHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 6px 8px;
+  padding: 9px 14px;
+  background: var(--panel);
+}
+
+.fileHeader > :global(.icon) {
+  color: var(--muted);
+}
+
+.fileHeader h4 {
+  flex: 1;
+  min-width: min(80px, 100%);
+  font: 600 12px/1.5 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.diffScroll {
+  overflow-x: auto;
+}
+
+.diffTable {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  text-align: left;
+  font: 12px/1.65 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.diffTable.split {
+  min-width: 360px;
+}
+
+.numberColumn {
+  width: 3.25em;
+}
+
+.diffTable th {
+  padding: 5px;
+  border-block: 1px solid var(--border);
+  background: var(--raised);
+  color: var(--muted);
+  font: 600 11px/1.5 var(--font-sans);
+}
+
+.split th {
+  padding-inline: 12px;
+}
+
+.diffTable td {
+  padding-block: 1px;
+  vertical-align: top;
+}
+
+.diffTable .hunk td {
+  padding: 4px 12px;
+  border-block: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.lineNo {
+  padding-inline: 4px;
+  border-inline-end: 1px solid var(--border);
+  color: var(--muted);
+  text-align: end;
+  user-select: none;
+}
+
+.diffTable .lineCode {
+  position: relative;
+  padding-inline: 2em 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+
+.diffMarker {
+  position: absolute;
+  inset-inline-start: 7px;
+  color: var(--muted);
+  user-select: none;
+}
+
+.diffTable [data-change='added'] {
+  background: var(--selected);
+}
+
+.diffTable [data-change='removed'] {
+  background: var(--danger-surface);
+}
+
+.diffTable [data-change='empty'] {
+  background: var(--panel);
+}
+
+.diffTable [data-change='added'] .diffMarker,
+.diffTable [data-change='added'].lineNo {
+  color: var(--success);
+}
+
+.diffTable [data-change='removed'] .diffMarker,
+.diffTable [data-change='removed'].lineNo {
+  color: var(--danger);
+}
+
+.split .lineNo:nth-child(3),
+.split th + th {
+  border-inline-start: 1px solid var(--border);
+}
+
+.noNewline {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.message,
+.notice {
+  padding: 14px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.message h3 {
+  margin-top: 6px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.message p[role='alert'] {
+  color: var(--danger);
+  margin-bottom: 8px;
+}
+
+.notice {
+  padding-block: 8px;
+  font-size: 12px;
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 10px 14px;
+  color: var(--muted);
+  font-size: 12px;
+}

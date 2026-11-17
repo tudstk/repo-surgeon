@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request, Response, status
+from fastapi import Path as PathParam
 from pydantic import BaseModel, Field
 
 from repo_surgeon.api.dependencies import CurrentPrincipal, DatabaseSession, MutationPrincipal
@@ -37,6 +38,11 @@ from repo_surgeon.infrastructure.github_import import (
     GitHubCommitPage,
     GitHubImporter,
     GitHubImportError,
+)
+from repo_surgeon.infrastructure.github_pull_requests import (
+    MAX_PULL_REQUEST_FILE_PAGE,
+    GitHubPullRequestChanges,
+    GitHubPullRequestPage,
 )
 from repo_surgeon.infrastructure.github_repository_search import (
     SEARCH_PATTERN,
@@ -188,6 +194,57 @@ def _history_problem(error: GitHubImportError) -> Exception:
         status=502,
         detail=str(error),
     )
+
+
+def _pull_request_problem(error: GitHubImportError) -> Exception:
+    return problem(
+        code="repository_pull_requests_unavailable",
+        title="GitHub pull requests unavailable",
+        status=502,
+        detail=str(error),
+    )
+
+
+@router.get("/{repository_id}/pull-requests")
+async def list_owned_pull_requests(
+    repository_id: UUID,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    database: DatabaseSession,
+    state: Literal["open", "closed"] = "open",
+    page: Annotated[int, Query(ge=1, le=MAX_HISTORY_PAGE)] = 1,
+) -> GitHubPullRequestPage:
+    response.headers["Cache-Control"] = "no-store"
+    repository = await _owned_github_snapshot(
+        SqlAlchemyRepositoryStore(database, principal.user_id), repository_id
+    )
+    importer: GitHubImporter = request.app.state.github_importer
+    try:
+        return await importer.list_pull_requests(repository, state, page)
+    except GitHubImportError as error:
+        raise _pull_request_problem(error) from error
+
+
+@router.get("/{repository_id}/pull-requests/{number}/files")
+async def get_owned_pull_request_changes(
+    repository_id: UUID,
+    number: Annotated[int, PathParam(ge=1, le=2**31 - 1)],
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    database: DatabaseSession,
+    page: Annotated[int, Query(ge=1, le=MAX_PULL_REQUEST_FILE_PAGE)] = 1,
+) -> GitHubPullRequestChanges:
+    response.headers["Cache-Control"] = "no-store"
+    repository = await _owned_github_snapshot(
+        SqlAlchemyRepositoryStore(database, principal.user_id), repository_id
+    )
+    importer: GitHubImporter = request.app.state.github_importer
+    try:
+        return await importer.pull_request_changes(repository, number, page)
+    except GitHubImportError as error:
+        raise _pull_request_problem(error) from error
 
 
 @router.get("/{repository_id}/branches")

@@ -312,3 +312,68 @@ export function syncRepositorySnapshot(repositoryId: string, csrfToken: string) 
     mutationInit(csrfToken, {}),
   );
 }
+
+export type PullRequestState = 'open' | 'closed';
+
+export type GitHubPullRequest = {
+  number: number;
+  title: string;
+  status: 'open' | 'draft' | 'closed' | 'merged';
+  author: string | null;
+  updated_at: string;
+  base_ref: string;
+  head_ref: string;
+  url: string;
+};
+
+export type PullRequestPage = {
+  pulls: GitHubPullRequest[];
+  next_page: number | null;
+};
+
+export type PullRequestFile = {
+  path: string;
+  previous_path: string | null;
+  status: string;
+  additions: number;
+  deletions: number;
+  patch: string | null;
+  patch_status: 'available' | 'unavailable' | 'limited' | 'restricted';
+};
+
+export type PullRequestChanges = {
+  changed_files: number;
+  additions: number;
+  deletions: number;
+  files: PullRequestFile[];
+  restricted_files: number;
+  next_page: number | null;
+  file_limit_reached: boolean;
+};
+
+export function listPullRequests(
+  repositoryId: string,
+  state: PullRequestState,
+  page: number,
+  signal: AbortSignal,
+) {
+  const query = new URLSearchParams({ state, page: String(page) });
+  return requestJson<PullRequestPage>(
+    `/api/v1/repositories/${repositoryId}/pull-requests?${query}`,
+    {
+      signal,
+    },
+  );
+}
+
+export function getPullRequestChanges(
+  repositoryId: string,
+  number: number,
+  page: number,
+  signal: AbortSignal,
+) {
+  return requestJson<PullRequestChanges>(
+    `/api/v1/repositories/${repositoryId}/pull-requests/${number}/files?page=${page}`,
+    { signal },
+  );
+}

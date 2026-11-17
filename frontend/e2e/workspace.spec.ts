@@ -129,8 +129,8 @@ for (const viewport of [
       await expect(
         page.getByRole('complementary', { name: 'Repositories and sessions' }),
       ).toBeVisible();
-      await expect(page.getByRole('region', { name: 'Code and activity' })).toBeVisible();
-      const bounds = await page.getByRole('region', { name: 'Code and activity' }).boundingBox();
+      await expect(page.getByRole('region', { name: 'Repository tools' })).toBeVisible();
+      const bounds = await page.getByRole('region', { name: 'Repository tools' }).boundingBox();
       expect(bounds?.width).toBeGreaterThanOrEqual(viewport.width * 0.3);
     } else {
       const trigger = page.getByRole('button', { name: 'Repositories', exact: true });
@@ -156,12 +156,12 @@ for (const viewport of [
       await page.keyboard.press('Escape');
       await expect(dialog).toHaveCount(0);
       await expect(trigger).toBeFocused();
-      await page.getByRole('button', { name: 'Code & activity' }).click();
+      await page.getByRole('button', { name: 'Repository tools' }).click();
       await page.getByRole('tab', { name: 'Activity' }).click();
       await expect(page.getByRole('tabpanel', { name: 'Activity' })).toContainText('Persisted');
       await capture(page, testInfo, 'events-drawer');
       await page.keyboard.press('Escape');
-      await expect(page.getByRole('button', { name: 'Code & activity' })).toBeFocused();
+      await expect(page.getByRole('button', { name: 'Repository tools' })).toBeFocused();
     }
   });
 }
@@ -1034,7 +1034,7 @@ for (const width of [1440, 390]) {
     });
     await page.goto('/');
     const mobile = width < 1101;
-    if (mobile) await page.getByRole('button', { name: 'Code & activity' }).click();
+    if (mobile) await page.getByRole('button', { name: 'Repository tools' }).click();
     const codeTab = page.getByRole('tab', { name: 'Code' });
     await expect(codeTab).toHaveAttribute('aria-selected', 'true');
     await page.getByRole('button', { name: 'src', exact: true }).click();
@@ -1103,7 +1103,7 @@ for (const width of [1440, 390]) {
       await expect(page.getByRole('button', { name: 'main.ts', exact: true })).toBeFocused();
     }
     if (!mobile) {
-      const divider = page.getByRole('separator', { name: 'Resize Code and Activity' });
+      const divider = page.getByRole('separator', { name: 'Resize repository tools' });
       await divider.press('Home');
       await expect(page.getByRole('button', { name: 'main.ts', exact: true })).toBeHidden();
       await expect(contents).toContainText('lastLine');
@@ -1126,8 +1126,8 @@ test('the work pane resizes with the pointer and keyboard within 20–50% of the
     route.fulfill({ json: [{ ...repository, github_commit: 'a'.repeat(40) }] }),
   );
   await page.goto('/');
-  const divider = page.getByRole('separator', { name: 'Resize Code and Activity' });
-  const pane = page.getByRole('region', { name: 'Code and activity' });
+  const divider = page.getByRole('separator', { name: 'Resize repository tools' });
+  const pane = page.getByRole('region', { name: 'Repository tools' });
   const paneHeaders = page.locator(
     '.repo-panel > .panel-heading, .conversation > .panel-heading, .work-panel > .work-toolbar',
   );
@@ -1206,11 +1206,10 @@ for (const width of [1440, 390]) {
     await expect(page.locator('.repository-context')).not.toContainText('Snapshot');
     const openCode = async () => {
       if (width === 390)
-        await page.getByRole('button', { name: 'Code & activity', exact: true }).click();
+        await page.getByRole('button', { name: 'Repository tools', exact: true }).click();
     };
     const closeCode = async () => {
-      if (width === 390)
-        await page.getByRole('button', { name: 'Close Code and activity' }).click();
+      if (width === 390) await page.getByRole('button', { name: 'Close Repository tools' }).click();
     };
     await openCode();
     const toolbar = page.locator('.work-toolbar');
@@ -1341,7 +1340,7 @@ for (const width of [1440, 390]) {
       });
     });
     await page.goto('/');
-    if (width === 390) await page.getByRole('button', { name: 'Code & activity' }).click();
+    if (width === 390) await page.getByRole('button', { name: 'Repository tools' }).click();
     const branchTrigger = page.getByRole('button', { name: /^Choose branch/ });
     const commitTrigger = page.getByRole('button', { name: /^Choose commit/ });
     await expect(branchTrigger).toHaveText('main');
@@ -1373,9 +1372,9 @@ for (const width of [1440, 390]) {
     await capture(page, testInfo, `revision-preview-${width}`);
 
     if (width === 390) {
-      await page.getByRole('button', { name: 'Close Code and activity' }).click();
+      await page.getByRole('button', { name: 'Close Repository tools' }).click();
       await expect(page.getByText(turn.answer)).toBeVisible();
-      await page.getByRole('button', { name: 'Code & activity' }).click();
+      await page.getByRole('button', { name: 'Repository tools' }).click();
       await expect(commitTrigger).toContainText('ccccccc');
     }
     await commitTrigger.click();
@@ -1386,3 +1385,165 @@ for (const width of [1440, 390]) {
     expect(opened).toEqual([latest.sha, previous.sha]);
   });
 }
+
+async function pullRequestFixture(page: Page) {
+  await fixture(page, 'ready');
+  await page.route('**/api/v1/repositories', (route) =>
+    route.fulfill({ json: [{ ...repository, github_commit: 'a'.repeat(40) }] }),
+  );
+  await page.route('**/api/v1/repositories/*/branches?*', (route) =>
+    route.fulfill({ json: { default_branch: 'main', branches: ['main'], next_page: null } }),
+  );
+  await page.route('**/api/v1/repositories/*/commits?*', (route) =>
+    route.fulfill({ json: { commits: [], next_page: null } }),
+  );
+  const pull = {
+    number: 24,
+    status: 'open',
+    title: 'Validate the catalog price filter',
+    author: 'ada',
+    updated_at: '2026-11-17T12:00:00Z',
+    base_ref: 'main',
+    head_ref: 'validate-price-filter',
+    url: 'https://github.com/sample/inspection-fixture/pull/24',
+  };
+  const second = { ...pull, number: 23, title: 'Keep search results stable' };
+  const merged = {
+    ...pull,
+    number: 21,
+    status: 'merged',
+    title: 'Add the catalog search endpoint',
+  };
+  const file = {
+    path: 'src/catalog/price.ts',
+    status: 'modified',
+    previous_path: null,
+    additions: 3,
+    deletions: 1,
+    patch_status: 'available',
+    patch: [
+      '@@ -12,5 +12,7 @@ export function parsePrice(raw: string) {',
+      '   const input = raw.trim();',
+      '   if (!input) return null;',
+      '-  const price = Number(input);',
+      '+  const price = parseFloat(input);',
+      '+  if (!Number.isFinite(price)) return null;',
+      '+  if (price < 0) return null;',
+      '   return price;',
+      ' }',
+    ].join('\n'),
+  };
+  let listRequests = 0;
+  await page.route('**/api/v1/repositories/*/pull-requests?*', (route) => {
+    listRequests += 1;
+    const state = new URL(route.request().url()).searchParams.get('state');
+    return route.fulfill({
+      json: { pulls: state === 'closed' ? [merged] : [pull, second], next_page: null },
+    });
+  });
+  await page.route('**/api/v1/repositories/*/pull-requests/*/files?*', (route) => {
+    const url = new URL(route.request().url());
+    const pageNumber = url.searchParams.get('page');
+    const isMerged = url.pathname.endsWith('/21/files');
+    return route.fulfill({
+      json: {
+        changed_files: isMerged ? 8 : 2,
+        additions: 15,
+        deletions: 3,
+        restricted_files: 0,
+        file_limit_reached: false,
+        next_page: isMerged && pageNumber === '1' ? 2 : null,
+        files:
+          pageNumber === '2'
+            ? [{ ...file, path: 'src/catalog/sort.ts' }]
+            : [
+                file,
+                {
+                  ...file,
+                  path: 'public/catalog-thumbnail.png',
+                  status: 'added',
+                  patch: null,
+                  patch_status: 'unavailable',
+                },
+              ],
+      },
+    });
+  });
+  return () => listRequests;
+}
+
+test('browses open and merged GitHub pull requests and both diff layouts', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  const countRequests = await pullRequestFixture(page);
+  await page.goto('/');
+  const code = page.getByRole('tab', { name: 'Code', exact: true });
+  await expect(code).toHaveAttribute('aria-selected', 'true');
+  expect(countRequests()).toBe(0);
+  await code.focus();
+  await page.keyboard.press('End');
+  await expect(page.getByRole('tab', { name: 'Pull Request', exact: true })).toBeFocused();
+  const panel = page.getByRole('tabpanel', { name: 'Pull Request' });
+  const row = panel.getByRole('button', { name: /Validate the catalog price filter/ });
+  await expect(row).toBeVisible();
+  await capture(
+    page.getByRole('region', { name: 'Repository tools' }),
+    testInfo,
+    'open-pull-requests',
+  );
+  const second = panel.getByRole('button', { name: /Keep search results stable/ });
+  await expect(second).toBeVisible();
+  await row.click();
+  await expect(
+    panel.getByRole('heading', { name: /Validate the catalog price filter/ }),
+  ).toBeFocused();
+  await expect(panel.getByRole('button', { name: 'Code Review this PR' })).toBeDisabled();
+  const unified = panel.getByRole('region', { name: 'Unified diff' });
+  await expect(unified).toContainText('const price = Number(input);');
+  await expect(unified).toContainText('const price = parseFloat(input);');
+  await capture(page.getByRole('region', { name: 'Repository tools' }), testInfo, 'unified-diff');
+  await panel.getByRole('button', { name: 'Side by side' }).click();
+  const split = panel.getByRole('region', { name: 'Side-by-side diff' });
+  await expect(split.getByRole('columnheader', { name: 'Before' })).toBeVisible();
+  await expect(split.getByRole('columnheader', { name: 'After' })).toBeVisible();
+  const replacement = split.getByRole('row', { name: /Number\(input\);.*parseFloat\(input\);/ });
+  await expect(replacement).toBeVisible();
+  await capture(
+    page.getByRole('region', { name: 'Repository tools' }),
+    testInfo,
+    'side-by-side-diff',
+  );
+  await panel.getByLabel('Changed files on this page').selectOption('1');
+  await expect(panel.getByText('GitHub did not include a text patch for this file.')).toBeVisible();
+  await panel.getByRole('button', { name: 'All pull requests' }).click();
+  await expect(row).toBeFocused();
+  await panel.getByRole('button', { name: 'Closed', exact: true }).click();
+  await expect(row).not.toBeVisible();
+  await panel.getByRole('button', { name: /Add the catalog search endpoint/ }).click();
+  await expect(panel.getByText('Merged', { exact: true }).filter({ visible: true })).toBeVisible();
+  await panel
+    .getByRole('navigation', { name: 'Changed file pages' })
+    .getByRole('button', { name: 'Next' })
+    .click();
+  await expect(panel.getByRole('heading', { name: 'src/catalog/sort.ts' })).toBeVisible();
+  await expect(split).toBeVisible();
+});
+
+test('shows readable pull request diffs in the mobile repository tools drawer', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await pullRequestFixture(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Repository tools', exact: true }).click();
+  const drawer = page.getByRole('dialog', { name: 'Repository tools' });
+  await drawer.getByRole('tab', { name: 'Pull Request', exact: true }).click();
+  await drawer.getByRole('button', { name: /Validate the catalog price filter/ }).click();
+  await expect(drawer.getByRole('region', { name: 'Unified diff' })).toBeVisible();
+  await capture(drawer, testInfo, 'mobile-pull-request');
+  await drawer.getByRole('button', { name: 'Side by side' }).click();
+  await expect(drawer.getByRole('region', { name: 'Side-by-side diff' })).toBeVisible();
+  expect(await drawer.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+});

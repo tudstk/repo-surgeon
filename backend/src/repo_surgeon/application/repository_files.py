@@ -107,6 +107,27 @@ class FileRead:
         }
 
 
+def ensure_visible_repository_path(relative: str) -> None:
+    """Enforce sensitive-path restrictions on an already validated relative path."""
+    parts = tuple(part.lower() for part in PurePath(relative).parts)
+    filename = parts[-1] if parts else ""
+    if ".git" in parts:
+        raise RepositoryFileError("unsafe_path", "The requested path is not available.")
+    if any(part.startswith(".env") for part in parts) or filename in {
+        "id_rsa",
+        "id_dsa",
+        "id_ecdsa",
+        "id_ed25519",
+    }:
+        raise RepositoryFileError("unsafe_path", "The requested path is not available.")
+    if PurePath(filename).suffix in {".key", ".p12", ".pfx", ".ppk"}:
+        raise RepositoryFileError("unsafe_path", "The requested path is not available.")
+    if any(
+        marker in component for component in parts for marker in ("credential", "secret", "token")
+    ):
+        raise RepositoryFileError("unsafe_path", "The requested path is not available.")
+
+
 class ConfinedRepositoryFiles:
     """Read only regular files that resolve under one canonical repository root."""
 
@@ -206,7 +227,7 @@ class ConfinedRepositoryFiles:
                     if len(path) > 1024:
                         continue
                     try:
-                        self._ensure_visible_relative(path)
+                        ensure_visible_repository_path(path)
                         mode = child.stat(follow_symlinks=False).st_mode
                     except RepositoryFileError, OSError:
                         continue
@@ -238,8 +259,8 @@ class ConfinedRepositoryFiles:
                 "unsafe_path", "The requested path cannot be inspected safely."
             ) from error
         self._ensure_contained(resolved)
-        self._ensure_visible_relative(relative)
-        self._ensure_visible_relative(resolved.relative_to(self._root).as_posix())
+        ensure_visible_repository_path(relative)
+        ensure_visible_repository_path(resolved.relative_to(self._root).as_posix())
         try:
             mode = resolved.stat().st_mode
         except OSError as error:
@@ -366,7 +387,7 @@ class ConfinedRepositoryFiles:
                 "file_not_found", "The requested path was not found."
             ) from error
         self._ensure_contained(resolved)
-        self._ensure_visible_relative(relative)
+        ensure_visible_repository_path(relative)
         if not resolved.is_dir():
             raise RepositoryFileError("unsafe_path", "The requested path is not a directory.")
         return resolved, relative
@@ -374,7 +395,7 @@ class ConfinedRepositoryFiles:
     def _resolve_requested_path(self, request_path: str) -> tuple[Path, str]:
         normalized = normalize_repository_relative_path(request_path)
         relative = Path(normalized)
-        self._ensure_visible_relative(normalized)
+        ensure_visible_repository_path(normalized)
         return self._root / relative, normalized
 
     def _resolve_file_candidate(
@@ -392,8 +413,8 @@ class ConfinedRepositoryFiles:
             ) from error
         self._ensure_contained(resolved)
         relative = requested_relative or candidate.relative_to(self._root).as_posix()
-        self._ensure_visible_relative(relative)
-        self._ensure_visible_relative(resolved.relative_to(self._root).as_posix())
+        ensure_visible_repository_path(relative)
+        ensure_visible_repository_path(resolved.relative_to(self._root).as_posix())
         try:
             mode = resolved.stat().st_mode
         except OSError as error:
@@ -408,8 +429,8 @@ class ConfinedRepositoryFiles:
         try:
             resolved = candidate.resolve(strict=True)
             self._ensure_contained(resolved)
-            self._ensure_visible_relative(candidate.relative_to(self._root).as_posix())
-            self._ensure_visible_relative(resolved.relative_to(self._root).as_posix())
+            ensure_visible_repository_path(candidate.relative_to(self._root).as_posix())
+            ensure_visible_repository_path(resolved.relative_to(self._root).as_posix())
         except OSError, RepositoryFileError:
             return False
         return resolved.is_dir()
@@ -419,25 +440,3 @@ class ConfinedRepositoryFiles:
             raise RepositoryFileError(
                 "unsafe_path", "The requested path is outside the repository."
             )
-
-    @staticmethod
-    def _ensure_visible_relative(relative: str) -> None:
-        parts = tuple(part.lower() for part in PurePath(relative).parts)
-        filename = parts[-1] if parts else ""
-        if ".git" in parts:
-            raise RepositoryFileError("unsafe_path", "The requested path is not available.")
-        if any(part.startswith(".env") for part in parts) or filename in {
-            "id_rsa",
-            "id_dsa",
-            "id_ecdsa",
-            "id_ed25519",
-        }:
-            raise RepositoryFileError("unsafe_path", "The requested path is not available.")
-        if PurePath(filename).suffix in {".key", ".p12", ".pfx", ".ppk"}:
-            raise RepositoryFileError("unsafe_path", "The requested path is not available.")
-        if any(
-            marker in component
-            for component in parts
-            for marker in ("credential", "secret", "token")
-        ):
-            raise RepositoryFileError("unsafe_path", "The requested path is not available.")

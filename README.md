@@ -202,6 +202,12 @@ Selecting an imported snapshot checks the commit on GitHub's default branch. Loo
 
 For an imported GitHub repository, use the branch picker in **Code** to preview the tip of another branch. Open the commit picker for that branch to browse older pages and select a revision. The selected commit's full message appears above the file browser. Choose **Saved snapshot** in the commit picker to return to the source used by the workspace and its sessions. A history selection is a read-only preview. GitHub API rate limits and the existing source-archive limits apply.
 
+### Browse pull requests
+
+Select an imported repository and open **Pull Request** in the right work pane. On a phone, open **Repository tools** first. **Open** lists open and draft pull requests. **Closed** includes closed and merged pull requests. Select a pull request, choose a changed file, and switch between **Unified** and **Side by side**. The viewer shows GitHub's available text patches with file paths, change counts, and original and new line numbers.
+
+Lists and file changes load one page at a time. The viewer identifies missing or partial text patches and applies the workspace's protected-path and preview limits. Use the GitHub link in the pull request header to see the upstream comparison. The **Code Review this PR** control is disabled while review execution is deferred.
+
 ### Local GitHub App access
 
 In loopback-only `local_trusted` mode, a GitHub App installation can read GitHub history and Sync for one existing snapshot, including a repository that became private after it was imported. Those requests use the installation's [GitHub API quota](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#primary-rate-limit-for-github-app-installations). Repository search and new imports still use the public endpoints and their own rate limits.
@@ -218,7 +224,7 @@ REPO_SURGEON_GITHUB_APP__REPOSITORY_ID=789
 REPO_SURGEON_GITHUB_APP__PRIVATE_KEY_PATH=/absolute/path/outside/the/checkout/github-app.pem
 ```
 
-Open the existing repository in **Code**. The branch picker can now read GitHub history for that snapshot. The server mints a read-only token for the configured numeric repository ID and keeps it in process memory.
+Open the existing repository in **Code**. The branch picker can now read GitHub history for that snapshot. The server mints a read-only token for the configured numeric repository ID and keeps it in process memory. For private pull request browsing, also grant **Pull requests → Read-only** in the App registration and approve the permission on the installation. Pull request reads use their own token scoped to that single permission and repository.
 
 If the workspace cannot open an imported snapshot after a filesystem remount, choose **Recover snapshot**. The server compares the existing directory with a fresh bounded archive of the saved public commit. Recovery updates its filesystem binding only when the original directory and files match. The repository and its saved sessions keep their IDs. A missing or changed snapshot requires a fresh import or operator assistance.
 

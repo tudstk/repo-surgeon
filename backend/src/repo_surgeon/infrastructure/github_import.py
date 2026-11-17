@@ -28,6 +28,17 @@ from repo_surgeon.infrastructure.github_app import (
     GitHubAppError,
     GitHubAppInstallation,
 )
+from repo_surgeon.infrastructure.github_pull_requests import (
+    MAX_PULL_REQUEST_FILE_PAGE,
+    MAX_PULL_REQUEST_FILES,
+    PULL_REQUEST_FILE_PAGE_SIZE,
+    PULL_REQUEST_PAGE_SIZE,
+    GitHubPullRequestChanges,
+    GitHubPullRequestPage,
+    change_count,
+    pull_file_from_github,
+    pull_request_from_github,
+)
 
 FULL_NAME_PATTERN = r"^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$"
 COMMIT_PATTERN = r"^[a-f0-9]{40}$"
@@ -58,6 +69,7 @@ class _UpstreamRepository:
     name: str
     id: int
     default_branch: str | None
+    private: bool
     token: str | None = field(default=None, repr=False)
 
 
@@ -201,6 +213,72 @@ class GitHubImporter:
                 repository.owner_user_id, upstream, commit, verify=repository
             )
             return snapshot.root
+
+    async def list_pull_requests(
+        self, repository: Repository, state: str, page: int
+    ) -> GitHubPullRequestPage:
+        async with self._operation():
+            upstream = await self._registered_repository(repository)
+            token = await self._pull_request_token(upstream)
+            payload, more = await self._github_json(
+                f"{upstream.name}/pulls",
+                {
+                    "state": state,
+                    "sort": "updated",
+                    "page": page,
+                    "per_page": PULL_REQUEST_PAGE_SIZE,
+                },
+                token,
+            )
+            if not isinstance(payload, list) or len(payload) > PULL_REQUEST_PAGE_SIZE:
+                raise ValueError
+            return GitHubPullRequestPage(
+                [pull_request_from_github(item, upstream.name) for item in payload],
+                page + 1 if more and page < MAX_HISTORY_PAGE else None,
+            )
+
+    async def pull_request_changes(
+        self, repository: Repository, number: int, page: int
+    ) -> GitHubPullRequestChanges:
+        async with self._operation():
+            upstream = await self._registered_repository(repository)
+            token = await self._pull_request_token(upstream)
+            path = f"{upstream.name}/pulls/{number}"
+            try:
+                details, _ = await self._github_json(path, {}, token)
+                payload, more = await self._github_json(
+                    f"{path}/files", {"page": page, "per_page": PULL_REQUEST_FILE_PAGE_SIZE}, token
+                )
+            except httpx.HTTPStatusError as error:
+                if error.response.status_code == 404:
+                    raise GitHubImportError(
+                        f"GitHub could not find pull request #{number} (HTTP 404)."
+                    ) from None
+                raise
+            if (
+                not isinstance(details, dict)
+                or change_count(details.get("number")) != number
+                or not isinstance(payload, list)
+                or len(payload) > PULL_REQUEST_FILE_PAGE_SIZE
+            ):
+                raise ValueError
+            files = [file for item in payload if (file := pull_file_from_github(item)) is not None]
+            changed_files = change_count(details.get("changed_files"))
+            next_page = page + 1 if more and page < MAX_PULL_REQUEST_FILE_PAGE else None
+            return GitHubPullRequestChanges(
+                changed_files,
+                change_count(details.get("additions")),
+                change_count(details.get("deletions")),
+                files,
+                len(payload) - len(files),
+                next_page,
+                next_page is None and changed_files > MAX_PULL_REQUEST_FILES,
+            )
+
+    async def _pull_request_token(self, upstream: _UpstreamRepository) -> str | None:
+        if upstream.private and self.installation is not None:
+            return await self.installation.access_token(self.client, permission="pull_requests")
+        return None
 
     async def list_branches(self, repository: Repository, page: int) -> GitHubBranchPage:
         async with self._operation():
@@ -375,6 +453,7 @@ class GitHubImporter:
             str(repo["full_name"]),
             int(repo["id"]),
             default if isinstance(default, str) and _valid_branch(default) else None,
+            repo["private"],
             token,
         )
 

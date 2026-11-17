@@ -7,6 +7,8 @@ export function Icon({
     | 'repo'
     | 'branch'
     | 'commit'
+    | 'pull-request'
+    | 'external'
     | 'code'
     | 'folder'
     | 'file'
@@ -35,6 +37,9 @@ export function Icon({
     repo: 'M4 3h13v16H4a2 2 0 0 1 0-4h13M4 3a2 2 0 0 0-2 2v12M7 7h6M7 10h4',
     branch:
       'M6 8v8m0 0c0-5 12-2 12-8M4 6a2 2 0 1 0 4 0 2 2 0 0 0-4 0Zm0 12a2 2 0 1 0 4 0 2 2 0 0 0-4 0ZM16 6a2 2 0 1 0 4 0 2 2 0 0 0-4 0Z',
+    'pull-request':
+      'M6 8v8m-2-10a2 2 0 1 0 4 0 2 2 0 0 0-4 0Zm0 12a2 2 0 1 0 4 0 2 2 0 0 0-4 0Zm12 0a2 2 0 1 0 4 0 2 2 0 0 0-4 0ZM18 16v-5a5 5 0 0 0-5-5h-2m3-3-3 3 3 3',
+    external: 'M14 4h6v6m0-6-9 9m7 0v7H4V6h7',
     commit: 'M3 12h5m8 0h5m-13 0a4 4 0 1 0 8 0 4 4 0 0 0-8 0Z',
     sync: 'M20 10a8 8 0 0 0-14-4L3 9m0-5v5h5m-4 5a8 8 0 0 0 14 4l3-3m0 5v-5h-5',
     activity: 'M3 12h4l3-7 4 14 3-7h4',

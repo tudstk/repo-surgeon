@@ -9,6 +9,7 @@ import { SessionActionDialog } from '@/components/ui/session-action-dialog';
 import { RepositoryRemovalDialog } from '@/components/ui/repository-removal-dialog';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { RepositoryCode } from './repository-code';
+import { RepositoryPullRequests } from './repository-pull-requests';
 import { RepositoryRevisions, type RepositoryRevision } from './repository-revisions';
 import { RepositorySummaryPanel } from './repository-summary-panel';
 import { GitHubSync, useGitHubSync } from './github-sync';
@@ -52,6 +53,12 @@ function eventMessage(event: RunEvent) {
 
 const minWorkWidth = 20;
 const maxWorkWidth = 50;
+const workTabs = [
+  { id: 'code', label: 'Code' },
+  { id: 'activity', label: 'Activity' },
+  { id: 'pull-request', label: 'Pull Request' },
+] as const;
+type WorkTab = (typeof workTabs)[number]['id'];
 
 function clampWorkWidth(width: number) {
   return Math.min(maxWorkWidth, Math.max(minWorkWidth, width));
@@ -78,7 +85,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     repositoryId: string;
     revision: RepositoryRevision;
   } | null>(null);
-  const [workTab, setWorkTab] = useState<'code' | 'activity'>('code');
+  const [workTab, setWorkTab] = useState<WorkTab>('code');
   const [workWidth, setWorkWidth] = useState(40);
   const [resizingWork, setResizingWork] = useState(false);
   const workDrag = useRef<{ pointerId: number; x: number; width: number } | null>(null);
@@ -717,7 +724,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     <>
       <div className="work-toolbar">
         <div className="work-tabs" role="tablist" aria-label="Repository work panel">
-          {(['code', 'activity'] as const).map((tab) => (
+          {workTabs.map(({ id: tab, label }, index) => (
             <button
               key={tab}
               type="button"
@@ -730,20 +737,20 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
               onKeyDown={(event) => {
                 if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
                 event.preventDefault();
-                const next =
+                const direction = event.key === 'ArrowRight' ? 1 : -1;
+                const nextIndex =
                   event.key === 'Home'
-                    ? 'code'
+                    ? 0
                     : event.key === 'End'
-                      ? 'activity'
-                      : tab === 'code'
-                        ? 'activity'
-                        : 'code';
+                      ? workTabs.length - 1
+                      : (index + direction + workTabs.length) % workTabs.length;
+                const next = workTabs[nextIndex].id;
                 setWorkTab(next);
                 document.getElementById(`${workTabsId}-${next}`)?.focus();
               }}
             >
               <Icon name={tab} />
-              {tab === 'code' ? 'Code' : 'Activity'}
+              {label}
               {tab === 'activity' && events.length ? (
                 <span className="count" aria-hidden="true">
                   {events.length}
@@ -800,6 +807,19 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       >
         {eventPane}
       </div>
+      <div
+        className="work-tab-panel"
+        role="tabpanel"
+        id={`${workTabsId}-pull-request-panel`}
+        aria-labelledby={`${workTabsId}-pull-request`}
+        hidden={workTab !== 'pull-request'}
+      >
+        <RepositoryPullRequests
+          key={selectedRepository?.id}
+          repositoryId={selectedRepository?.github_commit ? selectedRepository.id : undefined}
+          active={workTab === 'pull-request'}
+        />
+      </div>
     </>
   );
 
@@ -831,7 +851,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         </button>
         <button type="button" aria-haspopup="dialog" onClick={() => setDrawer('work')}>
           <Icon name="code" />
-          Code &amp; activity
+          Repository tools
         </button>
       </div>
       <div
@@ -999,13 +1019,13 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             </div>
           </form>
         </section>
-        <section className="work-panel" aria-label="Code and activity" id={`${workTabsId}-pane`}>
+        <section className="work-panel" aria-label="Repository tools" id={`${workTabsId}-pane`}>
           <div
             className="work-resize"
             role="separator"
             aria-orientation="vertical"
             tabIndex={0}
-            aria-label="Resize Code and Activity"
+            aria-label="Resize repository tools"
             aria-controls={`${workTabsId}-pane`}
             aria-valuemin={minWorkWidth}
             aria-valuemax={maxWorkWidth}
@@ -1045,7 +1065,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       </div>
       {drawer ? (
         <Drawer
-          title={drawer === 'repositories' ? 'Repositories and sessions' : 'Code and activity'}
+          title={drawer === 'repositories' ? 'Repositories and sessions' : 'Repository tools'}
           onClose={closeDrawer}
         >
           {drawer === 'repositories' ? repositoryPane : workPane}

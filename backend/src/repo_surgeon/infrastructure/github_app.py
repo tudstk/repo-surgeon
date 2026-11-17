@@ -10,6 +10,7 @@ import os
 import stat
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 import httpx
 from cryptography.hazmat.primitives import hashes, serialization
@@ -21,6 +22,9 @@ GITHUB_API_HEADERS = {
     "Accept": "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
 }
+
+
+GitHubReadPermission = Literal["contents", "pull_requests"]
 
 
 class GitHubAppError(Exception):
@@ -68,8 +72,7 @@ class GitHubAppInstallation:
         self.repository_id = settings.repository_id
         self._key = _load_key(settings.private_key_path)
         self._lock = asyncio.Lock()
-        self._token: str | None = None
-        self._expires_at: datetime | None = None
+        self._tokens: dict[GitHubReadPermission, tuple[str, datetime]] = {}
         # httpx logs full URLs at INFO. Private archive redirects carry a temporary token.
         logger = logging.getLogger("httpx")
         if not any(isinstance(item, _SignedArchiveLogFilter) for item in logger.filters):
@@ -84,22 +87,25 @@ class GitHubAppInstallation:
         signature = self._key.sign(signed.encode("ascii"), padding.PKCS1v15(), hashes.SHA256())
         return f"{signed}.{_base64url(signature)}"
 
-    async def access_token(self, client: httpx.AsyncClient) -> str:
+    async def access_token(
+        self, client: httpx.AsyncClient, *, permission: GitHubReadPermission = "contents"
+    ) -> str:
         async with self._lock:
             now = datetime.now(UTC)
-            if (
-                self._token is not None
-                and self._expires_at is not None
-                and self._expires_at > now + timedelta(minutes=1)
-            ):
-                return self._token
+            cached = self._tokens.get(permission)
+            if cached is not None and cached[1] > now + timedelta(minutes=1):
+                return cached[0]
             response = await client.post(
                 f"https://api.github.com/app/installations/{self._installation_id}/access_tokens",
                 headers={**GITHUB_API_HEADERS, "Authorization": f"Bearer {self._jwt(now)}"},
-                json={"repository_ids": [self.repository_id], "permissions": {"contents": "read"}},
+                json={"repository_ids": [self.repository_id], "permissions": {permission: "read"}},
                 follow_redirects=False,
             )
             if response.status_code != 201:
+                if permission == "pull_requests" and response.status_code == 422:
+                    raise GitHubAppError(
+                        "Approve Pull requests: Read-only on the GitHub App installation."
+                    )
                 raise GitHubAppError(
                     "GitHub could not authorize the app installation "
                     f"(HTTP {response.status_code})."
@@ -115,7 +121,8 @@ class GitHubAppInstallation:
                     or not token.isascii()
                     or any(not 33 <= ord(char) <= 126 for char in token)
                     or not isinstance(permissions, dict)
-                    or permissions.get("contents") != "read"
+                    or permissions.get(permission) != "read"
+                    or not permissions.keys() <= {permission, "metadata"}
                     or any(value != "read" for value in permissions.values())
                     or expires_at.tzinfo is None
                     or not now < expires_at <= now + timedelta(minutes=65)
@@ -125,5 +132,5 @@ class GitHubAppInstallation:
                 raise GitHubAppError(
                     "GitHub returned an invalid installation token response."
                 ) from None
-            self._token, self._expires_at = token, expires_at
+            self._tokens[permission] = (token, expires_at)
             return token

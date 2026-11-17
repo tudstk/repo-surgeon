@@ -27,3 +27,6 @@ FORM: Pinned DeepSource Operate direction; no tournament or comp. seed: none (un
 FINISH: Direct solo source and rendered review, package quality checks, DESIGN.md and the design sidecar. Review captures use synthetic fixtures; no raster assets ship in the product.
 
 REPOSITORY DISCOVERY: The workspace context bar opens a focused dialog with a blurred backdrop. Public results show owner/repository and an owner avatar. Selecting a result imports a pinned, read-only public source snapshot and selects it in the workspace. Pending and failure states stay in the dialog. Private authorization is deferred.
+
+
+PULL REQUESTS: The right work pane lists open and closed pull requests with text labels for draft and merged states. Details put the source and target branches above a file selector and a unified or side-by-side code diff. Additions and deletions use the existing semantic colors with explicit signs and line numbers. The mobile Repository tools drawer uses the same controls and contains any horizontal diff scrolling within the comparison. Review execution is reserved for a later release and the review control is visibly disabled.

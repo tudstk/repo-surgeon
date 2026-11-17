@@ -215,3 +215,62 @@ async def test_private_history_uses_only_matching_installation_and_validated_zip
         unconfigured = GitHubImporter(storage, client=client)
         assert unconfigured.history_preview_root(repository, previous) is None
         assert "token=fixture" not in caplog.text
+
+
+@pytest.mark.anyio
+async def test_private_pull_requests_use_a_separate_read_only_token(
+    app_setup: tuple[GitHubAppSettings, rsa.RSAPublicKey], tmp_path: Path
+) -> None:
+    settings, _ = app_setup
+    installation = GitHubAppInstallation(settings)
+    sha = "a" * 40
+    repository = Repository(
+        id=uuid4(),
+        source=RepositorySource.GITHUB,
+        canonical_root="",
+        created_at=datetime.now(UTC),
+        github_full_name="owner/project",
+        github_commit=sha,
+    )
+    repository = replace(
+        repository,
+        canonical_root=str(tmp_path / str(repository.owner_user_id) / "42" / sha),
+    )
+    issued: list[str] = []
+    approve = False
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            body = json.loads(request.content)
+            assert body["repository_ids"] == [42]
+            permission = next(iter(body["permissions"]))
+            assert body["permissions"] == {permission: "read"}
+            if permission == "pull_requests" and not approve:
+                return httpx.Response(422)
+            issued.append(permission)
+            return httpx.Response(
+                201,
+                json={
+                    "token": permission,
+                    "permissions": body["permissions"],
+                    "expires_at": (datetime.now(UTC) + timedelta(minutes=30)).isoformat(),
+                },
+            )
+        if request.url.path.endswith("/pulls"):
+            assert request.headers["authorization"] == "Bearer pull_requests"
+            return httpx.Response(200, json=[])
+        assert request.url.path == "/repos/owner/project"
+        assert request.headers["authorization"] == "Bearer contents"
+        return httpx.Response(
+            200,
+            json={"id": 42, "full_name": "owner/project", "private": True, "visibility": "private"},
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as github:
+        importer = GitHubImporter(tmp_path, client=github, installation=installation)
+        with pytest.raises(GitHubImportError, match="Approve Pull requests"):
+            await importer.list_pull_requests(repository, "open", 1)
+        approve = True
+        assert (await importer.list_pull_requests(repository, "open", 1)).pulls == []
+        assert (await importer.list_pull_requests(repository, "closed", 1)).pulls == []
+        assert issued == ["contents", "pull_requests"]
