@@ -226,13 +226,61 @@ export type RepositoryFilePreview = {
   has_more: boolean;
 };
 
+export type GitHubBranches = {
+  default_branch: string;
+  branches: string[];
+  next_page: number | null;
+};
+
+export type GitHubCommit = {
+  sha: string;
+  message: string;
+};
+
+export type GitHubCommits = {
+  commits: GitHubCommit[];
+  next_page: number | null;
+};
+
+export function getRepositoryBranches(repositoryId: string, page: number, signal: AbortSignal) {
+  return requestJson<GitHubBranches>(`/api/v1/repositories/${repositoryId}/branches?page=${page}`, {
+    signal,
+  });
+}
+
+export function getRepositoryCommits(
+  repositoryId: string,
+  branch: string,
+  page: number,
+  signal: AbortSignal,
+) {
+  const query = new URLSearchParams({ branch, page: String(page) });
+  return requestJson<GitHubCommits>(`/api/v1/repositories/${repositoryId}/commits?${query}`, {
+    signal,
+  });
+}
+
+export async function prepareRepositoryRevision(
+  repositoryId: string,
+  selection: { branch: string; page: number; sha: string },
+  csrfToken: string,
+  signal: AbortSignal,
+) {
+  await requestJson<void>(`/api/v1/repositories/${repositoryId}/history-preview`, {
+    ...mutationInit(csrfToken, selection),
+    signal,
+  });
+}
+
 export function getRepositoryTree(
   repositoryId: string,
   directory: string,
   offset: number,
   signal: AbortSignal,
+  revision?: string,
 ) {
   const query = new URLSearchParams({ directory, offset: String(offset) });
+  if (revision) query.set('revision', revision);
   return requestJson<RepositoryTreePage>(`/api/v1/repositories/${repositoryId}/tree?${query}`, {
     signal,
   });
@@ -243,8 +291,10 @@ export function getRepositoryFile(
   path: string,
   startLine: number,
   signal: AbortSignal,
+  revision?: string,
 ) {
   const query = new URLSearchParams({ path, start_line: String(startLine) });
+  if (revision) query.set('revision', revision);
   return requestJson<RepositoryFilePreview>(`/api/v1/repositories/${repositoryId}/file?${query}`, {
     signal,
   });

@@ -1270,3 +1270,119 @@ for (const width of [1440, 390]) {
     );
   });
 }
+
+for (const width of [1440, 390]) {
+  test(`branches and commits preview read-only code at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+    await fixture(page);
+    const url = '/api/v1/repositories/repository-1';
+    const saved = 'a'.repeat(40);
+    const latest = {
+      sha: 'b'.repeat(40),
+      message: 'Polish the checkout flow\n\nValidate the cart before submitting the order.',
+    };
+    const previous = {
+      sha: 'c'.repeat(40),
+      message: 'Create the checkout view\n\nAdd a first pass at the cart summary.',
+    };
+    const branch = 'release/checkout';
+    const opened: string[] = [];
+    await page.route('**/api/v1/repositories', (route) =>
+      route.fulfill({ json: [{ ...repository, github_commit: saved }] }),
+    );
+    await page.route(`**${url}/branches?*`, (route) => {
+      const page = new URL(route.request().url()).searchParams.get('page');
+      return route.fulfill({
+        json:
+          page === '1'
+            ? { default_branch: 'main', branches: ['main'], next_page: 2 }
+            : { default_branch: 'main', branches: [branch], next_page: null },
+      });
+    });
+    await page.route(`**${url}/commits?*`, (route) => {
+      const query = new URL(route.request().url()).searchParams;
+      expect(query.get('branch')).toBe(branch);
+      return route.fulfill({
+        json:
+          query.get('page') === '1'
+            ? { commits: [latest], next_page: 2 }
+            : { commits: [previous], next_page: null },
+      });
+    });
+    await page.route(`**${url}/history-preview`, (route) => {
+      expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
+      const body = route.request().postDataJSON();
+      expect(body.branch).toBe(branch);
+      expect(body.page).toBe(body.sha === latest.sha ? 1 : 2);
+      opened.push(body.sha);
+      return route.fulfill({ status: 204 });
+    });
+    await page.route(`**${url}/tree?*`, (route) =>
+      route.fulfill({
+        json: {
+          entries: [{ path: 'checkout.ts', name: 'checkout.ts', kind: 'file' }],
+          next_offset: null,
+          scan_limit_reached: false,
+        },
+      }),
+    );
+    await page.route(`**${url}/file?*`, (route) => {
+      const query = new URL(route.request().url()).searchParams;
+      expect(query.get('path')).toBe('checkout.ts');
+      return route.fulfill({
+        json: {
+          path: 'checkout.ts',
+          start_line: 1,
+          end_line: 1,
+          lines: [`const checkout = "${query.get('revision')?.slice(0, 7) ?? 'saved'}";`],
+          has_more: false,
+        },
+      });
+    });
+    await page.goto('/');
+    if (width === 390) await page.getByRole('button', { name: 'Code & activity' }).click();
+    const branchTrigger = page.getByRole('button', { name: /^Choose branch/ });
+    const commitTrigger = page.getByRole('button', { name: /^Choose commit/ });
+    await expect(branchTrigger).toHaveText('main');
+    await branchTrigger.click();
+    const branches = page.getByRole('group', { name: 'Branches', exact: true });
+    await branches.getByRole('button', { name: 'More branches' }).click();
+    await capture(page, testInfo, `revision-branches-${width}`);
+    await branches.getByRole('button', { name: branch }).click();
+    await expect(branchTrigger).toHaveText(branch);
+    await expect(commitTrigger).toContainText('bbbbbbb');
+    await expect(page.locator('.revision-message')).toHaveText(latest.message);
+    await expect(page.getByText('Saved snapshot aaaaaaa · Read-only')).toBeVisible();
+    await page.getByRole('button', { name: 'checkout.ts', exact: true }).click();
+    const source = page.getByRole('region', { name: 'File contents' });
+    await expect(source).toContainText('bbbbbbb');
+
+    await commitTrigger.click();
+    const commits = page.getByRole('group', { name: 'Commits', exact: true });
+    await commits.getByRole('button', { name: 'Older commits' }).click();
+    await expect(commits.getByRole('button', { name: /ccccccc/ })).toBeVisible();
+    await capture(page, testInfo, `revision-commits-${width}`);
+    await page.keyboard.press('Escape');
+    await expect(commitTrigger).toBeFocused();
+    await commitTrigger.click();
+    await commits.getByRole('button', { name: /ccccccc/ }).click();
+    await expect(page.locator('.revision-message')).toHaveText(previous.message);
+    await page.getByRole('button', { name: 'checkout.ts', exact: true }).click();
+    await expect(source).toContainText('ccccccc');
+    await capture(page, testInfo, `revision-preview-${width}`);
+
+    if (width === 390) {
+      await page.getByRole('button', { name: 'Close Code and activity' }).click();
+      await expect(page.getByText(turn.answer)).toBeVisible();
+      await page.getByRole('button', { name: 'Code & activity' }).click();
+      await expect(commitTrigger).toContainText('ccccccc');
+    }
+    await commitTrigger.click();
+    await commits.getByRole('button', { name: 'Saved snapshot' }).click();
+    await expect(page.locator('.revision-message')).toHaveCount(0);
+    await page.getByRole('button', { name: 'checkout.ts', exact: true }).click();
+    await expect(source).toContainText('"saved"');
+    expect(opened).toEqual([latest.sha, previous.sha]);
+  });
+}
