@@ -1,8 +1,8 @@
-import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 
-async function capture(page: Page, testInfo: TestInfo, name: string) {
+async function capture(target: Page | Locator, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(`${name}.png`);
-  await page.screenshot({ path });
+  await target.screenshot({ path, style: 'nextjs-portal { visibility: hidden; }' });
   await testInfo.attach(name, { path, contentType: 'image/png' });
 }
 
@@ -32,6 +32,18 @@ const turn = {
   started_at: session.created_at,
   completed_at: session.updated_at,
 };
+const repositorySummary = {
+  language: 'Python',
+  languages: { Python: 75, TypeScript: 25 },
+  language_confidence: 'high',
+  file_count: 12,
+  approximate_lines: 420,
+  test_framework: 'pytest',
+  test_command: 'uv run pytest',
+  test_detection: 'detected',
+  detected_at: session.created_at,
+  truncated: true,
+};
 
 async function fixture(page: Page, state: 'saved' | 'empty' | 'failed' | 'ready' = 'saved') {
   await page.route('**/api/v1/auth/session', (route) => route.fulfill({ json: account }));
@@ -39,20 +51,7 @@ async function fixture(page: Page, state: 'saved' | 'empty' | 'failed' | 'ready'
     route.fulfill({ json: state === 'empty' ? [] : [repository] }),
   );
   await page.route('**/api/v1/repositories/*/summary', (route) =>
-    route.fulfill({
-      json: {
-        language: 'Python',
-        languages: { Python: 75, TypeScript: 25 },
-        language_confidence: 'high',
-        file_count: 12,
-        approximate_lines: 420,
-        test_framework: 'pytest',
-        test_command: 'uv run pytest',
-        test_detection: 'detected',
-        detected_at: session.created_at,
-        truncated: true,
-      },
-    }),
+    route.fulfill({ json: repositorySummary }),
   );
   await page.route('**/api/v1/repositories/*/tree?*', (route) =>
     route.fulfill({ json: { entries: [], next_offset: null, scan_limit_reached: false } }),
@@ -148,6 +147,8 @@ for (const viewport of [
       await expect(
         page.getByRole('button', { name: 'Close Repositories and sessions' }),
       ).toBeFocused();
+      await page.keyboard.press('Shift+Tab');
+      await expect(dialog.locator('summary')).toBeFocused();
       await page.keyboard.press('Shift+Tab');
       await expect(
         page.getByRole('button', { name: 'Actions for session Read-only review' }),
@@ -450,14 +451,11 @@ for (const colorScheme of ['dark', 'light'] as const) {
     await expect
       .poll(() => trigger.locator('img').evaluate((img: HTMLImageElement) => img.naturalWidth))
       .toBeGreaterThan(0);
-    await expect(
-      page
-        .getByRole('navigation', { name: 'Main navigation' })
-        .getByRole('link', { name: 'Profile' }),
-    ).toHaveCount(0);
-    await expect(page.locator('.app-header')).not.toContainText('Read-only');
+    await expect(page.getByRole('navigation', { name: 'Main navigation' })).toHaveCount(0);
+    await expect(page.locator('.repository-context').locator(trigger)).toBeVisible();
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
+      await expect(trigger.getByText('@ada', { exact: true })).toBeVisible();
       await trigger.hover();
       await expect(page.getByRole('tooltip')).toHaveText('@ada');
       await expect(page.getByRole('tooltip')).toBeVisible();
@@ -530,7 +528,7 @@ test('a broken GitHub picture falls back to an initial without losing account na
   );
   await page.goto('/');
   const trigger = page.getByRole('button', { name: 'Account menu for @ada' });
-  await expect(trigger).toHaveText('A');
+  await expect(trigger.locator('.account-avatar')).toHaveText('A');
   await expect(trigger.locator('img')).toHaveCount(0);
   await trigger.focus();
   await expect(page.getByRole('tooltip')).toBeVisible();
@@ -612,15 +610,15 @@ test('public import selects its snapshot, recovers after failure and survives re
   await capture(page, testInfo, 'public-import-retry');
   await dialog.getByRole('button', { name: 'Import pallets/flask' }).click();
   await expect(dialog).toHaveCount(0);
+  const importedRow = page.getByRole('button', { name: imported.name, exact: true });
+  await expect(importedRow).toHaveAttribute('aria-pressed', 'true');
   await expect(
-    page.getByRole('button', { name: /pallets\/flask Snapshot aaaaaaa/ }),
-  ).toHaveAttribute('aria-pressed', 'true');
+    page.locator('.work-toolbar').getByText('Snapshot aaaaaaa · Read-only'),
+  ).toBeVisible();
   await expect(page.getByRole('button', { name: 'Start read-only session' })).toBeEnabled();
   await capture(page, testInfo, 'public-import-selected');
   await page.reload();
-  await expect(
-    page.getByRole('button', { name: /pallets\/flask Snapshot aaaaaaa/ }),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await expect(importedRow).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Start read-only session' })).toBeEnabled();
   expect(calls).toBe(2);
 });
@@ -646,31 +644,54 @@ for (const width of [1440, 390]) {
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: width === 390 ? 'light' : 'dark' });
     await fixture(page);
+    await page.route('**/api/v1/repositories/*/summary', (route) =>
+      route.fulfill({
+        json: {
+          ...repositorySummary,
+          language: 'TypeScript / JavaScript',
+          languages: { JavaScript: 74.2, CSS: 24.6, HTML: 1.2 },
+          file_count: 32,
+          approximate_lines: 1543,
+          ...(width === 1440
+            ? { test_framework: null, test_command: null, test_detection: 'not_found' }
+            : {}),
+        },
+      }),
+    );
     await page.goto('/');
     if (width === 390)
       await page.getByRole('button', { name: 'Repositories', exact: true }).click();
     const summary = page.getByRole('region', { name: 'Repository summary' });
-    await expect(summary.locator('dt')).toHaveText([
-      'Confidence',
-      'Files',
-      'Size',
-      'Tests detected',
-      'Languages',
+    await expect(summary.getByText('32', { exact: true })).toBeVisible();
+    await expect(summary.getByText('1.5K', { exact: true })).toBeVisible();
+    await expect(
+      summary.getByText(width === 1440 ? 'Not detected' : 'pytest', { exact: true }),
+    ).toBeVisible();
+    const languages = summary.getByRole('list', { name: 'Language shares' });
+    await expect(languages.getByRole('listitem')).toHaveText([
+      /JavaScript\s*74\.2%/,
+      /CSS\s*24\.6%/,
+      /HTML\s*1\.2%/,
     ]);
-    await expect(summary.getByText('75.0%')).toBeVisible();
-    await expect(summary.getByText('25.0%')).toBeVisible();
-    await expect(summary.getByText('Partial scan', { exact: true })).toHaveCount(0);
-    await expect(summary.locator('img')).toHaveCount(2);
+    await expect(languages.locator('img')).toHaveCount(3);
     await expect
       .poll(() =>
-        summary
+        languages
           .locator('img')
-          .first()
-          .evaluate((img: HTMLImageElement) => img.naturalWidth),
+          .evaluateAll((icons) => icons.every((img) => (img as HTMLImageElement).naturalWidth > 0)),
       )
-      .toBeGreaterThan(0);
-    await capture(page, testInfo, `language-summary-${width}`);
+      .toBe(true);
+    const details = summary.locator('summary');
+    await expect(summary.getByText('Language confidence')).toBeHidden();
+    await capture(summary, testInfo, `repository-summary-${width}`);
+    await details.press('Enter');
+    await expect(summary.getByText('Language confidence')).toBeVisible();
+    await expect(summary.getByText('Scan limits may omit some files or lines.')).toBeVisible();
+    if (width === 390) await expect(summary.getByText('uv run pytest')).toBeVisible();
+    await details.press('Enter');
+    await expect(summary.getByText('Language confidence')).toBeHidden();
   });
 }
 
@@ -811,6 +832,7 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
     await fixture(page);
+    const createdTitle = 'inspection-fixture read-only review of the imported source and tests-1';
     let saved = [{ ...session, title: 'sample/inspection-fixture read-only review' }];
     let renameFailure = true;
     await page.route('**/api/v1/sessions?*', (route) => route.fulfill({ json: saved }));
@@ -819,7 +841,7 @@ for (const width of [1440, 390]) {
       const created = {
         ...session,
         id: 'session-2',
-        title: 'inspection-fixture read-only review-1',
+        title: createdTitle,
       };
       saved = [created, ...saved];
       return route.fulfill({ status: 201, json: created });
@@ -866,8 +888,15 @@ for (const width of [1440, 390]) {
       page.getByRole('button', { name: 'sample/inspection-fixture read-only review', exact: true }),
     ).toHaveCount(0);
     await page.getByRole('button', { name: 'Start read-only session' }).click();
+    const createdRow = page.getByRole('button', { name: createdTitle, exact: true });
+    const label = createdRow.getByText(createdTitle, { exact: true });
+    await expect(createdRow).toHaveAttribute('title', createdTitle);
+    await expect(label).toHaveCSS('white-space', 'nowrap');
+    await expect(label).toHaveCSS('text-overflow', 'ellipsis');
+    expect(await label.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+    await capture(page, testInfo, `session-titles-${width}`);
     const actions = page.getByRole('button', {
-      name: 'Actions for session inspection-fixture read-only review-1',
+      name: `Actions for session ${createdTitle}`,
     });
     await actions.click();
     await expect(page.getByRole('menuitem', { name: 'Rename' })).toBeFocused();
@@ -1090,12 +1119,30 @@ for (const width of [1440, 390]) {
 
 test('the work pane resizes with the pointer and keyboard within 20–50% of the viewport', async ({
   page,
-}) => {
+}, testInfo) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await fixture(page);
+  await page.route('**/api/v1/repositories', (route) =>
+    route.fulfill({ json: [{ ...repository, github_commit: 'a'.repeat(40) }] }),
+  );
   await page.goto('/');
   const divider = page.getByRole('separator', { name: 'Resize Code and Activity' });
   const pane = page.getByRole('region', { name: 'Code and activity' });
+  const paneHeaders = page.locator(
+    '.repo-panel > .panel-heading, .conversation > .panel-heading, .work-panel > .work-toolbar',
+  );
+  await expect(paneHeaders).toHaveCount(3);
+  const expectAlignedHeaders = async () => {
+    await expect
+      .poll(() =>
+        paneHeaders.evaluateAll(
+          (headers) => new Set(headers.map((header) => header.getBoundingClientRect().bottom)).size,
+        ),
+      )
+      .toBe(1);
+  };
+  await expect(pane.getByText('Up to date', { exact: true })).toBeVisible();
+  await expectAlignedHeaders();
   const bounds = await divider.boundingBox();
   if (!bounds) throw new Error('Resize handle is not visible');
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
@@ -1108,6 +1155,11 @@ test('the work pane resizes with the pointer and keyboard within 20–50% of the
   expect((await pane.boundingBox())?.width).toBe(288);
   await page.mouse.up();
   await expect(page.getByRole('navigation', { name: 'Repository files' })).toBeVisible();
+  await expect(pane.getByRole('button', { name: 'Check GitHub for updates' })).toBeInViewport();
+  await expectAlignedHeaders();
+  await capture(page, testInfo, 'aligned-headers-narrow-work-pane');
+  await pane.getByRole('tab', { name: 'Activity' }).click();
+  await expectAlignedHeaders();
   await divider.press('ArrowLeft');
   await expect(divider).toHaveAttribute('aria-valuenow', '22');
   await divider.press('End');
@@ -1126,11 +1178,15 @@ for (const width of [1440, 390]) {
     let upstream = oldSnapshot.github_commit;
     let owned = oldSnapshot;
     let failSync = true;
+    let finishSync!: () => void;
+    const syncResponse = new Promise<void>((resolve) => {
+      finishSync = resolve;
+    });
     await page.route('**/api/v1/repositories', (route) => route.fulfill({ json: [owned] }));
     await page.route('**/api/v1/repositories/*/sync-status', (route) =>
       route.fulfill({ json: { up_to_date: upstream === owned.github_commit } }),
     );
-    await page.route('**/api/v1/repositories/repository-1/sync', (route) => {
+    await page.route('**/api/v1/repositories/repository-1/sync', async (route) => {
       expect(route.request().method()).toBe('POST');
       expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
       if (failSync) {
@@ -1140,38 +1196,74 @@ for (const width of [1440, 390]) {
           json: { detail: 'The archive could not be downloaded.' },
         });
       }
+      await syncResponse;
       owned = newSnapshot;
       return route.fulfill({ json: newSnapshot });
     });
     await page.goto('/');
-    const sync = page.getByRole('button', { name: 'Sync', exact: true });
-    await expect(page.getByText('Up to date', { exact: true })).toBeVisible();
+    const avatar = page.getByRole('button', { name: 'Account menu for @ada' });
+    await expect(avatar.getByText('@ada', { exact: true })).toBeVisible();
+    await expect(page.locator('.repository-context')).not.toContainText('Snapshot');
+    const openCode = async () => {
+      if (width === 390)
+        await page.getByRole('button', { name: 'Code & activity', exact: true }).click();
+    };
+    const closeCode = async () => {
+      if (width === 390)
+        await page.getByRole('button', { name: 'Close Code and activity' }).click();
+    };
+    await openCode();
+    const toolbar = page.locator('.work-toolbar');
+    const sync = toolbar.getByRole('button', { name: 'Sync', exact: true });
+    const code = toolbar.getByRole('tab', { name: 'Code' });
+    const activity = toolbar.getByRole('tab', { name: 'Activity' });
+    await expect(toolbar.getByText('Up to date', { exact: true })).toBeVisible();
+    await activity.click();
+    await expect(toolbar.getByText('Up to date', { exact: true })).toBeHidden();
+    await code.click();
     await expect(sync).toHaveCount(0);
     upstream = newSnapshot.github_commit;
-    await page.getByRole('button', { name: 'Check GitHub for updates' }).click();
-    await expect(page.getByText('Behind GitHub', { exact: true })).toBeVisible();
+    await toolbar.getByRole('button', { name: 'Check GitHub for updates' }).click();
+    await expect(toolbar.getByText('Behind GitHub', { exact: true })).toBeVisible();
     await expect(sync).toBeVisible();
     await capture(page, testInfo, `snapshot-behind-${width}`);
     await sync.click();
-    await expect(page.getByText('The archive could not be downloaded.')).toBeVisible();
-    await expect(page.getByText('Snapshot aaaaaaa · Read-only')).toBeVisible();
-    await expect(page.getByText(turn.answer)).toBeVisible();
+    await expect(toolbar.getByText('The archive could not be downloaded.')).toBeVisible();
+    await expect(toolbar.getByText('Snapshot aaaaaaa · Read-only')).toBeVisible();
     await sync.click();
-    await expect(page.getByText('Snapshot bbbbbbb · Read-only')).toBeVisible();
-    await expect(page.getByText('Up to date', { exact: true })).toBeVisible();
+    const syncing = toolbar.getByRole('button', { name: 'Syncing…', exact: true });
+    await expect(syncing).toBeDisabled();
+    if (width === 390) {
+      await closeCode();
+      await openCode();
+    } else {
+      await activity.click();
+      await code.click();
+    }
+    await expect(syncing).toBeDisabled();
+    finishSync();
+    await expect(toolbar.getByText('Snapshot bbbbbbb · Read-only')).toBeVisible();
+    await expect(toolbar.getByText('Up to date', { exact: true })).toBeVisible();
     await expect(sync).toHaveCount(0);
-    await expect(page.getByText(turn.answer)).toBeVisible();
     await capture(page, testInfo, `snapshot-up-to-date-${width}`);
+    await closeCode();
+    await expect(page.getByText(turn.answer)).toBeVisible();
+    if (width === 390) {
+      await page.mouse.move(0, 0);
+      await capture(page, testInfo, 'workspace-toolbar-390');
+    }
     await page.reload();
-    await expect(page.getByText('Snapshot bbbbbbb · Read-only')).toBeVisible();
+    await openCode();
+    await expect(toolbar.getByText('Snapshot bbbbbbb · Read-only')).toBeVisible();
+    await closeCode();
     if (width === 390)
       await page.getByRole('button', { name: 'Repositories', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Repositories 1' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Snapshot bbbbbbb/ })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await expect(page.getByRole('button', { name: /Snapshot aaaaaaa/ })).toHaveCount(0);
+    const repositoryRows = page.getByRole('group', { name: 'Repositories', exact: true });
+    await expect(
+      repositoryRows.getByRole('button', { name: repository.name, exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true');
+    await expect(repositoryRows).not.toContainText('Snapshot');
     await expect(page.getByRole('button', { name: session.title, exact: true })).toHaveAttribute(
       'aria-pressed',
       'true',

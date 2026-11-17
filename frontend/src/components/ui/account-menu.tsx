@@ -9,9 +9,11 @@ import { Icon } from './icons';
 export function AccountMenu({
   user,
   active,
+  showUsername = false,
 }: {
   user: SafeProfile;
-  active?: 'workspace' | 'profile' | 'settings';
+  active?: 'profile' | 'settings';
+  showUsername?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -44,7 +46,9 @@ export function AccountMenu({
       <button
         ref={trigger}
         type="button"
-        className="account-trigger"
+        className={
+          showUsername ? 'account-trigger account-trigger-with-username' : 'account-trigger'
+        }
         aria-label={`Account menu for @${user.github_login}`}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -66,6 +70,7 @@ export function AccountMenu({
           } else if (event.key === 'Escape' && open) close();
         }}
       >
+        {showUsername ? <span className="account-username">@{user.github_login}</span> : null}
         <Avatar
           name={user.display_name || user.github_login}
           url={user.github_avatar_url}

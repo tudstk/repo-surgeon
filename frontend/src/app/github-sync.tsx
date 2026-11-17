@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/icons';
 import {
   getSnapshotSyncStatus,
@@ -11,70 +11,79 @@ import {
 
 type Check = 'checking' | 'up-to-date' | 'behind' | 'unavailable';
 
-export function GitHubSync({
-  repositoryId,
-  csrfToken,
-  disabled,
-  onSynced,
-}: {
-  repositoryId: string;
-  csrfToken: string;
-  disabled: boolean;
-  onSynced: (snapshot: OwnedRepository) => void;
-}) {
-  const [check, setCheck] = useState<Check>('checking');
+export function useGitHubSync(
+  repositoryId: string | undefined,
+  csrfToken: string,
+  disabled: boolean,
+  onSynced: (snapshot: OwnedRepository) => void,
+) {
   const [attempt, setAttempt] = useState(0);
-  const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState<string>();
+  const request = useMemo(() => ({ repositoryId, attempt }), [repositoryId, attempt]);
+  const [result, setResult] = useState<{ request: typeof request; check: Check; error?: string }>();
+  const [syncingRepositoryId, setSyncingRepositoryId] = useState<string>();
   const pending = useRef(false);
-  const mounted = useRef(false);
-  const statusText = useRef<HTMLSpanElement>(null);
+  const current = result?.request === request ? result : undefined;
+  const check = current?.check ?? 'checking';
 
   useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
+    if (!request.repositoryId) return;
     const controller = new AbortController();
-    void getSnapshotSyncStatus(repositoryId, controller.signal).then(
+    void getSnapshotSyncStatus(request.repositoryId, controller.signal).then(
       ({ up_to_date }) => {
-        if (!controller.signal.aborted) setCheck(up_to_date ? 'up-to-date' : 'behind');
+        if (!controller.signal.aborted) {
+          setResult({ request, check: up_to_date ? 'up-to-date' : 'behind' });
+        }
       },
       () => {
-        if (!controller.signal.aborted) setCheck('unavailable');
+        if (!controller.signal.aborted) setResult({ request, check: 'unavailable' });
       },
     );
     return () => controller.abort();
-  }, [repositoryId, attempt]);
+  }, [request]);
 
   async function sync() {
-    if (disabled || pending.current || check !== 'behind') return;
+    if (!repositoryId || disabled || pending.current || check !== 'behind') return false;
     pending.current = true;
-    setSyncing(true);
-    setError(undefined);
+    setSyncingRepositoryId(repositoryId);
+    setResult({ request, check });
     try {
       const snapshot = await syncRepositorySnapshot(repositoryId, csrfToken);
-      if (!mounted.current) return;
-      statusText.current?.focus({ preventScroll: true });
-      setCheck('up-to-date');
+      setResult((current) =>
+        current?.request === request ? { request, check: 'up-to-date' } : current,
+      );
       onSynced(snapshot);
+      return true;
     } catch (cause) {
-      if (mounted.current) {
-        setError(
-          cause instanceof WorkspaceRequestError && cause.detail
-            ? cause.detail
-            : 'Could not sync the snapshot. Try again.',
-        );
-      }
+      const error =
+        cause instanceof WorkspaceRequestError && cause.detail
+          ? cause.detail
+          : 'Could not sync the snapshot. Try again.';
+      setResult((current) => (current?.request === request ? { request, check, error } : current));
+      return false;
     } finally {
       pending.current = false;
-      if (mounted.current) setSyncing(false);
+      setSyncingRepositoryId(undefined);
     }
   }
 
+  return {
+    check,
+    error: current?.error,
+    syncing: syncingRepositoryId !== undefined && syncingRepositoryId === repositoryId,
+    disabled: disabled || syncingRepositoryId !== undefined,
+    sync,
+    checkAgain: () => setAttempt((value) => value + 1),
+  };
+}
+
+export function GitHubSync({
+  commit,
+  state: { check, error, syncing, disabled, sync, checkAgain },
+}: {
+  commit: string;
+  state: ReturnType<typeof useGitHubSync>;
+}) {
+  const statusText = useRef<HTMLSpanElement>(null);
   const status = {
     checking: 'Checking GitHub…',
     'up-to-date': 'Up to date',
@@ -85,39 +94,48 @@ export function GitHubSync({
   return (
     <div className="github-sync">
       <div className="github-sync-controls">
-        <span
-          ref={statusText}
-          tabIndex={-1}
-          role="status"
-          className="github-sync-status"
-          data-check={check}
-        >
-          {status}
-        </span>
-        {check === 'behind' ? (
+        <span className="snapshot-caption">Snapshot {commit.slice(0, 7)} · Read-only</span>
+        <div className="github-sync-actions">
+          <span
+            ref={statusText}
+            tabIndex={-1}
+            role="status"
+            className="github-sync-status"
+            data-check={check}
+          >
+            {status}
+          </span>
+          {check === 'behind' ? (
+            <button
+              type="button"
+              className="secondary-button github-sync-button"
+              disabled={disabled}
+              onClick={(event) => {
+                const button = event.currentTarget;
+                void sync().then((synced) => {
+                  if (
+                    synced &&
+                    (document.activeElement === button || document.activeElement === document.body)
+                  ) {
+                    statusText.current?.focus({ preventScroll: true });
+                  }
+                });
+              }}
+            >
+              {syncing ? 'Syncing…' : 'Sync'}
+            </button>
+          ) : null}
           <button
             type="button"
-            className="secondary-button github-sync-button"
-            disabled={disabled || syncing}
-            onClick={() => void sync()}
+            className="icon-button github-sync-check"
+            aria-label="Check GitHub for updates"
+            title="Check GitHub for updates"
+            disabled={check === 'checking' || syncing}
+            onClick={checkAgain}
           >
-            {syncing ? 'Syncing…' : 'Sync'}
+            <Icon name="sync" />
           </button>
-        ) : null}
-        <button
-          type="button"
-          className="icon-button github-sync-check"
-          aria-label="Check GitHub for updates"
-          title="Check GitHub for updates"
-          disabled={check === 'checking' || syncing}
-          onClick={() => {
-            setCheck('checking');
-            setError(undefined);
-            setAttempt((value) => value + 1);
-          }}
-        >
-          <Icon name="sync" />
-        </button>
+        </div>
       </div>
       {error ? (
         <p className="github-sync-error" role="alert">
