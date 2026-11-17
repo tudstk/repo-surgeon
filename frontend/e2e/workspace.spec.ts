@@ -1279,11 +1279,12 @@ for (const width of [1440, 390]) {
     const saved = 'a'.repeat(40);
     const latest = {
       sha: 'b'.repeat(40),
-      message: 'Polish the checkout flow\n\nValidate the cart before submitting the order.',
+      message:
+        'Merge pull request #7 from sample/release/checkout\n\nValidate the cart before submitting the order.',
     };
     const previous = {
       sha: 'c'.repeat(40),
-      message: 'Create the checkout view\n\nAdd a first pass at the cart summary.',
+      message: 'Create the checkout view',
     };
     const branch = 'release/checkout';
     const opened: string[] = [];
@@ -1344,6 +1345,14 @@ for (const width of [1440, 390]) {
     const branchTrigger = page.getByRole('button', { name: /^Choose branch/ });
     const commitTrigger = page.getByRole('button', { name: /^Choose commit/ });
     await expect(branchTrigger).toHaveText('main');
+    const files = page.getByRole('navigation', { name: 'Repository files' });
+    await expect(files).toBeVisible();
+    const [branchBounds, filesBounds] = await Promise.all([
+      branchTrigger.boundingBox(),
+      files.boundingBox(),
+    ]);
+    expect(branchBounds!.x).toBeCloseTo(filesBounds!.x);
+    expect(branchBounds!.width).toBeCloseTo(filesBounds!.width);
     await branchTrigger.click();
     const branches = page.getByRole('group', { name: 'Branches', exact: true });
     await branches.getByRole('button', { name: 'More branches' }).click();
@@ -1351,11 +1360,20 @@ for (const width of [1440, 390]) {
     await branches.getByRole('button', { name: branch }).click();
     await expect(branchTrigger).toHaveText(branch);
     await expect(commitTrigger).toContainText('bbbbbbb');
-    await expect(page.locator('.revision-message')).toHaveText(latest.message);
+    const description = page.locator('.revision-message');
+    await expect(commitTrigger).toContainText('Merge pull request #7 from sample/release/checkout');
+    await expect(description).toHaveText('Validate the cart before submitting the order.');
+    const [commitBounds, descriptionBounds] = await Promise.all([
+      commitTrigger.boundingBox(),
+      description.boundingBox(),
+    ]);
+    expect(descriptionBounds!.x).toBeCloseTo(commitBounds!.x);
+    expect(descriptionBounds!.width).toBeCloseTo(commitBounds!.width);
     await expect(page.getByText('Saved snapshot aaaaaaa · Read-only')).toBeVisible();
     await page.getByRole('button', { name: 'checkout.ts', exact: true }).click();
     const source = page.getByRole('region', { name: 'File contents' });
     await expect(source).toContainText('bbbbbbb');
+    await capture(page, testInfo, `revision-preview-${width}`);
 
     await commitTrigger.click();
     const commits = page.getByRole('group', { name: 'Commits', exact: true });
@@ -1366,10 +1384,10 @@ for (const width of [1440, 390]) {
     await expect(commitTrigger).toBeFocused();
     await commitTrigger.click();
     await commits.getByRole('button', { name: /ccccccc/ }).click();
-    await expect(page.locator('.revision-message')).toHaveText(previous.message);
+    await expect(commitTrigger).toContainText(previous.message);
+    await expect(description).toHaveCount(0);
     await page.getByRole('button', { name: 'checkout.ts', exact: true }).click();
     await expect(source).toContainText('ccccccc');
-    await capture(page, testInfo, `revision-preview-${width}`);
 
     if (width === 390) {
       await page.getByRole('button', { name: 'Close Repository tools' }).click();

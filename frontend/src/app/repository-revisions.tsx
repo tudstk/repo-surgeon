@@ -18,8 +18,7 @@ type CommitOption = GitHubCommit & { page: number };
 type CommitOptions = { branch: string; commits: CommitOption[]; nextPage: number | null };
 
 function subject(message: string) {
-  const line = message.split('\n', 1)[0]?.trim() || 'No commit message';
-  return line.length > 120 ? `${line.slice(0, 120)}…` : line;
+  return message.split('\n', 1)[0]?.trim() || 'No commit message';
 }
 
 export function RepositoryRevisions({
@@ -48,6 +47,10 @@ export function RepositoryRevisions({
   const id = useId();
   const branch = revision?.branch ?? branches?.default_branch;
   const sha = revision?.sha ?? savedSha;
+  const message = revision?.message ?? '';
+  const commitSubject = revision ? subject(message) : 'Saved snapshot';
+  const bodyStart = message.indexOf('\n');
+  const commitBody = bodyStart < 0 ? '' : message.slice(bodyStart + 1).trim();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -226,8 +229,8 @@ export function RepositoryRevisions({
             className="revision-trigger revision-commit-trigger"
             type="button"
             ref={commitTrigger}
-            title={sha}
-            aria-label={`Choose commit, ${sha.slice(0, 7)}, ${revision ? subject(revision.message) : 'saved snapshot'}`}
+            title={revision ? `${sha}\n${commitSubject}` : sha}
+            aria-label={`Choose commit, ${sha.slice(0, 7)}, ${commitSubject}`}
             aria-expanded={open === 'commit'}
             aria-controls={open === 'commit' ? id : undefined}
             aria-disabled={Boolean(pending)}
@@ -237,7 +240,7 @@ export function RepositoryRevisions({
           >
             <Icon name="commit" />
             <code>{sha.slice(0, 7)}</code>
-            <bdi>{revision ? subject(revision.message) : 'Saved snapshot'}</bdi>
+            <bdi>{commitSubject}</bdi>
             <Icon name="chevron" className="revision-chevron" />
           </button>
         </div>
@@ -341,9 +344,9 @@ export function RepositoryRevisions({
         ) : null}
       </div>
       {!open ? notice : null}
-      {revision ? (
+      {commitBody ? (
         <p className="revision-message" tabIndex={0}>
-          {revision.message || 'No commit message'}
+          {commitBody}
         </p>
       ) : null}
     </div>

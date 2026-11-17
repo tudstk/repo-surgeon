@@ -1789,6 +1789,7 @@ code {
   border-bottom-color: var(--accent);
 }
 .work-tab-panel {
+  --source-tree-width: clamp(138px, 28%, 218px);
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -1802,9 +1803,13 @@ code {
   display: none;
 }
 .revision-browser {
+  --revision-gap: 8px;
+  --revision-end-gutter: 12px;
+  --revision-message-start: calc(var(--source-tree-width) + var(--revision-gap));
+  --revision-columns: var(--source-tree-width) minmax(0, 1fr);
   flex: 0 0 auto;
   min-width: 0;
-  padding: 8px 12px;
+  padding-block: 8px;
   border-bottom: 1px solid var(--border);
 }
 .revision-picker {
@@ -1812,8 +1817,8 @@ code {
 }
 .revision-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr);
-  gap: 8px;
+  grid-template-columns: var(--revision-columns);
+  gap: var(--revision-gap);
 }
 .revision-trigger,
 .revision-options button {
@@ -1830,6 +1835,13 @@ code {
 .revision-trigger {
   border: 1px solid var(--control-border);
   background: var(--canvas);
+}
+.revision-commit-trigger {
+  margin-inline-end: var(--revision-end-gutter);
+}
+.revision-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 .revision-trigger:hover,
 .revision-trigger[aria-expanded='true'],
@@ -1883,15 +1895,19 @@ code {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+.revision-browser > .revision-notice {
+  margin-inline: 12px;
+}
 .revision-notice:not(.danger) {
   color: var(--muted);
 }
 .revision-message {
   max-height: min(128px, 20dvh);
   overflow: auto;
-  padding: 8px;
-  border-radius: var(--radius);
-  background: var(--canvas);
+  margin-block: 4px 0;
+  margin-inline: var(--revision-message-start) var(--revision-end-gutter);
+  padding: 4px 8px;
+  color: var(--muted);
   white-space: pre-wrap;
 }
 .revision-message:focus-visible {
@@ -1904,17 +1920,12 @@ code {
     min-height: 44px;
   }
 }
-@media (max-width: 440px) {
-  .revision-controls {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
 .source-browser {
   flex: 1;
   min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-columns: clamp(138px, 28%, 218px) minmax(0, 1fr);
+  grid-template-columns: var(--source-tree-width) minmax(0, 1fr);
 }
 .source-tree {
   min-height: 0;
@@ -2136,6 +2147,11 @@ code {
     display: flex;
     flex-direction: column;
   }
+  .revision-browser {
+    --revision-columns: minmax(0, 1fr);
+    --revision-message-start: 0px;
+    --revision-end-gutter: 0px;
+  }
   .source-browser {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2157,8 +2173,10 @@ code {
 }
 
 @container work-pane (max-width: 380px) {
-  .revision-controls {
-    grid-template-columns: minmax(0, 1fr);
+  .revision-browser {
+    --revision-columns: minmax(0, 1fr);
+    --revision-message-start: 0px;
+    --revision-end-gutter: 0px;
   }
   .source-browser {
     grid-template-columns: minmax(0, 1fr);

@@ -200,7 +200,7 @@ Each repository has a three-dot actions menu. **Remove** opens a confirmation fo
 
 Selecting an imported snapshot checks the commit on GitHub's default branch. Look in the upper-right corner of **Code** for the saved revision and remote status. **Up to date** means the saved revision matches. If it differs, **Behind GitHub** and **Sync** appear. Sync checks again before downloading, updates the existing repository entry, and keeps its saved sessions. If an earlier sync created a duplicate, sync the older entry to consolidate it and preserve sessions from both entries. Use the refresh icon to check again while staying on the same snapshot.
 
-For an imported GitHub repository, use the branch picker in **Code** to preview the tip of another branch. Open the commit picker for that branch to browse older pages and select a revision. The selected commit's full message appears above the file browser. Choose **Saved snapshot** in the commit picker to return to the source used by the workspace and its sessions. A history selection is a read-only preview. GitHub API rate limits and the existing source-archive limits apply.
+For an imported GitHub repository, use the branch picker in **Code** to preview the tip of another branch. Open the commit picker for that branch to browse older pages and select a revision. The commit picker shows the subject, and any message body appears directly beneath it. Choose **Saved snapshot** in the commit picker to return to the source used by the workspace and its sessions. A history selection is a read-only preview. GitHub API rate limits and the existing source-archive limits apply.
 
 ### Browse pull requests
 
