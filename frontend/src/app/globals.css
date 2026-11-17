@@ -1803,50 +1803,63 @@ code {
   display: none;
 }
 .revision-browser {
-  --revision-gap: 8px;
-  --revision-end-gutter: 12px;
-  --revision-message-start: calc(var(--source-tree-width) + var(--revision-gap));
-  --revision-columns: var(--source-tree-width) minmax(0, 1fr);
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: var(--source-tree-width) minmax(0, 1fr);
+  position: relative;
+  z-index: 2;
   flex: 0 0 auto;
   min-width: 0;
-  padding-block: 8px;
   border-bottom: 1px solid var(--border);
+  background: var(--panel);
 }
-.revision-picker {
+.revision-branch,
+.revision-anchor {
   position: relative;
+  min-width: 0;
 }
-.revision-controls {
-  display: grid;
-  grid-template-columns: var(--revision-columns);
-  gap: var(--revision-gap);
+.revision-branch::after {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 1px;
+  background: var(--border);
+  content: '';
+  pointer-events: none;
+}
+.revision-commit {
+  min-width: 0;
 }
 .revision-trigger,
 .revision-options button {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  min-height: 36px;
-  padding: 6px 8px;
+  padding: 6px 12px;
   font-size: 12px;
   text-align: start;
-  border-radius: var(--radius);
 }
 .revision-trigger {
-  border: 1px solid var(--control-border);
-  background: var(--canvas);
+  min-height: 44px;
 }
-.revision-commit-trigger {
-  margin-inline-end: var(--revision-end-gutter);
+.revision-branch-trigger {
+  gap: 6px;
+  padding-inline-end: 8px;
+  font-weight: 600;
+}
+.revision-trigger:hover,
+.revision-options button:hover {
+  background: var(--hover);
+}
+.revision-trigger[aria-expanded='true'] {
+  background: var(--raised);
 }
 .revision-trigger:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-.revision-trigger:hover,
-.revision-trigger[aria-expanded='true'],
-.revision-options button:hover {
-  background: var(--hover);
+  outline-offset: -3px;
+  border-radius: var(--radius);
 }
 .revision-trigger[aria-disabled='true'] {
   cursor: wait;
@@ -1859,6 +1872,15 @@ code {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.revision-trigger code,
+.revision-options code {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--canvas);
+  color: var(--text);
+  font: 600 11px/1.4 var(--font-mono);
+}
 .revision-trigger .icon,
 .revision-options .icon {
   width: 14px;
@@ -1866,13 +1888,16 @@ code {
   flex-basis: 14px;
   color: var(--muted);
 }
-.revision-trigger .revision-chevron {
+.revision-chevron {
   transform: rotate(90deg);
+}
+.revision-trigger[aria-expanded='true'] .revision-chevron {
+  transform: rotate(-90deg);
 }
 .revision-options {
   position: absolute;
-  z-index: 5;
-  inset: calc(100% + 4px) 0 auto;
+  z-index: 2;
+  inset: calc(100% + 4px) 8px auto;
   display: grid;
   max-height: min(320px, 40dvh);
   overflow: auto;
@@ -1881,8 +1906,31 @@ code {
   border-radius: var(--radius);
   background: var(--raised);
 }
+.revision-branch .revision-options {
+  inset-inline-end: auto;
+  width: min(19rem, calc(100cqi - 16px));
+}
+.revision-menu-title {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
 .revision-options button {
-  width: 100%;
+  min-height: 36px;
+  padding-inline: 8px;
+  border-radius: 4px;
+}
+.revision-options button[aria-current='true'] {
+  color: var(--accent);
+  background: var(--selected);
+}
+.revision-options button[aria-current='true'] .icon:last-child {
+  color: var(--accent);
+}
+.revision-options .revision-more {
+  color: var(--accent);
 }
 .revision-options:focus-visible,
 .revision-options button:focus-visible {
@@ -1891,12 +1939,15 @@ code {
 }
 .revision-notice,
 .revision-message {
-  margin-top: 8px;
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+.revision-notice {
+  padding: 8px;
+}
 .revision-browser > .revision-notice {
-  margin-inline: 12px;
+  grid-column: 1 / -1;
+  padding: 0 12px 8px;
 }
 .revision-notice:not(.danger) {
   color: var(--muted);
@@ -1904,18 +1955,15 @@ code {
 .revision-message {
   max-height: min(128px, 20dvh);
   overflow: auto;
-  margin-block: 4px 0;
-  margin-inline: var(--revision-message-start) var(--revision-end-gutter);
-  padding: 4px 8px;
+  padding: 0 12px 8px 34px;
   color: var(--muted);
   white-space: pre-wrap;
 }
 .revision-message:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
 @media (max-width: 600px) {
-  .revision-trigger,
   .revision-options button {
     min-height: 44px;
   }
@@ -2148,9 +2196,13 @@ code {
     flex-direction: column;
   }
   .revision-browser {
-    --revision-columns: minmax(0, 1fr);
-    --revision-message-start: 0px;
-    --revision-end-gutter: 0px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .revision-branch::after {
+    inset-block: auto 0;
+    inset-inline: 0;
+    width: auto;
+    height: 1px;
   }
   .source-browser {
     grid-template-columns: minmax(0, 1fr);
@@ -2174,9 +2226,13 @@ code {
 
 @container work-pane (max-width: 380px) {
   .revision-browser {
-    --revision-columns: minmax(0, 1fr);
-    --revision-message-start: 0px;
-    --revision-end-gutter: 0px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .revision-branch::after {
+    inset-block: auto 0;
+    inset-inline: 0;
+    width: auto;
+    height: 1px;
   }
   .source-browser {
     grid-template-columns: minmax(0, 1fr);

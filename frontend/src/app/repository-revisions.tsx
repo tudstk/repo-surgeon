@@ -80,7 +80,7 @@ export function RepositoryRevisions({
 
   function close(choice: Choice) {
     setOpen(null);
-    (choice === 'branch' ? branchTrigger : commitTrigger).current?.focus();
+    (choice === 'branch' ? branchTrigger : commitTrigger).current?.focus({ preventScroll: true });
   }
 
   async function run(label: string, task: (signal: AbortSignal) => Promise<void>) {
@@ -190,6 +190,109 @@ export function RepositoryRevisions({
     </p>
   ) : null;
 
+  const menu = open ? (
+    <div
+      className="revision-options"
+      id={id}
+      ref={options}
+      tabIndex={-1}
+      role="group"
+      aria-label={open === 'branch' ? 'Branches' : 'Commits'}
+    >
+      <p className="revision-menu-title">{open === 'branch' ? 'Branches' : 'Commits'}</p>
+      {notice}
+      {open === 'branch' ? (
+        <>
+          {branchChoices.map((name) => (
+            <button
+              type="button"
+              key={name}
+              title={name}
+              aria-current={name === branch ? 'true' : undefined}
+              disabled={Boolean(pending)}
+              onClick={() => selectBranch(name)}
+            >
+              <Icon name="branch" />
+              <bdi>{name}</bdi>
+              {name === branch ? <Icon name="check" /> : null}
+            </button>
+          ))}
+          {branches?.next_page ? (
+            <button
+              type="button"
+              disabled={Boolean(pending)}
+              className="revision-more"
+              onClick={() => {
+                options.current?.focus();
+                const page = branches.next_page;
+                if (page)
+                  void run('Loading branches…', (signal) =>
+                    loadBranches(page, signal).then(() => undefined),
+                  );
+              }}
+            >
+              More branches
+            </button>
+          ) : null}
+        </>
+      ) : (
+        <>
+          {revision ? (
+            <button
+              type="button"
+              disabled={Boolean(pending)}
+              onClick={() => {
+                close('commit');
+                onRevision(null);
+              }}
+            >
+              <Icon name="repo" />
+              <bdi>Saved snapshot</bdi>
+            </button>
+          ) : null}
+          {commits?.commits.map((commit) => (
+            <button
+              type="button"
+              key={commit.sha}
+              aria-current={commit.sha === sha ? 'true' : undefined}
+              title={subject(commit.message)}
+              disabled={Boolean(pending)}
+              onClick={() => {
+                if (!branch) return;
+                close('commit');
+                void run('Opening commit…', (signal) => preview(branch, commit, signal));
+              }}
+            >
+              <code>{commit.sha.slice(0, 7)}</code>
+              <bdi>{subject(commit.message)}</bdi>
+              {commit.sha === sha ? <Icon name="check" /> : null}
+            </button>
+          ))}
+          {commits && commits.commits.length === 0 ? (
+            <p className="revision-notice">No commits found on this branch.</p>
+          ) : null}
+          {commits?.nextPage && branch ? (
+            <button
+              type="button"
+              disabled={Boolean(pending)}
+              className="revision-more"
+              onClick={() => {
+                options.current?.focus();
+                const page = commits.nextPage;
+                if (page)
+                  void run('Loading commits…', (signal) =>
+                    loadCommits(branch, page, signal).then(() => undefined),
+                  );
+              }}
+            >
+              Older commits
+            </button>
+          ) : null}
+        </>
+      )}
+    </div>
+  ) : null;
+
   return (
     <div
       className="revision-browser"
@@ -206,10 +309,10 @@ export function RepositoryRevisions({
         close(open);
       }}
     >
-      <div className="revision-picker">
-        <div className="revision-controls">
+      <div className="revision-branch">
+        <div className="revision-anchor">
           <button
-            className="revision-trigger"
+            className="revision-trigger revision-branch-trigger"
             type="button"
             ref={branchTrigger}
             title={branch}
@@ -225,8 +328,13 @@ export function RepositoryRevisions({
             <bdi>{branch ?? 'Default branch'}</bdi>
             <Icon name="chevron" className="revision-chevron" />
           </button>
+          {open === 'branch' ? menu : null}
+        </div>
+      </div>
+      <div className="revision-commit">
+        <div className="revision-anchor">
           <button
-            className="revision-trigger revision-commit-trigger"
+            className="revision-trigger"
             type="button"
             ref={commitTrigger}
             title={revision ? `${sha}\n${commitSubject}` : sha}
@@ -243,112 +351,15 @@ export function RepositoryRevisions({
             <bdi>{commitSubject}</bdi>
             <Icon name="chevron" className="revision-chevron" />
           </button>
+          {open === 'commit' ? menu : null}
         </div>
-        {open ? (
-          <div
-            className="revision-options"
-            id={id}
-            ref={options}
-            tabIndex={-1}
-            role="group"
-            aria-label={open === 'branch' ? 'Branches' : 'Commits'}
-          >
-            {notice}
-            {open === 'branch' ? (
-              <>
-                {branchChoices.map((name) => (
-                  <button
-                    type="button"
-                    key={name}
-                    aria-current={name === branch ? 'true' : undefined}
-                    disabled={Boolean(pending)}
-                    onClick={() => selectBranch(name)}
-                  >
-                    <Icon name="branch" />
-                    <bdi>{name}</bdi>
-                    {name === branch ? <Icon name="check" /> : null}
-                  </button>
-                ))}
-                {branches?.next_page ? (
-                  <button
-                    type="button"
-                    disabled={Boolean(pending)}
-                    onClick={() => {
-                      options.current?.focus();
-                      const page = branches.next_page;
-                      if (page)
-                        void run('Loading branches…', (signal) =>
-                          loadBranches(page, signal).then(() => undefined),
-                        );
-                    }}
-                  >
-                    More branches
-                  </button>
-                ) : null}
-              </>
-            ) : (
-              <>
-                {revision ? (
-                  <button
-                    type="button"
-                    disabled={Boolean(pending)}
-                    onClick={() => {
-                      close('commit');
-                      onRevision(null);
-                    }}
-                  >
-                    <Icon name="repo" />
-                    Saved snapshot
-                  </button>
-                ) : null}
-                {commits?.commits.map((commit) => (
-                  <button
-                    type="button"
-                    key={commit.sha}
-                    aria-current={commit.sha === sha ? 'true' : undefined}
-                    title={subject(commit.message)}
-                    disabled={Boolean(pending)}
-                    onClick={() => {
-                      if (!branch) return;
-                      close('commit');
-                      void run('Opening commit…', (signal) => preview(branch, commit, signal));
-                    }}
-                  >
-                    <code>{commit.sha.slice(0, 7)}</code>
-                    <bdi>{subject(commit.message)}</bdi>
-                    {commit.sha === sha ? <Icon name="check" /> : null}
-                  </button>
-                ))}
-                {commits && commits.commits.length === 0 ? (
-                  <p className="revision-notice">No commits found on this branch.</p>
-                ) : null}
-                {commits?.nextPage && branch ? (
-                  <button
-                    type="button"
-                    disabled={Boolean(pending)}
-                    onClick={() => {
-                      options.current?.focus();
-                      const page = commits.nextPage;
-                      if (page)
-                        void run('Loading commits…', (signal) =>
-                          loadCommits(branch, page, signal).then(() => undefined),
-                        );
-                    }}
-                  >
-                    Older commits
-                  </button>
-                ) : null}
-              </>
-            )}
-          </div>
+        {commitBody ? (
+          <p className="revision-message" tabIndex={0}>
+            {commitBody}
+          </p>
         ) : null}
       </div>
       {!open ? notice : null}
-      {commitBody ? (
-        <p className="revision-message" tabIndex={0}>
-          {commitBody}
-        </p>
-      ) : null}
     </div>
   );
 }

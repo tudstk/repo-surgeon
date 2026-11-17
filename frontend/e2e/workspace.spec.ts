@@ -1355,9 +1355,15 @@ for (const width of [1440, 390]) {
     expect(branchBounds!.width).toBeCloseTo(filesBounds!.width);
     await branchTrigger.click();
     const branches = page.getByRole('group', { name: 'Branches', exact: true });
+    await expect(branches.getByRole('button', { name: 'main' })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
     await branches.getByRole('button', { name: 'More branches' }).click();
+    const nextBranch = branches.getByRole('button', { name: branch });
+    await expect(nextBranch).toBeEnabled();
     await capture(page, testInfo, `revision-branches-${width}`);
-    await branches.getByRole('button', { name: branch }).click();
+    await nextBranch.click();
     await expect(branchTrigger).toHaveText(branch);
     await expect(commitTrigger).toContainText('bbbbbbb');
     const description = page.locator('.revision-message');
@@ -1377,6 +1383,15 @@ for (const width of [1440, 390]) {
 
     await commitTrigger.click();
     const commits = page.getByRole('group', { name: 'Commits', exact: true });
+    await expect(commits.getByRole('button', { name: /bbbbbbb/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    );
+    const menuBounds = await commits.boundingBox();
+    expect(menuBounds!.x).toBeGreaterThanOrEqual(commitBounds!.x);
+    expect(menuBounds!.x + menuBounds!.width).toBeLessThanOrEqual(
+      commitBounds!.x + commitBounds!.width,
+    );
     await commits.getByRole('button', { name: 'Older commits' }).click();
     await expect(commits.getByRole('button', { name: /ccccccc/ })).toBeVisible();
     await capture(page, testInfo, `revision-commits-${width}`);
