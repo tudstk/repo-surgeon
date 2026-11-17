@@ -9,6 +9,7 @@ import { SessionActionDialog } from '@/components/ui/session-action-dialog';
 import { RepositoryRemovalDialog } from '@/components/ui/repository-removal-dialog';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { RepositoryCode } from './repository-code';
+import { RepositoryRevisions, type RepositoryRevision } from './repository-revisions';
 import { RepositorySummaryPanel } from './repository-summary-panel';
 import { GitHubSync, useGitHubSync } from './github-sync';
 import { GitHubRepositoryPicker } from './github-repository-picker';
@@ -73,6 +74,10 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   const [repositoriesExpanded, setRepositoriesExpanded] = useState(true);
   const [sessionsExpanded, setSessionsExpanded] = useState(true);
   const [drawer, setDrawer] = useState<'repositories' | 'work' | null>(null);
+  const [historySelection, setHistorySelection] = useState<{
+    repositoryId: string;
+    revision: RepositoryRevision;
+  } | null>(null);
   const [workTab, setWorkTab] = useState<'code' | 'activity'>('code');
   const [workWidth, setWorkWidth] = useState(40);
   const [resizingWork, setResizingWork] = useState(false);
@@ -105,6 +110,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     workspaceRequestGeneration.current += 1;
     selectedRepositoryIdRef.current = null;
     setRepositories([]);
+    setHistorySelection(null);
     setSelectedRepositoryId(null);
     setSummary(null);
     setSessions([]);
@@ -116,6 +122,11 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     () => repositories.find((repository) => repository.id === selectedRepositoryId) ?? null,
     [repositories, selectedRepositoryId],
   );
+  // Code previews do not change the selected repository or its saved sessions.
+  const historyRevision =
+    historySelection && historySelection.repositoryId === selectedRepositoryId
+      ? historySelection.revision
+      : null;
   const githubSync = useGitHubSync(
     selectedRepository?.github_commit ? selectedRepository.id : undefined,
     csrfToken,
@@ -743,7 +754,11 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         </div>
         {workTab === 'code' && selectedRepository ? (
           selectedRepository.github_commit ? (
-            <GitHubSync commit={selectedRepository.github_commit} state={githubSync} />
+            <GitHubSync
+              commit={selectedRepository.github_commit}
+              previewingHistory={historyRevision !== null}
+              state={githubSync}
+            />
           ) : (
             <span className="snapshot-caption">Repository files stay unchanged</span>
           )
@@ -756,9 +771,24 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         aria-labelledby={`${workTabsId}-code`}
         hidden={workTab !== 'code'}
       >
+        {selectedRepository?.github_commit ? (
+          <RepositoryRevisions
+            key={selectedRepository.id}
+            repositoryId={selectedRepository.id}
+            savedSha={selectedRepository.github_commit}
+            revision={historyRevision}
+            csrfToken={csrfToken}
+            onRevision={(revision) =>
+              setHistorySelection(
+                revision ? { repositoryId: selectedRepository.id, revision } : null,
+              )
+            }
+          />
+        ) : null}
         <RepositoryCode
-          key={`${selectedRepositoryId ?? ''}-${attempt}`}
+          key={`${selectedRepositoryId ?? ''}-${attempt}-${historyRevision?.sha ?? 'saved'}`}
           repositoryId={selectedRepositoryId ?? undefined}
+          revision={historyRevision?.sha}
         />
       </div>
       <div

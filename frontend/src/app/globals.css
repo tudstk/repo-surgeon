@@ -1800,6 +1800,114 @@ code {
 .work-tab-panel[hidden] {
   display: none;
 }
+.revision-browser {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.revision-picker {
+  position: relative;
+}
+.revision-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.65fr);
+  gap: 8px;
+}
+.revision-trigger,
+.revision-options button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 8px;
+  font-size: 12px;
+  text-align: start;
+  border-radius: var(--radius);
+}
+.revision-trigger {
+  border: 1px solid var(--control-border);
+  background: var(--canvas);
+}
+.revision-trigger:hover,
+.revision-trigger[aria-expanded='true'],
+.revision-options button:hover {
+  background: var(--hover);
+}
+.revision-trigger[aria-disabled='true'] {
+  cursor: wait;
+}
+.revision-trigger bdi,
+.revision-options bdi {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.revision-trigger .icon,
+.revision-options .icon {
+  width: 14px;
+  height: 14px;
+  flex-basis: 14px;
+  color: var(--muted);
+}
+.revision-trigger .revision-chevron {
+  transform: rotate(90deg);
+}
+.revision-options {
+  position: absolute;
+  z-index: 5;
+  inset: calc(100% + 4px) 0 auto;
+  display: grid;
+  max-height: min(320px, 40dvh);
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+.revision-options button {
+  width: 100%;
+}
+.revision-options:focus-visible,
+.revision-options button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.revision-notice,
+.revision-message {
+  margin-top: 8px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.revision-notice:not(.danger) {
+  color: var(--muted);
+}
+.revision-message {
+  max-height: min(128px, 20dvh);
+  overflow: auto;
+  padding: 8px;
+  border-radius: var(--radius);
+  background: var(--canvas);
+  white-space: pre-wrap;
+}
+.revision-message:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (max-width: 600px) {
+  .revision-trigger,
+  .revision-options button {
+    min-height: 44px;
+  }
+}
+@media (max-width: 440px) {
+  .revision-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .source-browser {
   flex: 1;
   min-height: 0;
@@ -2048,6 +2156,9 @@ code {
 }
 
 @container work-pane (max-width: 380px) {
+  .revision-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .source-browser {
     grid-template-columns: minmax(0, 1fr);
   }

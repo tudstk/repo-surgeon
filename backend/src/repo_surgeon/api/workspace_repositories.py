@@ -30,7 +30,11 @@ from repo_surgeon.application.repository_files import (
 from repo_surgeon.application.repository_intelligence import detect_repository_summary
 from repo_surgeon.domain.repositories import RepositorySource
 from repo_surgeon.infrastructure.github_import import (
+    COMMIT_PATTERN,
     FULL_NAME_PATTERN,
+    MAX_HISTORY_PAGE,
+    GitHubBranchPage,
+    GitHubCommitPage,
     GitHubImporter,
     GitHubImportError,
 )
@@ -175,6 +179,81 @@ async def _owned_github_snapshot(
     ):
         raise _not_found()
     return repository
+
+
+def _history_problem(error: GitHubImportError) -> Exception:
+    return problem(
+        code="repository_history_unavailable",
+        title="GitHub history unavailable",
+        status=502,
+        detail=str(error),
+    )
+
+
+@router.get("/{repository_id}/branches")
+async def list_owned_repository_branches(
+    repository_id: UUID,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    database: DatabaseSession,
+    page: Annotated[int, Query(ge=1, le=MAX_HISTORY_PAGE)] = 1,
+) -> GitHubBranchPage:
+    response.headers["Cache-Control"] = "no-store"
+    repository = await _owned_github_snapshot(
+        SqlAlchemyRepositoryStore(database, principal.user_id), repository_id
+    )
+    importer: GitHubImporter = request.app.state.github_importer
+    try:
+        return await importer.list_branches(repository, page)
+    except GitHubImportError as error:
+        raise _history_problem(error) from error
+
+
+@router.get("/{repository_id}/commits")
+async def list_owned_repository_commits(
+    repository_id: UUID,
+    request: Request,
+    response: Response,
+    principal: CurrentPrincipal,
+    database: DatabaseSession,
+    branch: Annotated[str, Query(min_length=1, max_length=255)],
+    page: Annotated[int, Query(ge=1, le=MAX_HISTORY_PAGE)] = 1,
+) -> GitHubCommitPage:
+    response.headers["Cache-Control"] = "no-store"
+    repository = await _owned_github_snapshot(
+        SqlAlchemyRepositoryStore(database, principal.user_id), repository_id
+    )
+    importer: GitHubImporter = request.app.state.github_importer
+    try:
+        return await importer.list_branch_commits(repository, branch, page)
+    except GitHubImportError as error:
+        raise _history_problem(error) from error
+
+
+class HistoryPreviewRequest(BaseModel):
+    branch: str = Field(min_length=1, max_length=255)
+    page: int = Field(ge=1, le=MAX_HISTORY_PAGE)
+    sha: str = Field(pattern=COMMIT_PATTERN)
+
+
+@router.post("/{repository_id}/history-preview", status_code=204)
+async def prepare_owned_history_preview(
+    repository_id: UUID,
+    body: HistoryPreviewRequest,
+    request: Request,
+    principal: MutationPrincipal,
+    database: DatabaseSession,
+) -> Response:
+    repository = await _owned_github_snapshot(
+        SqlAlchemyRepositoryStore(database, principal.user_id), repository_id
+    )
+    importer: GitHubImporter = request.app.state.github_importer
+    try:
+        await importer.prepare_history_preview(repository, body.branch, body.page, body.sha)
+    except GitHubImportError as error:
+        raise _history_problem(error) from error
+    return Response(status_code=204, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/{repository_id}/sync-status")
@@ -323,7 +402,18 @@ async def get_owned_repository_summary(
     return RepositorySummaryResponse.from_summary(summary)
 
 
-def _repository_browser(repository: Repository) -> ConfinedRepositoryFiles:
+def _repository_browser(
+    repository: Repository, importer: GitHubImporter, revision: str | None
+) -> ConfinedRepositoryFiles:
+    if revision is not None:
+        preview = importer.history_preview_root(repository, revision)
+        if preview is None:
+            raise RepositoryFileError(
+                "history_preview_expired", "This preview is unavailable. Select the commit again."
+            )
+        return ConfinedRepositoryFiles(
+            preview.canonical_root, (preview.root_device, preview.root_inode)
+        )
     if repository.root_device is None or repository.root_inode is None:
         raise RepositoryFileError("repository_unavailable", "The repository is unavailable.")
     return ConfinedRepositoryFiles(
@@ -338,6 +428,7 @@ def _browse_problem(error: RepositoryFileError) -> Exception:
         "unsafe_path": 404,
         "binary_file": 415,
         "file_too_large": 413,
+        "history_preview_expired": 404,
     }.get(error.code, 400)
     return problem(
         code=error.code,
@@ -350,19 +441,25 @@ def _browse_problem(error: RepositoryFileError) -> Exception:
 @router.get("/{repository_id}/tree")
 async def browse_owned_repository(
     repository_id: UUID,
+    request: Request,
     response: Response,
     principal: CurrentPrincipal,
     database: DatabaseSession,
     directory: Annotated[str, Query(min_length=1, max_length=1024)] = ".",
     offset: Annotated[int, Query(ge=0, le=BROWSER_SCAN_LIMIT)] = 0,
+    revision: Annotated[str | None, Query(pattern=COMMIT_PATTERN)] = None,
 ) -> DirectoryPage:
     response.headers["Cache-Control"] = "no-store"
     repository = await SqlAlchemyRepositoryStore(database, principal.user_id).get(repository_id)
     if repository is None:
         raise _not_found()
 
+    importer: GitHubImporter = request.app.state.github_importer
+
     def browse() -> DirectoryPage:
-        return _repository_browser(repository).browse_directory(directory, offset)
+        return _repository_browser(repository, importer, revision).browse_directory(
+            directory, offset
+        )
 
     try:
         return await asyncio.to_thread(browse)
@@ -391,19 +488,23 @@ class FilePreviewResponse(BaseModel):
 @router.get("/{repository_id}/file")
 async def preview_owned_repository_file(
     repository_id: UUID,
+    request: Request,
     response: Response,
     principal: CurrentPrincipal,
     database: DatabaseSession,
     path: Annotated[str, Query(min_length=1, max_length=1024)],
     start_line: Annotated[int, Query(ge=1, le=MAX_FILE_BYTES + 1)] = 1,
+    revision: Annotated[str | None, Query(pattern=COMMIT_PATTERN)] = None,
 ) -> FilePreviewResponse:
     response.headers["Cache-Control"] = "no-store"
     repository = await SqlAlchemyRepositoryStore(database, principal.user_id).get(repository_id)
     if repository is None:
         raise _not_found()
 
+    importer: GitHubImporter = request.app.state.github_importer
+
     def read() -> FileRead:
-        return _repository_browser(repository).read_file(
+        return _repository_browser(repository, importer, revision).read_file(
             path, start_line, allow_unicode_bom=True, max_lines=MAX_PREVIEW_LINES
         )
 

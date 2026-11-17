@@ -18,12 +18,14 @@ function errorMessage(error: unknown, fallback: string) {
 
 type TreeProps = {
   repositoryId: string;
+  revision?: string;
   selected: string | null;
   onSelect: (path: string, trigger: HTMLButtonElement) => void;
 };
 
 function DirectoryContents({
   repositoryId,
+  revision,
   directory,
   selected,
   onSelect,
@@ -37,7 +39,7 @@ function DirectoryContents({
 
   useEffect(() => {
     const controller = new AbortController();
-    void getRepositoryTree(repositoryId, directory, offset, controller.signal).then(
+    void getRepositoryTree(repositoryId, directory, offset, controller.signal, revision).then(
       (result) => {
         if (controller.signal.aborted) return;
         setPage((previous) => ({
@@ -52,12 +54,12 @@ function DirectoryContents({
       },
     );
     return () => controller.abort();
-  }, [attempt, directory, offset, repositoryId]);
+  }, [attempt, directory, offset, repositoryId, revision]);
 
   return (
     <ul className="source-tree-list">
       {page?.entries.map((entry) => (
-        <TreeRow key={entry.path} {...{ repositoryId, selected, onSelect, entry }} />
+        <TreeRow key={entry.path} {...{ repositoryId, revision, selected, onSelect, entry }} />
       ))}
       {loading ? (
         <li className="source-tree-note" role="status">
@@ -173,7 +175,15 @@ function highlightedCode(path: string, text: string): ReactNode {
   return tree.children.map(render);
 }
 
-function FilePreview({ repositoryId, path }: { repositoryId: string; path: string }) {
+function FilePreview({
+  repositoryId,
+  revision,
+  path,
+}: {
+  repositoryId: string;
+  revision?: string;
+  path: string;
+}) {
   const [start, setStart] = useState(1);
   const [attempt, setAttempt] = useState(0);
   const [file, setFile] = useState<RepositoryFilePreview>();
@@ -184,7 +194,7 @@ function FilePreview({ repositoryId, path }: { repositoryId: string; path: strin
 
   useEffect(() => {
     const controller = new AbortController();
-    void getRepositoryFile(repositoryId, path, start, controller.signal).then(
+    void getRepositoryFile(repositoryId, path, start, controller.signal, revision).then(
       (next) => {
         if (controller.signal.aborted) return;
         setFile((previous) =>
@@ -209,7 +219,7 @@ function FilePreview({ repositoryId, path }: { repositoryId: string; path: strin
       },
     );
     return () => controller.abort();
-  }, [attempt, path, repositoryId, start]);
+  }, [attempt, path, repositoryId, revision, start]);
   const code = useMemo(
     () => (file ? highlightedCode(path, file.lines.join('\n')) : null),
     [file, path],
@@ -282,7 +292,13 @@ function FilePreview({ repositoryId, path }: { repositoryId: string; path: strin
   );
 }
 
-export function RepositoryCode({ repositoryId }: { repositoryId: string | undefined }) {
+export function RepositoryCode({
+  repositoryId,
+  revision,
+}: {
+  repositoryId: string | undefined;
+  revision?: string;
+}) {
   const [path, setPath] = useState<string | null>(null);
   const [compactPreview, setCompactPreview] = useState(false);
   const browser = useRef<HTMLDivElement>(null);
@@ -304,6 +320,7 @@ export function RepositoryCode({ repositoryId }: { repositoryId: string | undefi
         <h3>Files</h3>
         <DirectoryContents
           repositoryId={repositoryId}
+          revision={revision}
           directory="."
           selected={path}
           onSelect={(next, trigger) => {
@@ -337,7 +354,7 @@ export function RepositoryCode({ repositoryId }: { repositoryId: string | undefi
                 <bdi>{path}</bdi>
               </h3>
             </div>
-            <FilePreview key={path} repositoryId={repositoryId} path={path} />
+            <FilePreview key={path} repositoryId={repositoryId} revision={revision} path={path} />
           </>
         ) : (
           <div className="source-preview-message source-preview-empty">
