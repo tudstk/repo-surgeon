@@ -17,6 +17,7 @@ from repo_surgeon.api.problems import ApiProblem, ProblemDetail
 from repo_surgeon.api.repositories import router as repositories_router
 from repo_surgeon.api.workspace_repositories import router as workspace_repositories_router
 from repo_surgeon.infrastructure.database import create_engine, create_session_factory
+from repo_surgeon.infrastructure.github_app import GitHubAppInstallation
 from repo_surgeon.infrastructure.github_import import GitHubImporter
 from repo_surgeon.infrastructure.github_oauth import HttpxGitHubOAuthClient
 from repo_surgeon.infrastructure.github_repository_search import GitHubRepositorySearch
@@ -30,7 +31,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     github_oauth_client = HttpxGitHubOAuthClient(configured_settings)
     github_repository_search = GitHubRepositorySearch()
-    github_importer = GitHubImporter(configured_settings.repository_storage)
+    installation = (
+        GitHubAppInstallation(configured_settings.github_app)
+        if configured_settings.github_app
+        else None
+    )
+    github_importer = GitHubImporter(
+        configured_settings.repository_storage, installation=installation
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:

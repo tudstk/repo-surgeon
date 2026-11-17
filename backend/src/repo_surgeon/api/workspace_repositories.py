@@ -295,7 +295,7 @@ async def sync_owned_snapshot(
     repository = await _owned_github_snapshot(store, repository_id)
     importer: GitHubImporter = request.app.state.github_importer
     try:
-        snapshot = await importer.sync_public(repository)
+        snapshot = await importer.sync_registered(repository)
         if snapshot is not None:
             advanced = await store.advance_github_snapshot(
                 repository, snapshot.root, snapshot.commit
