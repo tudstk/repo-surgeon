@@ -22,6 +22,7 @@ This initial importer rejects symlink-containing repositories. Submodule sources
 
 - [GitHub source archive behavior](https://docs.github.com/en/repositories/working-with-files/using-files/downloading-source-code-archives)
 - [GitHub commit listing and default branch behavior](https://docs.github.com/en/rest/commits/commits)
+- [GitHub branches and pagination](https://docs.github.com/en/rest/branches/branches)
 - `backend/tests/test_github_import.py` covers HTTP authorization, ownership, retry, usable summaries and hostile archives without external network access.
 
 ## Workspace visibility
@@ -35,3 +36,15 @@ A filesystem remount can change the device number of an existing snapshot direct
 ## Manual synchronization
 
 The workspace status compares the registered SHA against the selected repository's default branch tip. It verifies public visibility and the original numeric GitHub ID encoded in the managed storage path before trusting that tip. The status request downloads metadata only. The owner-scoped, CSRF-protected Sync request resolves the tip again and reuses bounded archive staging to publish the new revision. After publication, the existing repository ID advances in a transaction while session IDs and saved history are retained. A persisted turn pins its source binding for the duration of the turn. Legacy duplicate rows for the same owner and managed repository are hidden on sync, and their sessions move to the selected registration. Prior source directories are retained.
+
+## Historical Code previews
+
+Owner-scoped endpoints list upstream branches and commits in pages of 25, with a cap of 1,000 pages and 1 MiB per GitHub metadata response. Commit pages are fetched from an exact branch tip SHA. Preparing a preview requires CSRF authorization and rechecks that the requested commit appears on the branch's requested page. The same fixed-host downloader and archive validator stage the source in a separate three-entry cache per owner and upstream repository. Code reads use the confined tree and file APIs, with an optional revision pointing to an already prepared cache entry. Reopening an evicted commit prepares it again.
+
+The preview cache is independent of registered paths and session and agent reads. Branch or commit selection does not mutate the saved registration. Sync remains the explicit way to advance it.
+
+## Local installation credentials
+
+An optional operator-configured GitHub App extends remote reads for one existing snapshot on a loopback-only instance. Access requires the reserved local principal and the pinned numeric repository ID. Hosted instances reject the configuration. The public discovery and new import paths continue to filter for public repositories.
+
+The backend reads an owner-only RSA key from outside the checkout and requests an installation token restricted to the configured repository ID and read-only Contents permissions. It keeps the token in memory and refreshes it before expiration. GitHub metadata still has to match the saved upstream ID. Private ZIP requests follow one validated HTTPS redirect to the same repository and SHA on codeload, without forwarding the installation credential. Application HTTP logs omit signed archive URLs. History previews prepared through the installation use a separate cache from public history previews.

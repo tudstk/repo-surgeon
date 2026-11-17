@@ -74,7 +74,7 @@ test('callback resolves a mocked session into the safe profile and logs out with
     page.getByRole('complementary', { name: 'Repositories and sessions' }),
   ).toBeVisible();
   await expect(page.getByRole('region', { name: 'Latest exchange' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Code and activity' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Repository tools' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'payments-api', exact: true })).toBeVisible();
   await expect(page.getByText(/bounded read-only inspection/i)).toBeVisible();
   await page.getByRole('tab', { name: 'Activity' }).click();

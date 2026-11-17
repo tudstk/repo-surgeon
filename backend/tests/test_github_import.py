@@ -404,6 +404,13 @@ async def test_public_import_requires_csrf_and_isolates_accounts(tmp_path: Path)
                 f"/api/v1/repositories/{first_id}/sync", headers={"X-CSRF-Token": "wrong"}
             )
             assert bad_sync.status_code == 403
+            history_selection = {"branch": "main", "page": 1, "sha": "a" * 40}
+            bad_preview = await client.post(
+                f"/api/v1/repositories/{first_id}/history-preview",
+                json=history_selection,
+                headers={"X-CSRF-Token": "wrong"},
+            )
+            assert bad_preview.status_code == 403
             assert "canonical_root" not in first.text
             token, csrf = credentials[1]
             client.cookies.set("__Host-repo_surgeon_session", token)
@@ -425,6 +432,15 @@ async def test_public_import_requires_csrf_and_isolates_accounts(tmp_path: Path)
             assert foreign_file.status_code == 404
             foreign_url = f"/api/v1/repositories/{first_id}"
             before = len(requests)
+            assert (await client.get(foreign_url + "/branches")).status_code == 404
+            foreign_history = await client.get(foreign_url + "/commits", params={"branch": "main"})
+            assert foreign_history.status_code == 404
+            assert (
+                await client.post(foreign_url + "/history-preview", json=history_selection)
+            ).status_code == 404
+            assert (
+                await client.get(foreign_url + "/tree", params={"revision": "a" * 40})
+            ).status_code == 404
             assert (await client.get(foreign_url + "/sync-status")).status_code == 404
             assert (await client.post(foreign_url + "/sync")).status_code == 404
             assert len(requests) == before
@@ -500,3 +516,126 @@ async def test_concurrent_publication_converges_without_partial_files(tmp_path: 
         assert not list(tmp_path.rglob(".import-*"))
     finally:
         await importer.aclose()
+
+
+@pytest.mark.anyio
+async def test_history_previews_are_branch_verified_bounded_and_separate(tmp_path: Path) -> None:
+    import asyncio
+
+    database_url = f"sqlite+aiosqlite:///{tmp_path / 'history.sqlite'}"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", database_url)
+    await asyncio.to_thread(command.upgrade, config, "head")
+    settings = Settings(
+        environment="test", database_url=database_url, repository_storage=tmp_path / "storage"
+    )
+    app = create_app(settings)
+    saved = "a" * 40
+    revisions = [letter * 40 for letter in "bcde"]
+    downloads: list[str] = []
+    branch = "releases/v2"
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        assert "authorization" not in request.headers
+        if request.url.host == "codeload.github.com":
+            sha = request.url.path.rsplit("/", 1)[-1]
+            downloads.append(sha)
+            return httpx.Response(200, content=archive(content=sha))
+        if request.url.path.endswith("/branches"):
+            return httpx.Response(
+                200,
+                json=[{"name": "main"}, {"name": branch}],
+                headers={
+                    "Link": "<https://api.github.com/repos/owner/project/branches?page=2>; "
+                    'rel="next"'
+                },
+            )
+        if "/branches/" in request.url.path:
+            assert request.url.raw_path.endswith(b"/branches/releases%2Fv2")
+            return httpx.Response(200, json={"name": branch, "commit": {"sha": revisions[0]}})
+        if request.url.path.endswith("/commits"):
+            if request.url.params.get("sha") is None:
+                return httpx.Response(200, json=[{"sha": saved}])
+            assert request.url.params["sha"] == revisions[0]
+            assert request.url.params["per_page"] == "25"
+            page = request.url.params["page"]
+            return httpx.Response(
+                200,
+                json=[
+                    {"sha": sha, "commit": {"message": "Subject\n\nFull body"}}
+                    for sha in (revisions[:2] if page == "1" else revisions[2:])
+                ],
+                headers=(
+                    {
+                        "Link": "<https://api.github.com/repos/owner/project/commits?page=2>; "
+                        'rel="next"'
+                    }
+                    if page == "1"
+                    else {}
+                ),
+            )
+        return httpx.Response(
+            200,
+            json={
+                "id": 42,
+                "full_name": "owner/project",
+                "private": False,
+                "visibility": "public",
+                "default_branch": "main",
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as github:
+        app.state.github_importer = GitHubImporter(settings.repository_storage, client=github)
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://127.0.0.1"
+            ) as client,
+        ):
+            imported = await client.post(
+                "/api/v1/repositories/github/import", json={"full_name": "owner/project"}
+            )
+            assert imported.status_code == 200, imported.text
+            original = imported.json()
+            url = f"/api/v1/repositories/{original['id']}"
+            branches = await client.get(url + "/branches")
+            assert branches.json() == {
+                "default_branch": "main",
+                "branches": ["main", branch],
+                "next_page": 2,
+            }
+            commits = await client.get(url + "/commits", params={"branch": branch})
+            assert commits.json()["commits"][0] == {
+                "sha": revisions[0],
+                "message": "Subject\n\nFull body",
+            }
+            assert commits.json()["next_page"] == 2
+            invalid = await client.post(
+                url + "/history-preview", json={"branch": branch, "page": 1, "sha": "f" * 40}
+            )
+            assert invalid.status_code == 502
+            assert downloads == [saved]
+            for index, sha in enumerate(revisions):
+                selection = {"branch": branch, "sha": sha, "page": index // 2 + 1}
+                preview = await client.post(url + "/history-preview", json=selection)
+                assert preview.status_code == 204, preview.text
+                assert preview.headers["cache-control"] == "no-store"
+            duplicate = await client.post(url + "/history-preview", json=selection)
+            assert duplicate.status_code == 204
+            assert downloads == [saved, *revisions]
+            root_tree = await client.get(url + "/tree", params={"revision": revisions[-1]})
+            assert root_tree.json()["entries"][0]["path"] == "src"
+            source = await client.get(
+                url + "/file", params={"path": "src/main.py", "revision": revisions[-1]}
+            )
+            assert source.json()["lines"] == [revisions[-1]]
+            escaped = await client.get(
+                url + "/file", params={"path": "../src/main.py", "revision": revisions[-1]}
+            )
+            assert escaped.status_code == 404
+            expired = await client.get(url + "/tree", params={"revision": revisions[0]})
+            assert expired.json()["code"] == "history_preview_expired"
+            normal = await client.get(url + "/file", params={"path": "src/main.py"})
+            assert normal.json()["lines"] == [saved]
+            assert (await client.get("/api/v1/repositories")).json() == [original]

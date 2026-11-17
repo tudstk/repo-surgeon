@@ -1768,7 +1768,8 @@ code {
 .work-tabs {
   display: flex;
   align-self: stretch;
-  gap: 14px;
+  flex-wrap: wrap;
+  gap: 0 8px;
 }
 .work-tabs button {
   display: flex;
@@ -1788,6 +1789,7 @@ code {
   border-bottom-color: var(--accent);
 }
 .work-tab-panel {
+  --source-tree-width: clamp(138px, 28%, 218px);
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -1800,12 +1802,178 @@ code {
 .work-tab-panel[hidden] {
   display: none;
 }
+.revision-browser {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: var(--source-tree-width) minmax(0, 1fr);
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.revision-branch,
+.revision-anchor {
+  position: relative;
+  min-width: 0;
+}
+.revision-branch::after {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 1px;
+  background: var(--border);
+  content: '';
+  pointer-events: none;
+}
+.revision-commit {
+  min-width: 0;
+}
+.revision-trigger,
+.revision-options button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+  text-align: start;
+}
+.revision-trigger {
+  min-height: 44px;
+}
+.revision-branch-trigger {
+  gap: 6px;
+  padding-inline-end: 8px;
+  font-weight: 600;
+}
+.revision-trigger:hover,
+.revision-options button:hover {
+  background: var(--hover);
+}
+.revision-trigger[aria-expanded='true'] {
+  background: var(--raised);
+}
+.revision-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+  border-radius: var(--radius);
+}
+.revision-trigger[aria-disabled='true'] {
+  cursor: wait;
+}
+.revision-trigger bdi,
+.revision-options bdi {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.revision-trigger code,
+.revision-options code {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--canvas);
+  color: var(--text);
+  font: 600 11px/1.4 var(--font-mono);
+}
+.revision-trigger .icon,
+.revision-options .icon {
+  width: 14px;
+  height: 14px;
+  flex-basis: 14px;
+  color: var(--muted);
+}
+.revision-chevron {
+  transform: rotate(90deg);
+}
+.revision-trigger[aria-expanded='true'] .revision-chevron {
+  transform: rotate(-90deg);
+}
+.revision-options {
+  position: absolute;
+  z-index: 2;
+  inset: calc(100% + 4px) 8px auto;
+  display: grid;
+  max-height: min(320px, 40dvh);
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius);
+  background: var(--raised);
+}
+.revision-branch .revision-options {
+  inset-inline-end: auto;
+  width: min(19rem, calc(100cqi - 16px));
+}
+.revision-menu-title {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.revision-options button {
+  min-height: 36px;
+  padding-inline: 8px;
+  border-radius: 4px;
+}
+.revision-options button[aria-current='true'] {
+  color: var(--accent);
+  background: var(--selected);
+}
+.revision-options button[aria-current='true'] .icon:last-child {
+  color: var(--accent);
+}
+.revision-options .revision-more {
+  color: var(--accent);
+}
+.revision-options:focus-visible,
+.revision-options button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.revision-notice,
+.revision-message {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.revision-notice {
+  padding: 8px;
+}
+.revision-browser > .revision-notice {
+  grid-column: 1 / -1;
+  padding: 0 12px 8px;
+}
+.revision-notice:not(.danger) {
+  color: var(--muted);
+}
+.revision-message {
+  max-height: min(128px, 20dvh);
+  overflow: auto;
+  padding: 0 12px 8px 34px;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+.revision-message:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+@media (max-width: 600px) {
+  .revision-options button {
+    min-height: 44px;
+  }
+}
 .source-browser {
   flex: 1;
   min-height: 0;
   min-width: 0;
   display: grid;
-  grid-template-columns: clamp(138px, 28%, 218px) minmax(0, 1fr);
+  grid-template-columns: var(--source-tree-width) minmax(0, 1fr);
 }
 .source-tree {
   min-height: 0;
@@ -1994,29 +2162,29 @@ code {
 .source-more-link:hover {
   color: var(--text);
 }
-.source-code-scroll .hljs-keyword,
-.source-code-scroll .hljs-selector-tag,
-.source-code-scroll .hljs-doctag,
-.source-code-scroll .hljs-literal {
+:is(.source-code-scroll, .diff-syntax) .hljs-keyword,
+:is(.source-code-scroll, .diff-syntax) .hljs-selector-tag,
+:is(.source-code-scroll, .diff-syntax) .hljs-doctag,
+:is(.source-code-scroll, .diff-syntax) .hljs-literal {
   color: var(--danger);
 }
-.source-code-scroll .hljs-string,
-.source-code-scroll .hljs-regexp {
+:is(.source-code-scroll, .diff-syntax) .hljs-string,
+:is(.source-code-scroll, .diff-syntax) .hljs-regexp {
   color: var(--success);
 }
-.source-code-scroll .hljs-number,
-.source-code-scroll .hljs-built_in,
-.source-code-scroll .hljs-meta {
+:is(.source-code-scroll, .diff-syntax) .hljs-number,
+:is(.source-code-scroll, .diff-syntax) .hljs-built_in,
+:is(.source-code-scroll, .diff-syntax) .hljs-meta {
   color: var(--warning);
 }
-.source-code-scroll .hljs-title,
-.source-code-scroll .hljs-name,
-.source-code-scroll .hljs-attr,
-.source-code-scroll .hljs-property {
+:is(.source-code-scroll, .diff-syntax) .hljs-title,
+:is(.source-code-scroll, .diff-syntax) .hljs-name,
+:is(.source-code-scroll, .diff-syntax) .hljs-attr,
+:is(.source-code-scroll, .diff-syntax) .hljs-property {
   color: var(--accent);
 }
-.source-code-scroll .hljs-comment,
-.source-code-scroll .hljs-quote {
+:is(.source-code-scroll, .diff-syntax) .hljs-comment,
+:is(.source-code-scroll, .diff-syntax) .hljs-quote {
   color: var(--muted);
 }
 @media (max-width: 1100px) {
@@ -2026,6 +2194,15 @@ code {
   .pane-drawer[open]:has(.work-tabs) {
     display: flex;
     flex-direction: column;
+  }
+  .revision-browser {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .revision-branch::after {
+    inset-block: auto 0;
+    inset-inline: 0;
+    width: auto;
+    height: 1px;
   }
   .source-browser {
     grid-template-columns: minmax(0, 1fr);
@@ -2048,6 +2225,15 @@ code {
 }
 
 @container work-pane (max-width: 380px) {
+  .revision-browser {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .revision-branch::after {
+    inset-block: auto 0;
+    inset-inline: 0;
+    width: auto;
+    height: 1px;
+  }
   .source-browser {
     grid-template-columns: minmax(0, 1fr);
   }

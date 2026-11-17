@@ -20,10 +20,13 @@ OWN-WORLD: DeepSource-informed neutral charcoal, quiet rules, system sans, compa
 
 STORY: Identify an account, understand public-snapshot and demo-provider limits, choose a session, inspect its actual saved outcome.
 
-FIRST VIEWPORT: One repository toolbar anchors three aligned panes: 280px repositories and sessions (260px at 1280px), fluid conversation with a sticky composer, and a resizable Code and Activity pane. The compact brand link returns to /landing. The GitHub username sits beside the account avatar. Snapshot and Sync controls live in the Code tab header. At 1100px and below the conversation leads with two labelled drawer triggers. Teal selected rows connect context. The geometric texture is restricted to sign-in and the public landing hero.
+FIRST VIEWPORT: One repository toolbar anchors three aligned panes: 280px repositories and sessions (260px at 1280px), fluid conversation with a sticky composer, and a resizable Repository tools pane with Code, Pull Request, and Activity tabs in that order. The compact brand link returns to /landing. The GitHub username sits beside the account avatar. Snapshot and Sync controls live in the Code tab header. At 1100px and below the conversation leads with two labelled drawer triggers. Teal selected rows connect context. The geometric texture is restricted to sign-in and the public landing hero.
 
 FORM: Pinned DeepSource Operate direction; no tournament or comp. seed: none (unavailable). System sans serves sustained desktop work under subdued room light; intentional light tokens follow OS preference.
 
 FINISH: Direct solo source and rendered review, package quality checks, DESIGN.md and the design sidecar. Review captures use synthetic fixtures; no raster assets ship in the product.
 
 REPOSITORY DISCOVERY: The workspace context bar opens a focused dialog with a blurred backdrop. Public results show owner/repository and an owner avatar. Selecting a result imports a pinned, read-only public source snapshot and selects it in the workspace. Pending and failure states stay in the dialog. Private authorization is deferred.
+
+
+PULL REQUESTS: The right work pane lists open and closed pull requests with text labels for draft and merged states. Details group PR-wide totals with the title and place the unified and side-by-side switch beside per-file line counts in the file header. The source and target branches sit above the file selector. Additions and deletions use the existing semantic colors with explicit signs and line numbers. The mobile Repository tools drawer uses the same controls and contains any horizontal diff scrolling within the comparison. Review execution is reserved for a later release and the review control is visibly disabled.

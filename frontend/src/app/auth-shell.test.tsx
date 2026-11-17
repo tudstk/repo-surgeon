@@ -253,7 +253,7 @@ describe('identity journey', () => {
       screen.getByRole('complementary', { name: 'Repositories and sessions' }),
     ).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Latest exchange' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Code and activity' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Repository tools' })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Code' })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByRole('button', { name: 'payments-api' })).toBeInTheDocument();
     expect(screen.getByText(/Start a read-only session/i)).toBeInTheDocument();

@@ -5,11 +5,20 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
 AccessMode = Literal["local_trusted", "public_authenticated"]
+
+
+class GitHubAppSettings(BaseModel):
+    """One operator-installed GitHub App scoped to an existing local snapshot."""
+
+    app_id: int = Field(gt=0)
+    installation_id: int = Field(gt=0)
+    repository_id: int = Field(gt=0)
+    private_key_path: Path
 
 
 class Settings(BaseSettings):
@@ -28,6 +37,7 @@ class Settings(BaseSettings):
     github_oauth_client_id: str | None = None
     github_oauth_client_secret: str | None = None
     github_oauth_callback_url: str | None = None
+    github_app: GitHubAppSettings | None = None
     auth_encryption_key: str | None = None
 
     session_idle_ttl_seconds: int = Field(default=43_200, ge=60, le=604_800)
@@ -42,6 +52,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="REPO_SURGEON_",
+        env_nested_delimiter="__",
         # README setup creates .env at the repository root before changing into
         # backend. Keep that documented workflow working for both the API and
         # Alembic, while still allowing a process-local .env when running from
@@ -81,6 +92,8 @@ class Settings(BaseSettings):
             raise ValueError("ALLOWED_HOSTS must contain exact host names")
         if self.session_absolute_ttl_seconds < self.session_idle_ttl_seconds:
             raise ValueError("SESSION_ABSOLUTE_TTL_SECONDS must be at least the idle TTL")
+        if self.github_app is not None and self.access_mode != "local_trusted":
+            raise ValueError("The operator GitHub App requires local_trusted access mode")
 
         if self.access_mode == "public_authenticated":
             if self.local_repository_access:

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { common, createLowlight } from 'lowlight';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { highlightedCode } from '@/lib/code-highlight';
 import { Icon } from '@/components/ui/icons';
 import {
   getRepositoryFile,
@@ -18,12 +18,14 @@ function errorMessage(error: unknown, fallback: string) {
 
 type TreeProps = {
   repositoryId: string;
+  revision?: string;
   selected: string | null;
   onSelect: (path: string, trigger: HTMLButtonElement) => void;
 };
 
 function DirectoryContents({
   repositoryId,
+  revision,
   directory,
   selected,
   onSelect,
@@ -37,7 +39,7 @@ function DirectoryContents({
 
   useEffect(() => {
     const controller = new AbortController();
-    void getRepositoryTree(repositoryId, directory, offset, controller.signal).then(
+    void getRepositoryTree(repositoryId, directory, offset, controller.signal, revision).then(
       (result) => {
         if (controller.signal.aborted) return;
         setPage((previous) => ({
@@ -52,12 +54,12 @@ function DirectoryContents({
       },
     );
     return () => controller.abort();
-  }, [attempt, directory, offset, repositoryId]);
+  }, [attempt, directory, offset, repositoryId, revision]);
 
   return (
     <ul className="source-tree-list">
       {page?.entries.map((entry) => (
-        <TreeRow key={entry.path} {...{ repositoryId, selected, onSelect, entry }} />
+        <TreeRow key={entry.path} {...{ repositoryId, revision, selected, onSelect, entry }} />
       ))}
       {loading ? (
         <li className="source-tree-note" role="status">
@@ -138,42 +140,15 @@ function TreeRow({ entry, ...props }: TreeProps & { entry: RepositoryTreeEntry }
   );
 }
 
-const highlighter = createLowlight(common);
-const languageAliases: Record<string, string> = {
-  tsx: 'typescript',
-  jsx: 'javascript',
-  mjs: 'javascript',
-  cjs: 'javascript',
-  svg: 'xml',
-  cs: 'csharp',
-  yml: 'yaml',
-  dockerfile: 'dockerfile',
-};
-
-function highlightedCode(path: string, text: string): ReactNode {
-  const name = path.split('/').at(-1)?.toLowerCase() ?? '';
-  const extension = name.split('.').at(-1) ?? '';
-  const language = Object.hasOwn(languageAliases, extension)
-    ? languageAliases[extension]
-    : extension;
-  if (!highlighter.registered(language)) return text;
-  // Lowlight returns text and styled spans. Render only those as React nodes.
-  const tree = highlighter.highlight(language, text);
-  type Token = (typeof tree.children)[number];
-  function render(token: Token, index: number): ReactNode {
-    if (token.type === 'text') return token.value;
-    if (token.type !== 'element') return null;
-    const classes = token.properties.className;
-    return (
-      <span key={index} className={Array.isArray(classes) ? classes.join(' ') : undefined}>
-        {token.children.map(render)}
-      </span>
-    );
-  }
-  return tree.children.map(render);
-}
-
-function FilePreview({ repositoryId, path }: { repositoryId: string; path: string }) {
+function FilePreview({
+  repositoryId,
+  revision,
+  path,
+}: {
+  repositoryId: string;
+  revision?: string;
+  path: string;
+}) {
   const [start, setStart] = useState(1);
   const [attempt, setAttempt] = useState(0);
   const [file, setFile] = useState<RepositoryFilePreview>();
@@ -184,7 +159,7 @@ function FilePreview({ repositoryId, path }: { repositoryId: string; path: strin
 
   useEffect(() => {
     const controller = new AbortController();
-    void getRepositoryFile(repositoryId, path, start, controller.signal).then(
+    void getRepositoryFile(repositoryId, path, start, controller.signal, revision).then(
       (next) => {
         if (controller.signal.aborted) return;
         setFile((previous) =>
@@ -209,7 +184,7 @@ function FilePreview({ repositoryId, path }: { repositoryId: string; path: strin
       },
     );
     return () => controller.abort();
-  }, [attempt, path, repositoryId, start]);
+  }, [attempt, path, repositoryId, revision, start]);
   const code = useMemo(
     () => (file ? highlightedCode(path, file.lines.join('\n')) : null),
     [file, path],
@@ -282,7 +257,13 @@ function FilePreview({ repositoryId, path }: { repositoryId: string; path: strin
   );
 }
 
-export function RepositoryCode({ repositoryId }: { repositoryId: string | undefined }) {
+export function RepositoryCode({
+  repositoryId,
+  revision,
+}: {
+  repositoryId: string | undefined;
+  revision?: string;
+}) {
   const [path, setPath] = useState<string | null>(null);
   const [compactPreview, setCompactPreview] = useState(false);
   const browser = useRef<HTMLDivElement>(null);
@@ -304,6 +285,7 @@ export function RepositoryCode({ repositoryId }: { repositoryId: string | undefi
         <h3>Files</h3>
         <DirectoryContents
           repositoryId={repositoryId}
+          revision={revision}
           directory="."
           selected={path}
           onSelect={(next, trigger) => {
@@ -337,7 +319,7 @@ export function RepositoryCode({ repositoryId }: { repositoryId: string | undefi
                 <bdi>{path}</bdi>
               </h3>
             </div>
-            <FilePreview key={path} repositoryId={repositoryId} path={path} />
+            <FilePreview key={path} repositoryId={repositoryId} revision={revision} path={path} />
           </>
         ) : (
           <div className="source-preview-message source-preview-empty">

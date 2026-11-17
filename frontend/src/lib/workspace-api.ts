@@ -226,13 +226,61 @@ export type RepositoryFilePreview = {
   has_more: boolean;
 };
 
+export type GitHubBranches = {
+  default_branch: string;
+  branches: string[];
+  next_page: number | null;
+};
+
+export type GitHubCommit = {
+  sha: string;
+  message: string;
+};
+
+export type GitHubCommits = {
+  commits: GitHubCommit[];
+  next_page: number | null;
+};
+
+export function getRepositoryBranches(repositoryId: string, page: number, signal: AbortSignal) {
+  return requestJson<GitHubBranches>(`/api/v1/repositories/${repositoryId}/branches?page=${page}`, {
+    signal,
+  });
+}
+
+export function getRepositoryCommits(
+  repositoryId: string,
+  branch: string,
+  page: number,
+  signal: AbortSignal,
+) {
+  const query = new URLSearchParams({ branch, page: String(page) });
+  return requestJson<GitHubCommits>(`/api/v1/repositories/${repositoryId}/commits?${query}`, {
+    signal,
+  });
+}
+
+export async function prepareRepositoryRevision(
+  repositoryId: string,
+  selection: { branch: string; page: number; sha: string },
+  csrfToken: string,
+  signal: AbortSignal,
+) {
+  await requestJson<void>(`/api/v1/repositories/${repositoryId}/history-preview`, {
+    ...mutationInit(csrfToken, selection),
+    signal,
+  });
+}
+
 export function getRepositoryTree(
   repositoryId: string,
   directory: string,
   offset: number,
   signal: AbortSignal,
+  revision?: string,
 ) {
   const query = new URLSearchParams({ directory, offset: String(offset) });
+  if (revision) query.set('revision', revision);
   return requestJson<RepositoryTreePage>(`/api/v1/repositories/${repositoryId}/tree?${query}`, {
     signal,
   });
@@ -243,8 +291,10 @@ export function getRepositoryFile(
   path: string,
   startLine: number,
   signal: AbortSignal,
+  revision?: string,
 ) {
   const query = new URLSearchParams({ path, start_line: String(startLine) });
+  if (revision) query.set('revision', revision);
   return requestJson<RepositoryFilePreview>(`/api/v1/repositories/${repositoryId}/file?${query}`, {
     signal,
   });
@@ -260,5 +310,70 @@ export function syncRepositorySnapshot(repositoryId: string, csrfToken: string) 
   return requestJson<OwnedRepository>(
     `/api/v1/repositories/${repositoryId}/sync`,
     mutationInit(csrfToken, {}),
+  );
+}
+
+export type PullRequestState = 'open' | 'closed';
+
+export type GitHubPullRequest = {
+  number: number;
+  title: string;
+  status: 'open' | 'draft' | 'closed' | 'merged';
+  author: string | null;
+  updated_at: string;
+  base_ref: string;
+  head_ref: string;
+  url: string;
+};
+
+export type PullRequestPage = {
+  pulls: GitHubPullRequest[];
+  next_page: number | null;
+};
+
+export type PullRequestFile = {
+  path: string;
+  previous_path: string | null;
+  status: string;
+  additions: number;
+  deletions: number;
+  patch: string | null;
+  patch_status: 'available' | 'unavailable' | 'limited' | 'restricted';
+};
+
+export type PullRequestChanges = {
+  changed_files: number;
+  additions: number;
+  deletions: number;
+  files: PullRequestFile[];
+  restricted_files: number;
+  next_page: number | null;
+  file_limit_reached: boolean;
+};
+
+export function listPullRequests(
+  repositoryId: string,
+  state: PullRequestState,
+  page: number,
+  signal: AbortSignal,
+) {
+  const query = new URLSearchParams({ state, page: String(page) });
+  return requestJson<PullRequestPage>(
+    `/api/v1/repositories/${repositoryId}/pull-requests?${query}`,
+    {
+      signal,
+    },
+  );
+}
+
+export function getPullRequestChanges(
+  repositoryId: string,
+  number: number,
+  page: number,
+  signal: AbortSignal,
+) {
+  return requestJson<PullRequestChanges>(
+    `/api/v1/repositories/${repositoryId}/pull-requests/${number}/files?page=${page}`,
+    { signal },
   );
 }
