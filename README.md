@@ -15,7 +15,7 @@ No model API key is required.
 A public landing-page preview is available at `/landing`; the working workspace remains at `/`. The shared brand returns to the landing page. The hero and sign-in screen share a faint circuit texture with two introductory accent pulses and mouse-triggered pulses. Reduced-motion preference keeps it static.
 The landing page uses locally hosted type and actual UI captures with synthetic demo data. It makes no model calls and loads no private workspace records.
 
-The workspace’s **Add repository** dialog searches public GitHub repositories by name or `owner/repository`, with owner avatars. Select a result to import its default branch at a pinned commit as a read-only source snapshot. Search and download use credential-free GitHub endpoints and may be rate-limited. Private repositories are not supported.
+The workspace’s **Add repository** dialog searches public GitHub repositories by name or `owner/repository`, with owner avatars. Select a result to import its default branch at a pinned commit as a read-only source snapshot. Search and new imports use credential-free GitHub endpoints and may be rate-limited. A local operator can connect one existing snapshot to a [read-only GitHub App](#local-github-app-access).
 
 GitHub sign-in identifies your account; it does not connect or import your GitHub repositories.
 The workspace shows your imported snapshots and any local repositories already assigned to your account.
@@ -188,7 +188,7 @@ The backend checks public visibility without a GitHub token, resolves the defaul
 
 Imports allow at most 25 MiB downloaded ZIP data, 100 MiB expanded source, 10,000 archive entries, 64 path components and 1,024 characters per archive path. Symlinks, special files, Git internals, encrypted archives and conflicting names are rejected. There are two concurrent imports per process, with a 60-second queue/network deadline; bounded extraction finishes cleanup before a timed-out operation releases its slot. Same-account, same-commit retries reuse the saved snapshot. Importing a newer commit creates another snapshot and leaves existing sessions intact.
 
-This is a source snapshot, not a Git checkout: history, automatic refresh, permanent deletion, private repositories and Git write actions are unavailable. Submodule contents are not fetched, and Git LFS content depends on GitHub's archive settings. GitHub's unauthenticated rate limits apply. The service has per-import bounds, but no cumulative tenant storage quota or automatic retention policy yet; deployments must monitor storage. If persistence fails after publication, a complete unregistered snapshot can remain and a retry reuses it. Never delete registered snapshot directories while sessions still refer to them.
+The source snapshot contains a pinned source tree. Branch and commit history are fetched on demand from GitHub. Submodule contents are omitted, and Git LFS content depends on GitHub's archive settings. The service has per-import bounds. Deployments must monitor storage because cumulative tenant quotas and automatic retention are deferred. If persistence fails after publication, a complete unregistered snapshot can remain and a retry reuses it. Keep registered snapshot directories while sessions refer to them.
 
 Deterministic coverage lives in `backend/tests/test_github_import.py`, `frontend/src/app/github-repository-picker.test.tsx` and `frontend/e2e/workspace.spec.ts`. These checks use fixtures and make no paid model calls.
 
@@ -200,7 +200,25 @@ Each repository has a three-dot actions menu. **Remove** opens a confirmation fo
 
 Selecting an imported snapshot checks the commit on GitHub's default branch. Look in the upper-right corner of **Code** for the saved revision and remote status. **Up to date** means the saved revision matches. If it differs, **Behind GitHub** and **Sync** appear. Sync checks again before downloading, updates the existing repository entry, and keeps its saved sessions. If an earlier sync created a duplicate, sync the older entry to consolidate it and preserve sessions from both entries. Use the refresh icon to check again while staying on the same snapshot.
 
-For an imported public GitHub repository, use the branch picker in **Code** to preview the tip of another branch. Open the commit picker for that branch to browse older pages and select a revision. The selected commit's full message appears above the file browser. Choose **Saved snapshot** in the commit picker to return to the source used by the workspace and its sessions. A history selection is a read-only preview. GitHub API rate limits and the existing source-archive limits apply.
+For an imported GitHub repository, use the branch picker in **Code** to preview the tip of another branch. Open the commit picker for that branch to browse older pages and select a revision. The selected commit's full message appears above the file browser. Choose **Saved snapshot** in the commit picker to return to the source used by the workspace and its sessions. A history selection is a read-only preview. GitHub API rate limits and the existing source-archive limits apply.
+
+### Local GitHub App access
+
+In loopback-only `local_trusted` mode, a GitHub App installation can read GitHub history and Sync for one existing snapshot, including a repository that became private after it was imported. Those requests use the installation's [GitHub API quota](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api#primary-rate-limit-for-github-app-installations). Repository search and new imports still use the public endpoints and their own rate limits.
+
+1. [Register a GitHub App](https://github.com/settings/apps/new) for your own account. Disable webhooks, grant **Contents → Read-only** and use GitHub's required read-only metadata permission. Leave all event subscriptions empty.
+2. Install the App with **Only select repositories** and select the repository that matches your saved snapshot.
+3. Generate the App's PEM key and keep it outside the checkout with file permissions `0600`. Use the App ID from its settings and the installation ID from the installation page URL. To find the GitHub repository's numeric ID, run `gh api repos/OWNER/REPOSITORY --jq .id` while signed in to GitHub CLI.
+4. Add these values to the backend's private runtime environment and restart it.
+
+```dotenv
+REPO_SURGEON_GITHUB_APP__APP_ID=123
+REPO_SURGEON_GITHUB_APP__INSTALLATION_ID=456
+REPO_SURGEON_GITHUB_APP__REPOSITORY_ID=789
+REPO_SURGEON_GITHUB_APP__PRIVATE_KEY_PATH=/absolute/path/outside/the/checkout/github-app.pem
+```
+
+Open the existing repository in **Code**. The branch picker can now read GitHub history for that snapshot. The server mints a read-only token for the configured numeric repository ID and keeps it in process memory.
 
 If the workspace cannot open an imported snapshot after a filesystem remount, choose **Recover snapshot**. The server compares the existing directory with a fresh bounded archive of the saved public commit. Recovery updates its filesystem binding only when the original directory and files match. The repository and its saved sessions keep their IDs. A missing or changed snapshot requires a fresh import or operator assistance.
 
