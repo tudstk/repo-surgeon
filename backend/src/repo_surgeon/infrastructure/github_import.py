@@ -13,15 +13,21 @@ import zipfile
 import zlib
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 from uuid import UUID
 
 import httpx
 
 from repo_surgeon.application.repositories import ResolvedLocalRepositoryRoot
+from repo_surgeon.domain.authentication import LOCAL_DEVELOPMENT_USER_ID
 from repo_surgeon.domain.repositories import Repository, RepositorySource
+from repo_surgeon.infrastructure.github_app import (
+    GITHUB_API_HEADERS,
+    GitHubAppError,
+    GitHubAppInstallation,
+)
 
 FULL_NAME_PATTERN = r"^[A-Za-z0-9-]{1,39}/[A-Za-z0-9._-]{1,100}$"
 COMMIT_PATTERN = r"^[a-f0-9]{40}$"
@@ -48,10 +54,11 @@ class ImportedSnapshot:
 
 
 @dataclass(frozen=True)
-class PublicRepository:
+class _UpstreamRepository:
     name: str
     id: int
     default_branch: str | None
+    token: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True)
@@ -139,11 +146,18 @@ def extract_snapshot(archive: bytes, destination: Path) -> None:
 class GitHubImporter:
     """Only fixed GitHub endpoints may supply data to the importer."""
 
-    def __init__(self, storage: Path, *, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self,
+        storage: Path,
+        *,
+        client: httpx.AsyncClient | None = None,
+        installation: GitHubAppInstallation | None = None,
+    ) -> None:
         self.storage = storage.expanduser().resolve()
         self.client = client or httpx.AsyncClient(timeout=15, follow_redirects=False)
         self.owns_client = client is None
         self.slots = asyncio.Semaphore(2)
+        self.installation = installation
 
     async def aclose(self) -> None:
         if self.owns_client:
@@ -152,49 +166,50 @@ class GitHubImporter:
     async def import_public(self, full_name: str, user_id: UUID) -> ImportedSnapshot:
         """Validate visibility, pin the default revision and download within a deadline."""
         async with self._operation():
-            upstream = await self._public_repository(full_name)
-            commit = await self._default_commit(upstream.name)
-            return await self._download_snapshot(user_id, upstream.id, upstream.name, commit)
+            upstream = await self._fetch_repository(full_name)
+            commit = await self._default_commit(upstream)
+            return await self._download_snapshot(user_id, upstream, commit)
 
     async def latest_commit(self, repository: Repository) -> str:
-        """Read the default branch tip of the same registered public repository."""
+        """Read the default branch tip of the same registered repository."""
         async with self._operation():
-            upstream = await self._registered_public_repository(repository)
-            return await self._default_commit(upstream.name)
+            upstream = await self._registered_repository(repository)
+            return await self._default_commit(upstream)
 
-    async def sync_public(self, repository: Repository) -> ImportedSnapshot | None:
+    async def sync_registered(self, repository: Repository) -> ImportedSnapshot | None:
         """Import the latest revision only if it differs from the saved snapshot."""
         async with self._operation():
-            upstream = await self._registered_public_repository(repository)
-            latest = await self._default_commit(upstream.name)
+            upstream = await self._registered_repository(repository)
+            latest = await self._default_commit(upstream)
             if latest == repository.github_commit:
                 return None
             return await self._download_snapshot(
                 repository.owner_user_id,
-                upstream.id,
-                upstream.name,
+                upstream,
                 latest,
                 verify_existing=True,
             )
 
     async def verify_saved(self, repository: Repository) -> ResolvedLocalRepositoryRoot:
-        """Verify a stale binding against a fresh archive of the original public commit."""
+        """Verify a stale binding against a fresh archive of the original commit."""
         commit = repository.github_commit
         if commit is None or repository.root_inode is None:
             raise GitHubImportError("This snapshot cannot be verified.")
         async with self._operation():
-            upstream = await self._registered_public_repository(repository)
+            upstream = await self._registered_repository(repository)
             snapshot = await self._download_snapshot(
-                repository.owner_user_id, upstream.id, upstream.name, commit, verify=repository
+                repository.owner_user_id, upstream, commit, verify=repository
             )
             return snapshot.root
 
     async def list_branches(self, repository: Repository, page: int) -> GitHubBranchPage:
         async with self._operation():
-            upstream = await self._registered_public_repository(repository)
+            upstream = await self._registered_repository(repository)
             if upstream.default_branch is None:
                 raise GitHubImportError("GitHub did not provide a default branch.")
-            payload, next_page = await self._history_page(f"{upstream.name}/branches", page)
+            payload, next_page = await self._history_page(
+                f"{upstream.name}/branches", page, upstream.token
+            )
             branches = []
             for item in payload:
                 name = item.get("name") if isinstance(item, dict) else None
@@ -207,16 +222,16 @@ class GitHubImporter:
         self, repository: Repository, branch: str, page: int
     ) -> GitHubCommitPage:
         async with self._operation():
-            upstream = await self._registered_public_repository(repository)
-            return await self._branch_commits(upstream.name, branch, page)
+            upstream = await self._registered_repository(repository)
+            return await self._branch_commits(upstream, branch, page)
 
     async def prepare_history_preview(
         self, repository: Repository, branch: str, page: int, sha: str
     ) -> None:
         """Materialize only a SHA listed on the requested branch; leave registration alone."""
         async with self._operation():
-            upstream = await self._registered_public_repository(repository)
-            history = await self._branch_commits(upstream.name, branch, page)
+            upstream = await self._registered_repository(repository)
+            history = await self._branch_commits(upstream, branch, page)
             if not any(commit.sha == sha for commit in history.commits):
                 raise GitHubImportError(
                     "This commit is no longer on the requested history page. "
@@ -224,9 +239,7 @@ class GitHubImporter:
                 )
             parent = self._history_parent(repository)
             if await asyncio.to_thread(_cached_history_root, parent, sha) is None:
-                await self._download_snapshot(
-                    repository.owner_user_id, upstream.id, upstream.name, sha, history=True
-                )
+                await self._download_snapshot(repository.owner_user_id, upstream, sha, history=True)
 
     def history_preview_root(
         self, repository: Repository, sha: str
@@ -240,6 +253,19 @@ class GitHubImporter:
             return None
 
     def _history_parent(self, repository: Repository) -> Path:
+        parent = self._managed_parent(repository)
+        return parent / (
+            ".history-app" if self._uses_installation(repository, parent) else ".history"
+        )
+
+    def _uses_installation(self, repository: Repository, parent: Path) -> bool:
+        return (
+            self.installation is not None
+            and repository.owner_user_id == LOCAL_DEVELOPMENT_USER_ID
+            and parent.name == str(self.installation.repository_id)
+        )
+
+    def _managed_parent(self, repository: Repository) -> Path:
         root = Path(repository.canonical_root)
         if (
             repository.source != RepositorySource.GITHUB
@@ -249,19 +275,25 @@ class GitHubImporter:
             or re.fullmatch(r"[1-9][0-9]*", root.parent.name) is None
         ):
             raise GitHubImportError("The saved GitHub snapshot has an invalid storage binding.")
-        return root.parent / ".history"
+        return root.parent
 
-    async def _branch_commits(self, name: str, branch: str, page: int) -> GitHubCommitPage:
+    async def _branch_commits(
+        self, upstream: _UpstreamRepository, branch: str, page: int
+    ) -> GitHubCommitPage:
         if not _valid_branch(branch):
             raise GitHubImportError("Choose a valid GitHub branch.")
-        metadata, _ = await self._github_json(f"{name}/branches/{quote(branch, safe='')}", {})
+        metadata, _ = await self._github_json(
+            f"{upstream.name}/branches/{quote(branch, safe='')}", {}, upstream.token
+        )
         if not isinstance(metadata, dict) or metadata.get("name") != branch:
             raise GitHubImportError("GitHub did not resolve the requested branch.")
         tip = metadata.get("commit")
         sha = tip.get("sha") if isinstance(tip, dict) else None
         if not isinstance(sha, str) or re.fullmatch(COMMIT_PATTERN, sha) is None:
             raise GitHubImportError("GitHub did not provide a valid branch tip.")
-        payload, next_page = await self._history_page(f"{name}/commits", page, sha=sha)
+        payload, next_page = await self._history_page(
+            f"{upstream.name}/commits", page, upstream.token, sha=sha
+        )
         commits = []
         for item in payload:
             if not isinstance(item, dict):
@@ -276,21 +308,24 @@ class GitHubImporter:
         return GitHubCommitPage(commits, next_page)
 
     async def _history_page(
-        self, path: str, page: int, **params: str
+        self, path: str, page: int, token: str | None, **params: str
     ) -> tuple[list[object], int | None]:
         payload, more = await self._github_json(
-            path, {"per_page": HISTORY_PAGE_SIZE, "page": page, **params}
+            path, {"per_page": HISTORY_PAGE_SIZE, "page": page, **params}, token
         )
         if not isinstance(payload, list) or len(payload) > HISTORY_PAGE_SIZE:
             raise GitHubImportError("GitHub returned invalid history metadata.")
         return payload, page + 1 if more and page < MAX_HISTORY_PAGE else None
 
-    async def _github_json(self, path: str, params: dict[str, str | int]) -> tuple[object, bool]:
+    async def _github_json(
+        self, path: str, params: dict[str, str | int], token: str | None = None
+    ) -> tuple[object, bool]:
         async with self.client.stream(
             "GET",
             f"https://api.github.com/repos/{path}",
             params=params,
-            headers={"Accept": "application/vnd.github+json"},
+            headers=_api_headers(token),
+            follow_redirects=False,
         ) as response:
             response.raise_for_status()
             payload = bytearray()
@@ -300,28 +335,34 @@ class GitHubImporter:
                 payload.extend(chunk)
             return json.loads(payload), "next" in response.links
 
-    async def _registered_public_repository(self, repository: Repository) -> PublicRepository:
-        commit = repository.github_commit
-        if (
-            repository.github_full_name is None
-            or not commit
-            or not re.fullmatch(COMMIT_PATTERN, commit)
-        ):
-            raise GitHubImportError("This GitHub snapshot has no valid saved revision.")
-        upstream = await self._public_repository(repository.github_full_name)
-        registered_path = self.storage / str(repository.owner_user_id) / str(upstream.id) / commit
-        if str(registered_path) != repository.canonical_root:
+    async def _registered_repository(self, repository: Repository) -> _UpstreamRepository:
+        parent = self._managed_parent(repository)
+        if repository.github_full_name is None:
+            raise GitHubImportError("This GitHub snapshot has no saved upstream name.")
+        token = None
+        if self.installation is not None and self._uses_installation(repository, parent):
+            token = await self.installation.access_token(self.client)
+        upstream = await self._fetch_repository(repository.github_full_name, token)
+        if parent.name != str(upstream.id):
             raise GitHubImportError("GitHub no longer matches the saved repository registration.")
         return upstream
 
-    async def _public_repository(self, full_name: str) -> PublicRepository:
+    async def _fetch_repository(
+        self, full_name: str, token: str | None = None
+    ) -> _UpstreamRepository:
         if not re.fullmatch(FULL_NAME_PATTERN, full_name) or full_name.split("/")[1] in {".", ".."}:
-            raise GitHubImportError("Choose an available public GitHub repository.")
-        repo, _ = await self._github_json(full_name, {})
+            raise GitHubImportError("Choose an available GitHub repository.")
+        repo, _ = await self._github_json(full_name, {}, token)
         if (
             not isinstance(repo, dict)
-            or repo.get("private") is not False
-            or repo.get("visibility") != "public"
+            or not (
+                (repo.get("private") is False and repo.get("visibility") == "public")
+                or (
+                    token is not None
+                    and repo.get("private") is True
+                    and repo.get("visibility") == "private"
+                )
+            )
             or type(repo.get("id")) is not int
             or repo["id"] <= 0
             or not isinstance(repo.get("full_name"), str)
@@ -330,20 +371,17 @@ class GitHubImporter:
         ):
             raise GitHubImportError("Choose an available public GitHub repository.")
         default = repo.get("default_branch")
-        return PublicRepository(
+        return _UpstreamRepository(
             str(repo["full_name"]),
             int(repo["id"]),
             default if isinstance(default, str) and _valid_branch(default) else None,
+            token,
         )
 
-    async def _default_commit(self, name: str) -> str:
-        revision = await self.client.get(
-            f"https://api.github.com/repos/{name}/commits",
-            params={"per_page": 1},
-            headers={"Accept": "application/vnd.github+json"},
+    async def _default_commit(self, upstream: _UpstreamRepository) -> str:
+        revisions, _ = await self._github_json(
+            f"{upstream.name}/commits", {"per_page": 1}, upstream.token
         )
-        revision.raise_for_status()
-        revisions = revision.json()
         commit = (
             revisions[0].get("sha")
             if isinstance(revisions, list) and revisions and isinstance(revisions[0], dict)
@@ -356,8 +394,7 @@ class GitHubImporter:
     async def _download_snapshot(
         self,
         user_id: UUID,
-        repository_id: int,
-        name: str,
+        upstream: _UpstreamRepository,
         commit: str,
         *,
         verify: Repository | None = None,
@@ -365,9 +402,8 @@ class GitHubImporter:
         history: bool = False,
     ) -> ImportedSnapshot:
         payload = bytearray()
-        async with self.client.stream(
-            "GET", f"https://codeload.github.com/{name}/zip/{commit}"
-        ) as response:
+        url = await self._archive_url(upstream, commit)
+        async with self.client.stream("GET", url, follow_redirects=False) as response:
             response.raise_for_status()
             length = response.headers.get("content-length", "")
             if length.isdigit() and int(length) > MAX_ARCHIVE_BYTES:
@@ -389,12 +425,12 @@ class GitHubImporter:
                 self._publish,
                 bytes(payload),
                 user_id,
-                repository_id,
-                name,
+                upstream.id,
+                upstream.name,
                 commit,
                 verify,
                 verify_existing,
-                history,
+                (".history-app" if upstream.token else ".history") if history else None,
             )
         )
         try:
@@ -405,6 +441,35 @@ class GitHubImporter:
             await publication
             raise
 
+    async def _archive_url(self, upstream: _UpstreamRepository, commit: str) -> str:
+        if upstream.token is None:
+            return f"https://codeload.github.com/{upstream.name}/zip/{commit}"
+        async with self.client.stream(
+            "GET",
+            f"https://api.github.com/repos/{upstream.name}/zipball/{commit}",
+            headers=_api_headers(upstream.token),
+            follow_redirects=False,
+        ) as response:
+            if response.status_code != 302:
+                response.raise_for_status()
+                raise GitHubImportError("GitHub did not return an archive download link.")
+            location: str = response.headers.get("location", "")
+        parsed = urlsplit(location)
+        if (
+            len(location) > 8192
+            or parsed.scheme != "https"
+            or parsed.netloc != "codeload.github.com"
+            or parsed.fragment
+            or parsed.path.lower()
+            not in {
+                f"/{upstream.name.lower()}/legacy.zip/{commit}",
+                f"/{upstream.name.lower()}/zip/{commit}",
+            }
+        ):
+            raise GitHubImportError("GitHub returned an unexpected archive download link.")
+        # The temporary signed URL authorizes codeload on its own.
+        return location
+
     @asynccontextmanager
     async def _operation(self) -> AsyncIterator[None]:
         try:
@@ -412,6 +477,8 @@ class GitHubImporter:
                 yield
         except GitHubImportError:
             raise
+        except GitHubAppError as error:
+            raise GitHubImportError(str(error)) from None
         except httpx.HTTPStatusError as error:
             status = error.response.status_code
             if status == 403 and (
@@ -420,7 +487,7 @@ class GitHubImporter:
             ):
                 status = 429
             messages = {
-                404: "GitHub could not find this public repository (HTTP 404).",
+                404: "GitHub could not find this repository with the configured access (HTTP 404).",
                 403: "GitHub denied this request (HTTP 403).",
                 429: "GitHub's request limit has been reached. Retry after the limit resets.",
                 409: "This repository has no commits to import.",
@@ -453,11 +520,11 @@ class GitHubImporter:
         commit: str,
         verify: Repository | None = None,
         verify_existing: bool = False,
-        history: bool = False,
+        history_directory: str | None = None,
     ) -> ImportedSnapshot:
         parent = self.storage / str(user_id) / str(repository_id)
-        if history:
-            parent /= ".history"
+        if history_directory is not None:
+            parent /= history_directory
         if parent.resolve() != parent:
             raise GitHubImportError("Repository storage is unavailable.")
         if verify is None:
@@ -478,7 +545,7 @@ class GitHubImporter:
                     identity = _verify_snapshot_tree(destination, staging)
                 else:
                     if not destination.exists():
-                        if history:
+                        if history_directory is not None:
                             _prune_history(parent, destination)
                         staging.rename(destination)
                     identity = destination.lstat()
@@ -491,6 +558,12 @@ class GitHubImporter:
             )
         finally:
             shutil.rmtree(staging, ignore_errors=True)
+
+
+def _api_headers(token: str | None) -> dict[str, str]:
+    if token is None:
+        return GITHUB_API_HEADERS
+    return {**GITHUB_API_HEADERS, "Authorization": f"Bearer {token}"}
 
 
 def _valid_branch(name: str) -> bool:
