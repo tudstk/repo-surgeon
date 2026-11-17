@@ -497,8 +497,12 @@ for (const colorScheme of ['dark', 'light'] as const) {
     await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
     await capture(page, testInfo, `settings-${colorScheme}-390`);
     await expect(
-      page.getByText('There are no configurable settings in this release.', { exact: false }),
+      page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', {
+        name: 'Personalization',
+      }),
     ).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'System', exact: true })).toBeChecked();
+    await expect(page.getByRole('radio', { name: 'Green', exact: true })).toBeChecked();
     await trigger.click();
     await expect(page.getByRole('menuitem', { name: 'Settings' })).toHaveAttribute(
       'aria-current',
@@ -509,6 +513,78 @@ for (const colorScheme of ['dark', 'light'] as const) {
     await expect(page.getByRole('heading', { name: 'Ada Lovelace' })).toBeVisible();
   });
 }
+
+test('personalization follows the system by default and persists theme and accent', async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ colorScheme: 'light', reducedMotion: 'reduce' });
+  await fixture(page);
+  await page.goto('/settings');
+  const theme = page.getByRole('group', { name: 'Theme', exact: true });
+  const accent = page.getByRole('group', { name: 'Accent color' });
+  const system = theme.getByRole('radio', { name: 'System', exact: true });
+  const dark = theme.getByRole('radio', { name: 'Dark', exact: true });
+  const light = theme.getByRole('radio', { name: 'Light', exact: true });
+  const green = accent.getByRole('radio', { name: 'Green' });
+  const blue = accent.getByRole('radio', { name: 'Blue' });
+  const body = page.locator('body');
+
+  await expect(system).toBeChecked();
+  await expect(green).toBeChecked();
+  await expect(body).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(body).toHaveCSS('background-color', 'rgb(16, 18, 20)');
+  const darkPreview = page.locator('[data-theme-preview="dark"]');
+  const lightPreview = page.locator('[data-theme-preview="light"]');
+  await expect(darkPreview).toHaveCSS('background-color', 'rgb(16, 18, 20)');
+  await expect(lightPreview).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await capture(page, testInfo, 'settings-system-desktop');
+
+  await light.check();
+  await blue.check();
+  await expect(body).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  const category = page.getByRole('link', { name: 'Personalization' });
+  await expect(category).toHaveCSS('color', 'rgb(36, 88, 166)');
+  await expect(page.locator('[data-theme-preview="system"]')).toHaveCSS(
+    'background-color',
+    'rgb(16, 18, 20)',
+  );
+  await expect(darkPreview).toHaveCSS('background-color', 'rgb(16, 18, 20)');
+  await capture(page, testInfo, 'settings-light-desktop');
+
+  await theme.getByRole('radio', { name: 'Light', exact: true }).focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(dark).toBeChecked();
+  await expect(body).toHaveCSS('background-color', 'rgb(16, 18, 20)');
+  await page.getByRole('link', { name: 'Workspace', exact: true }).click();
+  await expect(page).toHaveURL('/');
+  const inspect = page.getByRole('button', { name: 'Send instruction' });
+  await expect(inspect).toHaveCSS('background-color', 'rgb(147, 186, 255)');
+
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.reload();
+  await expect(body).toHaveCSS('background-color', 'rgb(16, 18, 20)');
+  await expect(inspect).toHaveCSS('background-color', 'rgb(147, 186, 255)');
+  await page.goto('/settings');
+  await expect(dark).toBeChecked();
+  await expect(blue).toBeChecked();
+  await system.check();
+  await green.check();
+  await expect(body).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await expect(category).toHaveCSS('color', 'rgb(17, 106, 91)');
+});
+
+test('appearance changes propagate between open tabs', async ({ page, context }) => {
+  await fixture(page);
+  const otherTab = await context.newPage();
+  await fixture(otherTab);
+  await Promise.all([page.goto('/settings'), otherTab.goto('/settings')]);
+  await expect(otherTab.getByRole('radio', { name: 'System', exact: true })).toBeChecked();
+  await page.getByRole('radio', { name: 'Dark', exact: true }).check();
+  await page.getByRole('radio', { name: 'Violet', exact: true }).check();
+  await expect(otherTab.getByRole('radio', { name: 'Dark', exact: true })).toBeChecked();
+  await expect(otherTab.getByRole('radio', { name: 'Violet', exact: true })).toBeChecked();
+});
 
 test('a broken GitHub picture falls back to an initial without losing account navigation', async ({
   page,
