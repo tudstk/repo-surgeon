@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { highlightedCode } from '@/lib/code-highlight';
+import { highlightedCodeLines } from '@/lib/code-highlight';
 import { Icon } from '@/components/ui/icons';
 import {
   getRepositoryFile,
@@ -186,7 +186,7 @@ function FilePreview({
     return () => controller.abort();
   }, [attempt, path, repositoryId, revision, start]);
   const code = useMemo(
-    () => (file ? highlightedCode(path, file.lines.join('\n')) : null),
+    () => (file ? highlightedCodeLines(path, file.lines.join('\n')) : null),
     [file, path],
   );
   const retry = () => {
@@ -219,17 +219,16 @@ function FilePreview({
       role="region"
       aria-label="File contents"
     >
-      <div className="source-code-lines" aria-hidden="true">
-        {file.lines.map((_, index) => (
-          <div key={index}>{file.start_line + index}</div>
-        ))}
-      </div>
-      <pre>
-        <code>
-          {code}
-          {'\n'}
-        </code>
-      </pre>
+      {file.lines.map((_, index) => (
+        <div className="source-code-row" key={index}>
+          <span className="source-line-number" aria-hidden="true">
+            {file.start_line + index}
+          </span>
+          <pre>
+            <code>{code?.[index]}</code>
+          </pre>
+        </div>
+      ))}
       {file.has_more ? (
         <div className="source-code-more">
           {error ? <p role="alert">{error}</p> : null}

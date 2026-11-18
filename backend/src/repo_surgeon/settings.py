@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
+from repo_surgeon.application.review_catalog import DEFAULT_REVIEW_MODEL
+
 AccessMode = Literal["local_trusted", "public_authenticated"]
 
 
@@ -41,7 +43,7 @@ class Settings(BaseSettings):
     auth_encryption_key: str | None = None
 
     openrouter_api_key: SecretStr | None = None
-    openrouter_model: str = Field(default="deepseek/deepseek-v3.2", min_length=3, max_length=128)
+    openrouter_model: str = Field(default=DEFAULT_REVIEW_MODEL, min_length=3, max_length=128)
     review_mode: Literal["openrouter", "simulation"] = "openrouter"
     review_max_output_tokens: int = Field(default=4_000, ge=512, le=8_000)
     review_timeout_seconds: int = Field(default=180, ge=30, le=300)

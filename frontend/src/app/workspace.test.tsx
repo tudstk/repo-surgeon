@@ -319,6 +319,9 @@ describe('authenticated workspace', () => {
     expect(screen.getByRole('tabpanel', { name: 'Activity' })).toHaveTextContent('run.completed');
     expect(screen.getByText(/Proposals and test execution are not available/)).toBeInTheDocument();
 
+    fireEvent.change(screen.getByRole('textbox', { name: 'Agent instruction' }), {
+      target: { value: 'What does this repository contain?' },
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Send instruction' }));
 
     await waitFor(() => expect(turnCreated).toBe(true));

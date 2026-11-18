@@ -8,18 +8,18 @@ This checkout provides an executable foundation: a typed FastAPI process, a stri
 
 Registration validates only the selected path and Git worktree boundary. The MCP tools read and search bounded safe content, and the agent loop can use only those read-only capabilities through a provider boundary. Repository intelligence maps bounded manifest evidence to versioned language and test-command catalogs without executing repository code. Bug investigations use a fixed bounded search plan and, for the canonical seeded fixture, an evaluation-owned deterministic behavioral proof; unsupported questions return insufficient evidence. Authenticated users can select an owned repository, create a product session, submit one deterministic read-only turn, and resume its persisted normalized SSE events. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. Local-trusted repository behavior remains available only through the existing local boundary; public-authenticated workspace requests use the current principal and fail closed for foreign IDs. See [safe search](docs/mcp/safe-search-tools.md), [product scope](docs/product/scope.md), and [persisted turns](docs/architecture/decisions/0011-persisted-agent-turns.md).
 
-No model API key is required.
+No model API key is required for deterministic tests or explicit simulation. Live repository chat and PR reviews require the backend-only OpenRouter key; see [setup and context limits](docs/learning/pr-code-reviews.md).
 
 ### Workspace interface
 
-A public landing-page preview is available at `/landing`; the working workspace remains at `/`. The shared brand returns to the landing page. The hero and sign-in screen share a faint circuit texture with two introductory accent pulses and mouse-triggered pulses. Reduced-motion preference keeps it static.
+A public landing-page preview is available at `/landing`; the working workspace remains at `/`. The shared brand returns to the landing page. The hero and sign-in screen share a faint static circuit texture. The code-globe animation respects reduced motion.
 The landing page uses locally hosted type and actual UI captures with synthetic demo data. It makes no model calls and loads no private workspace records.
 
 The workspace’s **Add repository** dialog searches public GitHub repositories by name or `owner/repository`, with owner avatars. Select a result to import its default branch at a pinned commit as a read-only source snapshot. Search and new imports use credential-free GitHub endpoints and may be rate-limited. A local operator can connect one existing snapshot to a [read-only GitHub App](#local-github-app-access).
 
 GitHub sign-in identifies your account; it does not connect or import your GitHub repositories.
 The workspace shows your imported snapshots and any local repositories already assigned to your account.
-Its demo provider lists files and returns a fixed completion message, rather than a tailored answer.
+The compact composer answers repository questions through the selected OpenRouter model, using bounded excerpts from the saved snapshot and recent conversation. PR reviews separately read the pinned PR revision. Explicit simulation is labelled; the legacy deterministic demo endpoint remains available for tests and older clients.
 Selecting a saved session restores its latest exchange and run events, not a complete transcript.
 “Persisted” means saved to session history; it does not mean a Git commit was created or a tool succeeded.
 
@@ -181,7 +181,7 @@ Future work continues with Git context, test sandboxing, proposals, approvals, p
 
 Run the normal `uv run alembic upgrade head` migration before starting this version. Migration `20261114_0005` adds nullable snapshot provenance fields and preserves existing registrations and ownership. Migration `20261114_0006` adds persistent workspace visibility; existing repositories remain visible.
 
-In the workspace, choose **Add repository**, search by repository name or exact `owner/repository`, then select a suggestion. After import, the snapshot is selected and ready for a read-only session. Its short commit identifier appears in the repository list. Reloading restores the saved registration. The deterministic demo provider still lists files and returns its fixed completion message.
+In the workspace, choose **Add repository**, search by repository name or exact `owner/repository`, then select a suggestion. After import, the snapshot is selected and ready for a read-only session. Its short commit identifier appears in the repository list. Reloading restores the saved registration. Ask questions about the imported snapshot in the composer, or open a PR to review its pinned revision.
 
 The backend checks public visibility without a GitHub token, resolves the default branch to a commit and downloads a bounded source ZIP into app-managed storage. Set `REPO_SURGEON_REPOSITORY_STORAGE` to a private, persistent directory owned by the backend process; its default is `~/.local/share/repo-surgeon/repositories`. Back up this directory together with the database. Multiple workers must share the same filesystem. The Next.js API proxy allows 90 seconds for import responses; any outer proxy needs a compatible timeout. The browser never supplies a filesystem path.
 

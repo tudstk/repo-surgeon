@@ -19,7 +19,7 @@ const display = localFont({
 export const metadata: Metadata = {
   title: 'Repo Surgeon - Inspect the repo. Keep control.',
   description:
-    'A human-controlled repository inspection workspace. Read-only sessions, saved activity, and a clear view of the current demo release.',
+    'A human-controlled repository inspection workspace. Read-only sessions, saved activity, and a clear view of the current release.',
   other: { 'page-type': 'software', 'site-kind': 'software' },
 };
 
@@ -73,7 +73,7 @@ export default function LandingPage() {
                   <Icon name="arrow" />
                 </a>
               </div>
-              <span className={styles.finePrint}>Early release · deterministic demo provider</span>
+              <span className={styles.finePrint}>Early release · read-only AI workspace</span>
             </div>
             <div className={styles.heroArt}>
               <InspectionMark />
@@ -89,14 +89,14 @@ export default function LandingPage() {
             <Image
               className={styles.desktopImage}
               src={desktop}
-              alt="Repo Surgeon desktop workspace with repository selection, a saved demo exchange and persisted run events."
+              alt="Repo Surgeon workspace with repository selection, a saved PR review, a readable pull request diff and model selection."
               sizes="(min-width: 1408px) 1280px, (min-width: 1101px) calc(100vw - 128px), calc(100vw - 80px)"
               loading="eager"
             />
             <Image
               className={styles.phoneImage}
               src={phone}
-              alt="Repo Surgeon phone workspace with a saved demo exchange, inspection composer, and repository and event drawer buttons."
+              alt="Repo Surgeon phone workspace with a saved review, compact message composer, model selection and repository tools drawer."
               sizes="calc(100vw - 40px)"
               loading="eager"
             />
@@ -125,8 +125,8 @@ export default function LandingPage() {
             <li>
               <h3>Follow the inspection</h3>
               <p>
-                Run the deterministic demo provider. See the tool outcome and the saved run events
-                alongside the exchange.
+                Ask about the repository or review a pull request. Read the answer beside source
+                files and diffs, with saved activity to revisit.
               </p>
             </li>
             <li>
@@ -146,7 +146,8 @@ export default function LandingPage() {
           <div className={styles.releaseLead}>
             <h2 id="release-title">The current boundary.</h2>
             <p>
-              Working sessions and saved activity. A demo provider, with its limits in plain sight.
+              Repository questions, PR reviews and saved activity. Read-only, with clear context
+              limits.
             </p>
           </div>
           <div className={styles.questions}>
@@ -157,7 +158,8 @@ export default function LandingPage() {
               </summary>
               <p>
                 Sign in with GitHub, import a public source snapshot and create a read-only session.
-                Run a bounded demo inspection, then revisit its latest exchange and saved events.
+                Browse source and history, ask repository questions, or review a PR. Reopen the
+                latest exchange and saved events when you return.
               </p>
             </details>
             <details>
@@ -166,8 +168,9 @@ export default function LandingPage() {
                 <Icon name="plus" />
               </summary>
               <p>
-                The current provider lists files and returns a fixed completion message. It does not
-                generate a tailored answer to your question.
+                Yes, when OpenRouter is configured. Choose a model for repository questions and PR
+                reviews. Answers use bounded source excerpts and can miss context. Simulation mode
+                is explicitly labelled.
               </p>
             </details>
             <details>

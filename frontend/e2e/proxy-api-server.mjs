@@ -168,6 +168,16 @@ const server = createServer((request, response) => {
     return;
   }
 
+  if (request.url === '/api/v1/review-provider' && request.method === 'GET') {
+    json(response, 200, {
+      available: true,
+      simulation: true,
+      repository_chat: false,
+      model: 'Simulation',
+    });
+    return;
+  }
+
   if (request.url === '/api/v1/sessions/session-1/turns' && request.method === 'POST') {
     request.on('data', () => {});
     request.on('end', () => {

@@ -80,6 +80,9 @@ test('callback resolves a mocked session into the safe profile and logs out with
   await page.getByRole('tab', { name: 'Activity' }).click();
   await expect(page.getByLabel('Normalized run events')).toContainText('run.completed');
 
+  await page
+    .getByRole('textbox', { name: 'Agent instruction' })
+    .fill('What does this repository contain?');
   await page.getByRole('button', { name: 'Send instruction' }).click();
   await expect(page.getByText(/Saved to session history/)).toBeVisible();
 

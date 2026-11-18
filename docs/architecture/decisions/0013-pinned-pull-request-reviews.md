@@ -10,6 +10,8 @@ Context preparation uses confined file reads, deterministic dependency hints and
 
 One bounded completion request goes through the OpenRouter adapter. The API key remains backend-only. Untrusted titles, descriptions, patches and source stay in the data message behind the existing untrusted-data policy. Common credential patterns are redacted, while filenames still obey the established confinement rules. The adapter requests no-collection and zero-retention routing and never weakens those filters on failure. A dedicated operator-controlled key spending limit remains necessary because there is no monthly per-user billing quota in this slice.
 
+Model selection is a server-owned allowlist: DeepSeek V3.2 by default and DeepSeek V4 Flash as the budget choice. Browser input cannot choose an arbitrary model or change provider policy. Each request carries per-model routing price caps, and its selected model becomes part of the idempotency identity and persisted evidence. There is no automatic fallback to another model.
+
 Simulation is a deliberate configuration with explicit UI and answer disclaimers. It runs real context preparation without inference. It never silently stands in for a failed real review. Model quality is evaluated separately from no-network protocol tests.
 
 ## Streaming and persistence
@@ -23,3 +25,10 @@ Completed request replays return their saved result. A new button click uses a n
 ## Validation
 
 HTTP adapter tests cover PR revision races and path filtering. Application tests cover confinement, graph retrieval and secret fragmentation. End-to-end session tests cover authentication/CSRF, persistence, idempotent replay and partial failures. Provider transports are mocked; browser fixtures exercise actual streaming through the Next rewrite and desktop/mobile restoration. No paid inference is required by any quality gate.
+
+
+## Repository chat extension
+
+The same streaming/persistence boundary serves ordinary repository messages through `/repository-messages`. A distinct server-selected system prompt answers the user's question rather than issuing a PR verdict. This flow reads the registered snapshot through its pinned device/inode capability; it never reads an active historical preview or imports a different GitHub revision. The mapper selects question-relevant excerpts under the same scan and packet limits. At most four recent completed exchanges are included, each with bounded question/answer text. Source, history and output remain subject to the untrusted-data and credential-redaction policies. A model's answer is advice, not evidence that code ran or was modified.
+
+The request identity now includes the question as well as the session, PR selection and model. A replay cannot change its message. Chat metadata carries `kind: repository_chat` in the existing nullable JSON evidence field, so no schema migration is necessary. The legacy deterministic turn endpoint remains separate for existing clients. No new MCP tool or model-accessible command is introduced.

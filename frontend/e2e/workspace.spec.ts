@@ -231,9 +231,14 @@ test('an in-flight inspection disables duplicate submission and restores its sav
   });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Session ready' })).toBeVisible();
+  await page
+    .getByRole('textbox', { name: 'Agent instruction' })
+    .fill('What does this repository contain?');
   await page.getByRole('button', { name: 'Send instruction' }).click();
   await expect(page.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
-  await expect(page.getByText('Running read-only inspection…')).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Latest exchange' }).getByRole('status'),
+  ).toHaveText('Inspecting…');
   await page.route('**/api/v1/sessions/session-1', (route) =>
     route.fulfill({ json: { ...session, turns: [turn] } }),
   );
@@ -340,7 +345,7 @@ test('session creation is labelled separately from running an inspection', async
   } finally {
     release?.();
   }
-  await expect(page.getByRole('button', { name: 'Send instruction' })).toBeEnabled();
+  await expect(page.getByRole('textbox', { name: 'Agent instruction' })).toBeEnabled();
 });
 
 test('an unavailable repository still lets the user select another assigned repository', async ({
@@ -416,6 +421,7 @@ for (const colorScheme of ['dark', 'light'] as const) {
     await page.goto('/');
     const instruction = page.getByRole('textbox', { name: 'Agent instruction' });
     await expect(instruction).toBeEnabled();
+    await instruction.fill('Explain the repository');
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
       await instruction.click();
@@ -561,12 +567,14 @@ test('personalization follows the system by default and persists theme and accen
   await expect(body).toHaveCSS('background-color', 'rgb(16, 18, 20)');
   await page.getByRole('link', { name: 'Workspace', exact: true }).click();
   await expect(page).toHaveURL('/');
+  await page.getByRole('textbox', { name: 'Agent instruction' }).fill('Explain the repository');
   const inspect = page.getByRole('button', { name: 'Send instruction' });
   await expect(inspect).toHaveCSS('background-color', 'rgb(147, 186, 255)');
 
   await page.emulateMedia({ colorScheme: 'light' });
   await page.reload();
   await expect(body).toHaveCSS('background-color', 'rgb(16, 18, 20)');
+  await page.getByRole('textbox', { name: 'Agent instruction' }).fill('Explain the repository');
   await expect(inspect).toHaveCSS('background-color', 'rgb(147, 186, 255)');
   await page.goto('/settings');
   await expect(dark).toBeChecked();
@@ -1691,6 +1699,21 @@ for (const width of [1920, 1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
     await pullRequestFixture(page);
+    await page.route('**/api/v1/review-provider', (route) =>
+      route.fulfill({
+        json: {
+          available: true,
+          simulation: true,
+          repository_chat: true,
+          model: 'Simulation',
+          default_model: 'deepseek/deepseek-v3.2',
+          models: [
+            { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', description: 'Default' },
+            { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash', description: 'Budget' },
+          ],
+        },
+      }),
+    );
     const review = {
       number: 24,
       title: 'Validate the catalog price filter',
@@ -1707,6 +1730,7 @@ for (const width of [1920, 1440, 390]) {
       expect(route.request().postDataJSON()).toEqual({
         number: 24,
         request_id: expect.any(String),
+        model: 'deepseek/deepseek-v3.2',
       });
       expect(requested).toBe(false);
       requested = true;
@@ -1758,3 +1782,169 @@ for (const width of [1920, 1440, 390]) {
     await expect(chat.getByText(/PR revision/)).toContainText('bbbbbbb');
   });
 }
+
+test('chat model selector submits the selected budget model for PR review', async ({
+  page,
+}, testInfo) => {
+  await pullRequestFixture(page);
+  await page.route('**/api/v1/review-provider', (route) =>
+    route.fulfill({
+      json: {
+        available: true,
+        simulation: false,
+        model: 'deepseek/deepseek-v3.2',
+        default_model: 'deepseek/deepseek-v3.2',
+        models: [
+          { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', description: 'Default' },
+          { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash', description: 'Budget' },
+        ],
+      },
+    }),
+  );
+  let requestModel = '';
+  await page.route('**/api/v1/sessions/session-1/pull-request-reviews', (route) => {
+    requestModel = route.request().postDataJSON().model;
+    return route.fulfill({ status: 429, json: { detail: 'Test rate limit. No model call made.' } });
+  });
+  await page.goto('/');
+  const select = page.getByLabel('Chat model');
+  await expect(select).toHaveValue('deepseek/deepseek-v3.2');
+  await select.selectOption('deepseek/deepseek-v4-flash');
+  await capture(page, testInfo, 'model-selector-desktop');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(select).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await capture(page, testInfo, 'model-selector-mobile');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('tab', { name: 'Pull Request', exact: true }).click();
+  await page.getByRole('button', { name: /Validate the catalog price filter/ }).click();
+  await page.getByRole('button', { name: 'Code Review this PR' }).click();
+  await expect(page.getByText('Test rate limit. No model call made.')).toBeVisible();
+  expect(requestModel).toBe('deepseek/deepseek-v4-flash');
+});
+
+for (const width of [1440, 390]) {
+  test(`repository chat grows from one line and saves a model answer at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+    await fixture(page, 'ready');
+    await page.route('**/api/v1/review-provider', (route) =>
+      route.fulfill({
+        json: {
+          available: true,
+          simulation: false,
+          repository_chat: true,
+          model: 'deepseek/deepseek-v3.2',
+          default_model: 'deepseek/deepseek-v3.2',
+          models: [{ id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', description: 'Default' }],
+        },
+      }),
+    );
+    const question = 'How does the entry point work?';
+    const answer =
+      '## Architecture\n\nThere are **2 components** connected through `src/main.py`.\n\n---\n\n1. The entry point starts the application.\n2. The handler processes requests.';
+    const response = {
+      ...turn,
+      question,
+      answer,
+      review: {
+        kind: 'repository_chat',
+        model: 'deepseek/deepseek-v3.2',
+        simulation: false,
+        repository: repository.name,
+        head_sha: 'a'.repeat(40),
+      },
+    };
+    let sent = false;
+    await page.route('**/api/v1/sessions/session-1/repository-messages', (route) => {
+      expect(route.request().postDataJSON()).toMatchObject({
+        message: question,
+        model: 'deepseek/deepseek-v3.2',
+      });
+      expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
+      sent = true;
+      return route.fulfill({
+        contentType: 'text/event-stream',
+        body:
+          `event: started\ndata: ${JSON.stringify({ ...response, status: 'running', answer: '' })}\n\n` +
+          `event: delta\ndata: ${JSON.stringify({ text: answer })}\n\n` +
+          `event: completed\ndata: ${JSON.stringify(response)}\n\n`,
+      });
+    });
+    await page.route('**/api/v1/sessions/session-1', (route) =>
+      route.fulfill({ json: { ...session, turns: sent ? [response] : [] } }),
+    );
+    await page.goto('/');
+    const input = page.getByPlaceholder('Write your message...');
+    await expect(input).toBeVisible();
+    const single = (await input.boundingBox())!.height;
+    expect(single).toBeLessThanOrEqual(48);
+    await input.fill('First line\nSecond line\nThird line');
+    await expect.poll(async () => (await input.boundingBox())!.height).toBeGreaterThan(single);
+    await input.fill(question);
+    await expect.poll(async () => (await input.boundingBox())!.height).toBe(single);
+    const send = page.getByRole('button', { name: 'Send instruction' });
+    await expect(send).toHaveText('');
+    await expect(send).toHaveCSS('border-radius', '6px');
+    await send.click();
+    await expect(page.getByRole('heading', { name: 'Architecture' })).toBeVisible();
+    await expect(page.getByText('Repository conversation', { exact: true })).toBeVisible();
+    await expect(input).toHaveValue('');
+    const rule = page.locator('.assistant-content hr');
+    await expect(rule).toHaveCSS('border-top-style', 'solid');
+    expect(
+      await rule.evaluate((el) => parseFloat(getComputedStyle(el).borderTopWidth)),
+    ).toBeLessThanOrEqual(1);
+    await capture(page, testInfo, `repository-chat-${width}`);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Architecture' })).toBeVisible();
+  });
+}
+
+test('Code wraps long source lines and keeps the next line number aligned', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await fixture(page);
+  const lines = [
+    '<meta name="description" content="' + 'Repository source preview '.repeat(20) + '">',
+    '<title>Repository</title>',
+  ];
+  await page.route('**/api/v1/repositories/*/tree?*', (route) =>
+    route.fulfill({
+      json: {
+        entries: [{ name: 'index.html', path: 'index.html', kind: 'file' }],
+        next_offset: null,
+        scan_limit_reached: false,
+      },
+    }),
+  );
+  await page.route('**/api/v1/repositories/*/file?*', (route) =>
+    route.fulfill({
+      json: {
+        path: 'index.html',
+        start_line: 1,
+        end_line: 2,
+        has_more: false,
+        lines,
+      },
+    }),
+  );
+  await page.goto('/');
+  await page.getByRole('button', { name: 'index.html', exact: true }).click();
+  const content = page.getByRole('region', { name: 'File contents' });
+  await expect(content.locator('.source-code-row')).toHaveCount(2);
+  const first = await content.locator('.source-code-row').nth(0).boundingBox();
+  const second = await content.locator('.source-code-row').nth(1).boundingBox();
+  expect(first!.height).toBeGreaterThan(22);
+  expect(second!.y).toBeCloseTo(first!.y + first!.height, 0);
+  expect(await content.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  expect(await content.locator('code').allTextContents()).toEqual(lines);
+  await capture(page, testInfo, 'wrapped-source');
+});
