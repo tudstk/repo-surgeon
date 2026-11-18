@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from math import isfinite
 from pathlib import Path
 from typing import cast
 from uuid import UUID, uuid4
@@ -17,6 +17,7 @@ from repo_surgeon.application.agent_sessions import (
     SessionBusyError,
     SessionTitleConflictError,
 )
+from repo_surgeon.application.redaction import SENSITIVE_KEY, redact_text
 from repo_surgeon.domain.sessions import (
     AgentRun,
     AgentRunStatus,
@@ -26,7 +27,7 @@ from repo_surgeon.domain.sessions import (
     RunEventType,
     SessionWithRuns,
 )
-from repo_surgeon.infrastructure.repository_models import RepositoryRecord
+from repo_surgeon.infrastructure.repository_models import RepositoryRecord, UserRecord
 from repo_surgeon.infrastructure.run_models import (
     AgentRunRecord,
     ConversationSessionRecord,
@@ -39,28 +40,12 @@ def _aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
-_SENSITIVE_KEY = re.compile(
-    r"(?:api[_-]?key|authorization|credential|password|passwd|secret|token)", re.I
-)
-_SENSITIVE_VALUE = re.compile(
-    r"(?i)(\b(?:api[_-]?key|authorization|credential|password|passwd|secret|token)\b\s*[:=]\s*)([^\s,;}'\"]+)"
-)
-_BEARER_VALUE = re.compile(r"(?i)(\bbearer\s+)([^\s,;}'\"]+)")
-_PEM_VALUE = re.compile(r"-----BEGIN ([^-]+)-----.+?-----END \1-----", re.DOTALL)
-
-
-def _redact_text(value: str) -> str:
-    value = _PEM_VALUE.sub("[REDACTED PEM]", value)
-    value = _SENSITIVE_VALUE.sub(r"\1[REDACTED]", value)
-    return _BEARER_VALUE.sub(r"\1[REDACTED]", value)
-
-
 def _redact_value(value: object) -> object:
     if isinstance(value, str):
-        return _redact_text(value)
+        return redact_text(value)
     if isinstance(value, dict):
         return {
-            str(key): "[REDACTED]" if _SENSITIVE_KEY.search(str(key)) else _redact_value(item)
+            str(key): "[REDACTED]" if SENSITIVE_KEY.search(str(key)) else _redact_value(item)
             for key, item in value.items()
         }
     if isinstance(value, list):
@@ -101,6 +86,7 @@ def _run(record: AgentRunRecord) -> AgentRun:
         returned_bytes=record.returned_bytes,
         started_at=_aware(record.started_at),
         completed_at=_aware(record.completed_at) if record.completed_at else None,
+        review_context=record.review_context,
     )
 
 
@@ -309,7 +295,50 @@ class SqlAlchemyAgentSessionStore:
         ).scalars()
         return SessionWithRuns(session, tuple(_run(record) for record in records))
 
-    async def start_run(self, session_id: UUID, question: str, now: datetime) -> AgentRun | None:
+    async def start_run(
+        self,
+        session_id: UUID,
+        question: str,
+        now: datetime,
+        *,
+        review_request_id: UUID | None = None,
+        review_context: dict[str, object] | None = None,
+    ) -> AgentRun | None:
+        if review_request_id is not None:
+            await self._database.execute(
+                select(UserRecord.id).where(UserRecord.id == self._owner_user_id).with_for_update()
+            )
+            existing = (
+                await self._database.execute(
+                    select(AgentRunRecord).where(
+                        AgentRunRecord.owner_user_id == self._owner_user_id,
+                        AgentRunRecord.review_request_id == review_request_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing is not None:
+                if existing.session_id != session_id or (existing.review_context or {}).get(
+                    "number"
+                ) != (review_context or {}).get("number"):
+                    raise ValueError("This review request belongs to a different selection.")
+                if existing.status == "running":
+                    if _aware(existing.started_at) < now - timedelta(minutes=6):
+                        await self.fail_run(existing.id, "review_interrupted", now)
+                        return await self.get_run(existing.id)
+                    raise SessionBusyError
+                return _run(existing)
+            active = await self._database.scalar(
+                select(AgentRunRecord.id)
+                .where(
+                    AgentRunRecord.owner_user_id == self._owner_user_id,
+                    AgentRunRecord.review_context.is_not(None),
+                    AgentRunRecord.status == "running",
+                    AgentRunRecord.started_at > now - timedelta(minutes=6),
+                )
+                .limit(1)
+            )
+            if active is not None:
+                raise SessionBusyError
         session_record = (
             await self._database.execute(
                 select(ConversationSessionRecord)
@@ -328,8 +357,10 @@ class SqlAlchemyAgentSessionStore:
             session_id=session_id,
             correlation_id=uuid4(),
             status=AgentRunStatus.RUNNING.value,
-            question=_redact_text(question),
+            question=redact_text(question),
             answer="",
+            review_request_id=review_request_id,
+            review_context=_redact_mapping(review_context) if review_context else None,
             stop_reason=None,
             model_calls=0,
             tool_calls=0,
@@ -358,7 +389,11 @@ class SqlAlchemyAgentSessionStore:
                     sequence=2,
                     event_type=RunEventType.PROGRESS_UPDATED.value,
                     event_data={
-                        "message": "Inspecting the repository with bounded read-only tools."
+                        "message": (
+                            "Preparing pull request context."
+                            if review_context
+                            else "Inspecting the repository with bounded read-only tools."
+                        )
                     },
                     occurred_at=now,
                 ),
@@ -430,7 +465,7 @@ class SqlAlchemyAgentSessionStore:
                 agent_run_id=record.id,
                 sequence=sequence,
                 event_type=RunEventType.ANSWER_COMPLETED.value,
-                event_data={"content": _redact_text(result.answer)},
+                event_data={"content": redact_text(result.answer)},
                 occurred_at=now,
             )
         )
@@ -457,7 +492,7 @@ class SqlAlchemyAgentSessionStore:
             )
         )
         record.status = status.value
-        record.answer = _redact_text(result.answer)
+        record.answer = redact_text(result.answer)
         record.stop_reason = result.stop_reason
         record.model_calls = result.model_calls
         record.tool_calls = result.tool_calls
@@ -469,6 +504,27 @@ class SqlAlchemyAgentSessionStore:
         await self._database.commit()
         await self._database.refresh(record)
         return _run(record)
+
+    async def checkpoint_review(
+        self, run_id: UUID, answer: str, context: dict[str, object]
+    ) -> None:
+        record = await self._owned_run_record(run_id)
+        if record is None or record.status != "running":
+            raise LookupError("review run is no longer active")
+        record.answer = redact_text(answer)
+        safe_context = _redact_mapping(context)
+        usage = context.get("usage")
+        if isinstance(usage, dict):
+            safe_context["usage"] = {
+                key: value
+                for key, value in usage.items()
+                if key in {"prompt_tokens", "completion_tokens", "cost"}
+                and type(value) in {int, float}
+                and isfinite(value)
+                and value >= 0
+            }
+        record.review_context = safe_context
+        await self._database.commit()
 
     async def fail_run(self, run_id: UUID, error_code: str, now: datetime) -> None:
         record = await self._owned_run_record(run_id)

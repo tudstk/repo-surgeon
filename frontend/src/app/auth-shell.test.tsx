@@ -242,6 +242,10 @@ describe('identity journey', () => {
           jsonResponse({ entries: [], next_offset: null, scan_limit_reached: false }),
         );
       }
+      if (input === '/api/v1/review-provider')
+        return Promise.resolve(
+          jsonResponse({ available: true, simulation: true, model: 'Simulation' }),
+        );
       throw new Error(`Unexpected request: ${input}`);
     });
     vi.stubGlobal('fetch', fetchMock);

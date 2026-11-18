@@ -73,6 +73,7 @@ class PersistedTurnResponse(BaseModel):
     answer: str
     started_at: datetime
     completed_at: datetime | None
+    review: dict[str, object] | None = None
 
     @classmethod
     def from_domain(cls, run: AgentRun) -> PersistedTurnResponse:
@@ -83,6 +84,7 @@ class PersistedTurnResponse(BaseModel):
             answer=run.answer,
             started_at=run.started_at,
             completed_at=run.completed_at,
+            review=run.review_context,
         )
 
 
@@ -155,6 +157,7 @@ async def list_sessions(
 @router.get(
     "/sessions/{session_id}",
     response_model=SessionDetailResponse,
+    response_model_exclude_none=True,
     responses={404: {"model": ProblemDetail}},
 )
 async def get_session(
@@ -226,6 +229,7 @@ async def archive_session(
 @router.post(
     "/sessions/{session_id}/turns",
     response_model=PersistedTurnResponse,
+    response_model_exclude_none=True,
     status_code=status.HTTP_201_CREATED,
     responses={404: {"model": ProblemDetail}},
 )

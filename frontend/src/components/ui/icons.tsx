@@ -10,6 +10,7 @@ export function Icon({
     | 'pull-request'
     | 'external'
     | 'code'
+    | 'copy'
     | 'folder'
     | 'file'
     | 'activity'
@@ -28,6 +29,7 @@ export function Icon({
   className?: string;
 }) {
   const paths = {
+    copy: 'M9 9h12v12H9zM15 9V3H3v12h6',
     code: 'm8 6-6 6 6 6m8-12 6 6-6 6m-2-15-4 18',
     folder: 'M3 6h7l2 3h9v10H3z',
     file: 'M6 3h8l4 4v14H6zm8 0v5h4',

@@ -58,6 +58,7 @@ class AgentRun:
     returned_bytes: int
     started_at: datetime
     completed_at: datetime | None
+    review_context: dict[str, object] | None = None
 
 
 @dataclass(frozen=True, slots=True)

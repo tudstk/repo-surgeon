@@ -14,6 +14,7 @@ from repo_surgeon.api.agent_sessions import router as agent_sessions_router
 from repo_surgeon.api.authentication import router as authentication_router
 from repo_surgeon.api.health import router as health_router
 from repo_surgeon.api.problems import ApiProblem, ProblemDetail
+from repo_surgeon.api.pull_request_reviews import router as pull_request_reviews_router
 from repo_surgeon.api.repositories import router as repositories_router
 from repo_surgeon.api.workspace_repositories import router as workspace_repositories_router
 from repo_surgeon.infrastructure.database import create_engine, create_session_factory
@@ -124,6 +125,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(repositories_router)
     app.include_router(workspace_repositories_router)
     app.include_router(agent_sessions_router)
+    app.include_router(pull_request_reviews_router)
     return app
 
 

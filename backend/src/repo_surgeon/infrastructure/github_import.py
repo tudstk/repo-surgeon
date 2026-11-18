@@ -18,9 +18,11 @@ from pathlib import Path
 from urllib.parse import quote, urlsplit
 from uuid import UUID
 
+import anyio
 import httpx
 
 from repo_surgeon.application.repositories import ResolvedLocalRepositoryRoot
+from repo_surgeon.application.review_models import PullReviewSource
 from repo_surgeon.domain.authentication import LOCAL_DEVELOPMENT_USER_ID
 from repo_surgeon.domain.repositories import Repository, RepositorySource
 from repo_surgeon.infrastructure.github_app import (
@@ -34,6 +36,7 @@ from repo_surgeon.infrastructure.github_pull_requests import (
     PULL_REQUEST_FILE_PAGE_SIZE,
     PULL_REQUEST_PAGE_SIZE,
     GitHubPullRequestChanges,
+    GitHubPullRequestFile,
     GitHubPullRequestPage,
     change_count,
     pull_file_from_github,
@@ -274,6 +277,92 @@ class GitHubImporter:
                 next_page,
                 next_page is None and changed_files > MAX_PULL_REQUEST_FILES,
             )
+
+    async def review_source(
+        self, repository: Repository, number: int, destination: Path
+    ) -> PullReviewSource:
+        """Pin one PR revision and download its head into request-owned temporary storage."""
+        async with self._operation():
+            upstream = await self._registered_repository(repository)
+            token = await self._pull_request_token(upstream)
+            path = f"{upstream.name}/pulls/{number}"
+            details, _ = await self._github_json(path, {}, token)
+            if not isinstance(details, dict):
+                raise ValueError
+            pull = pull_request_from_github(details, upstream.name)
+            base, head = details.get("base"), details.get("head")
+            if not isinstance(base, dict) or not isinstance(head, dict) or pull.number != number:
+                raise ValueError
+            base_sha, head_sha = base.get("sha"), head.get("sha")
+            if any(
+                not isinstance(sha, str) or re.fullmatch(COMMIT_PATTERN, sha) is None
+                for sha in (base_sha, head_sha)
+            ):
+                raise ValueError
+            assert isinstance(base_sha, str) and isinstance(head_sha, str)
+            files: list[GitHubPullRequestFile] = []
+            count = change_count(details.get("changed_files"))
+            for page in range(1, 7):
+                payload, more = await self._github_json(
+                    f"{path}/files", {"per_page": 10, "page": page}, token
+                )
+                if not isinstance(payload, list) or len(payload) > 10:
+                    raise ValueError
+                files.extend(
+                    file for item in payload if (file := pull_file_from_github(item)) is not None
+                )
+                if not more:
+                    break
+            after, _ = await self._github_json(path, {}, token)
+            if (
+                not isinstance(after, dict)
+                or after.get("head") != head
+                or after.get("base") != base
+                or after.get("updated_at") != details.get("updated_at")
+            ):
+                raise GitHubImportError(
+                    "This pull request changed while loading. Retry the review."
+                )
+            root = await self._download_review_source(upstream, head_sha, destination)
+            description = details.get("body") or ""
+            if not isinstance(description, str) or len(description) > 100_000:
+                raise GitHubImportError("This pull request description exceeds the review limit.")
+            return PullReviewSource(
+                number,
+                pull.title,
+                description,
+                base_sha,
+                head_sha,
+                tuple(files),
+                max(0, count - len(files)),
+                root,
+            )
+
+    async def _download_review_source(
+        self, upstream: _UpstreamRepository, head_sha: str, destination: Path
+    ) -> ResolvedLocalRepositoryRoot:
+        # refs/pull/<n>/head is available through the base repository's archive endpoint,
+        # including fork PRs. Never send the installation token to a fork host.
+        url = await self._archive_url(upstream, head_sha)
+        payload = bytearray()
+        async with self.client.stream("GET", url, follow_redirects=False) as response:
+            response.raise_for_status()
+            async for chunk in response.aiter_bytes(64 * 1024):
+                payload.extend(chunk)
+                if len(payload) > MAX_ARCHIVE_BYTES:
+                    raise GitHubImportError("PR source exceeds the 25 MiB archive limit.")
+        destination.mkdir()
+        worker = asyncio.create_task(
+            asyncio.to_thread(extract_snapshot, bytes(payload), destination)
+        )
+        try:
+            await asyncio.shield(worker)
+        except asyncio.CancelledError:
+            with anyio.CancelScope(shield=True):
+                await worker
+            raise
+        info = destination.stat()
+        return ResolvedLocalRepositoryRoot(str(destination), info.st_dev, info.st_ino)
 
     async def _pull_request_token(self, upstream: _UpstreamRepository) -> str | None:
         if upstream.private and self.installation is not None:

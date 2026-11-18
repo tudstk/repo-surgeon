@@ -37,6 +37,57 @@ function json(response, status, body) {
 const server = createServer((request, response) => {
   // Isolated, synthetic visual-review scenarios. Never mounted by the product server.
   const reviewState = request.headers.cookie?.match(/review_state=(\w+)/)?.[1];
+  if (
+    request.url === '/api/v1/sessions/session-1/pull-request-reviews' &&
+    request.method === 'POST'
+  ) {
+    // Synthetic streaming fixture, never mounted by the product backend.
+    const review = {
+      number: 24,
+      title: 'Validate the catalog price filter',
+      repository: 'sample/inspection-fixture',
+      head_sha: 'b'.repeat(40),
+      simulation: true,
+      model: 'Simulation',
+    };
+    const turn = {
+      ...persistedTurn,
+      question: 'Code Review this PR',
+      status: 'running',
+      answer: '',
+      completed_at: null,
+      review,
+    };
+    const answer =
+      '## Simulation\n\nNo model has evaluated this pull request.\n\n### Example suggestion format\n\n```javascript\nconst price = Number(input);\n```\n\nTests were not executed.';
+    response.writeHead(200, {
+      'content-type': 'text/event-stream',
+      'cache-control': 'no-store, no-transform',
+      'x-accel-buffering': 'no',
+    });
+    const frame = (type, payload) =>
+      response.write(`event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`);
+    frame('started', turn);
+    frame('progress', { message: 'Generating simulated review…' });
+    let position = 0;
+    const interval = setInterval(() => {
+      if (position < answer.length) {
+        frame('delta', { text: answer.slice(position, position + 24) });
+        position += 24;
+      } else {
+        clearInterval(interval);
+        frame('completed', {
+          ...turn,
+          status: 'completed',
+          answer,
+          completed_at: persistedTurn.completed_at,
+        });
+        response.end();
+      }
+    }, 110);
+    response.on('close', () => clearInterval(interval));
+    return;
+  }
   if (request.url?.startsWith('/health')) {
     response.writeHead(200, { 'content-type': 'application/json' });
     response.end('{"status":"ok"}');
