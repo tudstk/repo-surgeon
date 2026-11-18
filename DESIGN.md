@@ -175,4 +175,4 @@ PR reviews send the exact chat message **Code Review this PR** and keep the sele
 
 Review response bodies sit in a quiet panel message box, using muted prose and softened headings to reduce white intensity. Code-copy controls use 11px text beside a 13px copy/check icon while preserving usable pointer and touch targets.
 
-Conversation questions use content-sized bubbles aligned right with their author label; Repo Surgeon responses remain left aligned. Question bubbles stop at 85% of the conversation width and wrap long content.
+Conversation questions use content-sized bubbles aligned right with their author label, capped at 85% or 70ch. Repo Surgeon responses anchor to the conversation’s left padding beside a 32px circular avatar containing the activity icon. Only the response content keeps a 70ch reading limit; the exchange itself fills the pane so wide layouts do not center the chatbot. Long content wraps within its message.

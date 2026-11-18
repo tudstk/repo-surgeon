@@ -1684,7 +1684,7 @@ test('shows readable pull request diffs in the mobile repository tools drawer', 
   expect(await drawer.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
 
-for (const width of [1440, 390]) {
+for (const width of [1920, 1440, 390]) {
   test(`streams a clearly labelled PR review into chat at ${width}px`, async ({
     page,
   }, testInfo) => {
@@ -1739,6 +1739,13 @@ for (const width of [1440, 390]) {
     await expect(chat.getByRole('heading', { name: 'Simulation', exact: true })).toBeVisible();
     await expect(chat.getByRole('button', { name: 'Stop review' })).toBeVisible();
     await expect(chat.getByText('Run outcome: completed')).toBeVisible();
+    const [bodyBounds, replyBounds] = await Promise.all([
+      chat.locator('.conversation-body').boundingBox(),
+      chat.locator('.review-context-note').boundingBox(),
+    ]);
+    expect(replyBounds).not.toBeNull();
+    expect(replyBounds!.x - bodyBounds!.x).toBeLessThanOrEqual(72);
+    await expect(chat.locator('.agent-avatar .icon')).toBeVisible();
     await expect(chat.getByRole('button', { name: 'Stop review' })).toHaveCount(0);
     await expect(chat.getByText('No model has evaluated this pull request.')).toBeVisible();
     await expect(chat.getByRole('button', { name: 'Copy code' })).toBeVisible();

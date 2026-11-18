@@ -784,8 +784,7 @@ code {
   margin-bottom: 24px;
 }
 .exchange {
-  max-width: 70ch;
-  margin: auto;
+  width: 100%;
 }
 .message-meta {
   display: flex;
@@ -801,7 +800,7 @@ code {
 }
 .user-message {
   width: fit-content;
-  max-width: 85%;
+  max-width: min(85%, 70ch);
   margin-inline-start: auto;
   padding: 16px;
   border-radius: var(--radius);
@@ -809,12 +808,35 @@ code {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.agent-meta {
+.assistant-message {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
   margin-top: 32px;
-  color: var(--text);
 }
-.agent-meta > .icon {
+.agent-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--selected);
   color: var(--accent);
+}
+.agent-avatar > .icon {
+  width: 17px;
+  height: 17px;
+}
+.assistant-content {
+  min-width: 0;
+  max-width: 70ch;
+}
+.agent-meta {
+  min-height: 32px;
+  flex-wrap: wrap;
+  color: var(--text);
 }
 .agent-message {
   white-space: pre-wrap;

@@ -1079,83 +1079,95 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
               <div className="exchange">
                 <div className="message-meta">You</div>
                 <div className="user-message">{latestTurn.question}</div>
-                <div className="message-meta agent-meta">
-                  <Icon name="activity" />
-                  Repo Surgeon
-                  <span className="status-badge">
-                    {latestTurn.review
-                      ? latestTurn.review.simulation
-                        ? 'Simulation'
-                        : latestTurn.review.model
-                      : 'Demo'}
+                <div className="assistant-message">
+                  <span className="agent-avatar" aria-hidden="true">
+                    <Icon name="activity" />
                   </span>
-                </div>
-                {latestTurn.review ? (
-                  <div className="review-context-note">
-                    <strong>
-                      PR #{latestTurn.review.number} · {latestTurn.review.title}
-                    </strong>
-                    {latestTurn.review.head_sha ? (
-                      <span>
-                        PR revision <code>{latestTurn.review.head_sha.slice(0, 7)}</code>
+                  <div className="assistant-content">
+                    <div className="message-meta agent-meta">
+                      Repo Surgeon
+                      <span className="status-badge">
+                        {latestTurn.review
+                          ? latestTurn.review.simulation
+                            ? 'Simulation'
+                            : latestTurn.review.model
+                          : 'Demo'}
                       </span>
-                    ) : null}
-                    {latestTurn.review.limited ? (
-                      <span>Some context was omitted by review limits.</span>
-                    ) : null}
-                  </div>
-                ) : null}
-                {reviewing ? (
-                  <div className="review-processing" role="status">
-                    <span className="review-processing-dots" aria-hidden="true">
-                      <i />
-                      <i />
-                      <i />
-                    </span>
-                    <span>{reviewProgress}</span>
-                    <button type="button" onClick={() => reviewRequest.current?.abort()}>
-                      Stop review
-                    </button>
-                  </div>
-                ) : null}
-                {latestTurn.review ? (
-                  latestTurn.answer ? (
-                    <ReviewAnswer text={latestTurn.answer} />
-                  ) : null
-                ) : (
-                  <p className="agent-message">
-                    {latestTurn.answer || 'No answer was returned for this run.'}
-                  </p>
-                )}
-                {reviewError || latestTurn.review?.error ? (
-                  <p className="review-error" role="alert">
-                    {reviewError || latestTurn.review?.error}
-                  </p>
-                ) : null}
-                <div className="activity-list" aria-label="Persisted agent activity">
-                  {events
-                    .filter((item) => item.type === 'tool.completed' || item.type === 'tool.failed')
-                    .map((item) => (
-                      <div className="activity-row" key={item.event_id}>
-                        <Icon name={item.type === 'tool.failed' ? 'error' : 'check'} />
-                        <code>{typeof item.data.tool === 'string' ? item.data.tool : 'tool'}</code>
-                        <span className={item.type === 'tool.failed' ? 'danger' : 'success'}>
-                          {item.type === 'tool.completed' ? 'Completed' : 'Failed'}
-                        </span>
+                    </div>
+                    {latestTurn.review ? (
+                      <div className="review-context-note">
+                        <strong>
+                          PR #{latestTurn.review.number} · {latestTurn.review.title}
+                        </strong>
+                        {latestTurn.review.head_sha ? (
+                          <span>
+                            PR revision <code>{latestTurn.review.head_sha.slice(0, 7)}</code>
+                          </span>
+                        ) : null}
+                        {latestTurn.review.limited ? (
+                          <span>Some context was omitted by review limits.</span>
+                        ) : null}
                       </div>
-                    ))}
+                    ) : null}
+                    {reviewing ? (
+                      <div className="review-processing" role="status">
+                        <span className="review-processing-dots" aria-hidden="true">
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                        <span>{reviewProgress}</span>
+                        <button type="button" onClick={() => reviewRequest.current?.abort()}>
+                          Stop review
+                        </button>
+                      </div>
+                    ) : null}
+                    {latestTurn.review ? (
+                      latestTurn.answer ? (
+                        <ReviewAnswer text={latestTurn.answer} />
+                      ) : null
+                    ) : (
+                      <p className="agent-message">
+                        {latestTurn.answer || 'No answer was returned for this run.'}
+                      </p>
+                    )}
+                    {reviewError || latestTurn.review?.error ? (
+                      <p className="review-error" role="alert">
+                        {reviewError || latestTurn.review?.error}
+                      </p>
+                    ) : null}
+                    <div className="activity-list" aria-label="Persisted agent activity">
+                      {events
+                        .filter(
+                          (item) => item.type === 'tool.completed' || item.type === 'tool.failed',
+                        )
+                        .map((item) => (
+                          <div className="activity-row" key={item.event_id}>
+                            <Icon name={item.type === 'tool.failed' ? 'error' : 'check'} />
+                            <code>
+                              {typeof item.data.tool === 'string' ? item.data.tool : 'tool'}
+                            </code>
+                            <span className={item.type === 'tool.failed' ? 'danger' : 'success'}>
+                              {item.type === 'tool.completed' ? 'Completed' : 'Failed'}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                    {latestTurn.status !== 'running' && latestTurn.run_id ? (
+                      <p className="read-only-note">
+                        <Icon name="shield" />
+                        Saved to session history. Repository files are unchanged.
+                      </p>
+                    ) : null}
+                    <p
+                      className={
+                        latestTurn.status === 'failed' ? 'run-outcome danger' : 'run-outcome'
+                      }
+                    >
+                      Run outcome: {latestTurn.status}
+                    </p>
+                  </div>
                 </div>
-                {latestTurn.status !== 'running' && latestTurn.run_id ? (
-                  <p className="read-only-note">
-                    <Icon name="shield" />
-                    Saved to session history. Repository files are unchanged.
-                  </p>
-                ) : null}
-                <p
-                  className={latestTurn.status === 'failed' ? 'run-outcome danger' : 'run-outcome'}
-                >
-                  Run outcome: {latestTurn.status}
-                </p>
               </div>
             ) : session ? (
               <div className="workspace-empty">
