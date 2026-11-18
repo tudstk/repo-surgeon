@@ -1,0 +1,19 @@
+{
+  "label": "final",
+  "viewport": "1440x900",
+  "cpuThrottle": 4,
+  "elapsedMs": 4051,
+  "moves": 81,
+  "frames": 243,
+  "frameP50ms": 16.699999999999818,
+  "frameP95ms": 16.700000000000273,
+  "longTasks": 0,
+  "longTaskTotalMs": 0,
+  "globeElements": 36,
+  "LayoutCount": 0,
+  "LayoutDuration": 0,
+  "RecalcStyleCount": 95,
+  "RecalcStyleDuration": 0.046906,
+  "ScriptDuration": 0.188418,
+  "TaskDuration": 3.016109
+}

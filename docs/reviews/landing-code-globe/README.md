@@ -1,9 +1,19 @@
 # Landing code globe
 
-Native Playwright captures from 2026-11-18. The desktop capture uses a 1440x900 viewport, reduced motion and a full-page screenshot. The magnifier capture shows an active reviewed band with motion enabled. No repository data, model output or account information is used by the graphic.
+Playwright captures use fixed local JavaScript examples, with no private repository or account content. The globe and lens share cached curved code strips. Gray code and green keywords remain, along with the fixed simple handle, marked bezel, cursor/keyboard magnification, pinning and Escape. Offscreen or hidden views stop the frame loop; reduced motion paints only on interaction. The geometric background is now entirely static, including sign-in.
 
-The globe uses 21 curved code bands with opposing scroll directions. Its gray-and-green snippets are complete JavaScript helpers, with fixed before/after versions checked for syntax and intended behavior. The lens follows the cursor and magnifies the same SVG source group, rather than showing an unrelated canned excerpt. The selected band highlights, then switches to its reviewed version. The glass has a finely marked bezel and a simpler fixed handle. Pointer updates are batched into one animation frame; movement uses a transform. Near the right viewport edge, the glass shifts inward while continuing to sample the cursor's code.
+## Performance comparison
 
-Click pins the lens; Escape releases it. Arrow keys explore the code when the lens is focused. Both SVG viewports pause offscreen or in hidden tabs. Reduced motion keeps the globe static and shows the selected reviewed snippet immediately. The existing responsive layout hides the artwork at 800px and below. SVG reuse follows the [SVG 2 document structure and instancing rules](https://svgwg.org/svg2-draft/struct.html).
+Short local headless Chromium samples at 1440x900 with 4x CPU throttling and the same four-second pointer sweep:
 
-Validation: frontend formatting, lint, type checking, 46 unit tests, all 71 browser tests and the production build passed. Browser tests measured opposing SVG offsets, sampled different cursor positions, checked the lens center, exercised pinning/Escape and keyboard movement, and checked edge overflow at 1910px and 1024px. Offscreen pausing and a frozen reduced-motion SVG clock are covered. Existing landing checks cover 1910, 1440, 1280, 1024, 768, 390 and 320px with no horizontal overflow or private API requests. The Impeccable detector returned no findings, alongside direct rendered review. No dependencies, canvas, WebGL or inference calls were introduced.
+| Measurement | Original SVG | Pulses removed only | Cached renderer |
+| --- | ---: | ---: | ---: |
+| Median frame gap | 49.9 ms | 49.9 ms | 16.7 ms |
+| 95th-percentile frame gap | 66.6 ms | 66.7 ms | 16.7 ms |
+| Layout count | 198 | 173 | 0 |
+| Script duration | 1.074 s | 1.064 s | 0.188 s |
+| Globe DOM elements | 547 | 547 | 36 |
+
+Raw samples are adjacent JSON files. These are emulated local observations, not universal FPS guarantees or measurements from a physical low-end device. Removing background pulses alone did not resolve the bottleneck. Cached text drawing removed repeated SVG text-path layout and its duplicate magnified subtree. Pointer state stays outside React; cached layout bounds and transform positioning avoid per-movement reflow. The updated lens uses extra backing resolution for legibility.
+
+Validation: frontend format/lint/typing, 46 unit tests, 70 browser tests and production build. The two old pulse tests were replaced by a static-background regression check. Globe checks cover actual changing canvas pixels, opposing offsets, magnification position, keyboard/pin/Escape, rim overflow, offscreen stopping and frozen reduced-motion output. No inference calls or new dependencies are needed.
