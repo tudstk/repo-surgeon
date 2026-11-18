@@ -51,7 +51,7 @@ for (const viewport of [
     const question = page.getByText('Does it answer questions with AI?', { exact: true });
     await question.click();
     await expect(
-      page.getByText('The current provider lists files and returns a fixed completion message.', {
+      page.getByText('Yes, when OpenRouter is configured.', {
         exact: false,
       }),
     ).toBeVisible();

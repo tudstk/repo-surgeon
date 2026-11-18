@@ -42,3 +42,5 @@ The authenticated application test sends arbitrary repository questions, checks 
 A live V4 Flash repository question through the running application completed with 15,024 input and 430 output tokens, reported cost $0.0015340934. Its answer restored exactly from PostgreSQL. The check used its own “Repository chat check” session; no source or answer is published here.
 
 ![Wrapped source with aligned line numbers](wrapped-source.png)
+
+The landing preview now uses current desktop/phone PR-review captures with model selection. Its synthetic-data label remains, and its FAQ describes the configured AI capabilities and context limits. Capture provenance is recorded in the landing assets manifest.

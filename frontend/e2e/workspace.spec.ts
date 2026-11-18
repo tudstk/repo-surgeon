@@ -1699,6 +1699,21 @@ for (const width of [1920, 1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
     await pullRequestFixture(page);
+    await page.route('**/api/v1/review-provider', (route) =>
+      route.fulfill({
+        json: {
+          available: true,
+          simulation: true,
+          repository_chat: true,
+          model: 'Simulation',
+          default_model: 'deepseek/deepseek-v3.2',
+          models: [
+            { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', description: 'Default' },
+            { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash', description: 'Budget' },
+          ],
+        },
+      }),
+    );
     const review = {
       number: 24,
       title: 'Validate the catalog price filter',
@@ -1715,6 +1730,7 @@ for (const width of [1920, 1440, 390]) {
       expect(route.request().postDataJSON()).toEqual({
         number: 24,
         request_id: expect.any(String),
+        model: 'deepseek/deepseek-v3.2',
       });
       expect(requested).toBe(false);
       requested = true;
