@@ -165,15 +165,6 @@
   display: grid;
   place-items: center;
 }
-.inspectionMark {
-  width: 100%;
-  max-width: 240px;
-  height: auto;
-  overflow: visible;
-}
-.markSource {
-  stroke: #a8b0ba;
-}
 .productView {
   border: 1px solid #343c45;
   border-radius: 6px;

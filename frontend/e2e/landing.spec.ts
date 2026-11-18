@@ -73,7 +73,7 @@ test('landing artwork respects reduced motion and keyboard navigation', async ({
   await page.keyboard.press('Enter');
   await expect(page.getByRole('main')).toBeFocused();
   const field = page.locator('[data-visual="circuit-field"]');
-  await expect(field).toHaveAttribute('data-motion', 'reduced');
+  await expect(field).toHaveAttribute('data-motion', 'static');
   expect(
     await field
       .locator('svg')
@@ -83,95 +83,14 @@ test('landing artwork respects reduced motion and keyboard navigation', async ({
   await expect(field.getByRole('button')).toHaveCount(0);
 });
 
-test('background pulses move without a control and stop offscreen or for reduced motion', async ({
-  page,
-}, testInfo) => {
-  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'no-preference' });
+test('background lines stay static during pointer movement', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto('/landing');
   const field = page.locator('[data-visual="circuit-field"]');
-  const pulse = field.locator('g').last();
-  await expect(field).toHaveAttribute('data-motion', 'playing');
-  await expect
-    .poll(() => pulse.evaluate((node) => node.getAnimations({ subtree: true }).length), {
-      intervals: [50, 100, 200],
-    })
-    .toBe(3);
-  const start = await pulse
-    .locator('path')
-    .last()
-    .evaluate((node) => getComputedStyle(node).strokeDashoffset);
-  await expect
-    .poll(() =>
-      pulse
-        .locator('path')
-        .last()
-        .evaluate((node) => getComputedStyle(node).strokeDashoffset),
-    )
-    .not.toBe(start);
-  const screenshot = testInfo.outputPath('hero-electric-pulse.png');
-  await page.screenshot({
-    path: screenshot,
-    style: 'nextjs-portal { visibility: hidden !important; }',
-  });
-  await testInfo.attach('hero-electric-pulse', { path: screenshot, contentType: 'image/png' });
-  await expect
-    .poll(() => pulse.evaluate((node) => node.getAnimations({ subtree: true }).length), {
-      intervals: [25, 50, 100],
-    })
-    .toBe(0);
-  await expect
-    .poll(() => pulse.evaluate((node) => node.getAnimations({ subtree: true }).length), {
-      intervals: [25, 50, 100],
-      timeout: 1600,
-    })
-    .toBe(3);
-  await expect(field.getByRole('button')).toHaveCount(0);
-  await page.getByRole('heading', { name: 'The current boundary.' }).scrollIntoViewIfNeeded();
-  await expect(field).toHaveAttribute('data-motion', 'idle');
-  await expect
-    .poll(() => pulse.evaluate((node) => node.getAnimations({ subtree: true }).length))
-    .toBe(0);
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.getByRole('heading', { level: 1 }).scrollIntoViewIfNeeded();
-  await expect(field).toHaveAttribute('data-motion', 'reduced');
-  await expect(field.getByRole('button')).toHaveCount(0);
-});
-
-test('pointer movement sends bounded circuit pulses and respects reduced motion', async ({
-  page,
-}, testInfo) => {
-  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'no-preference' });
-  await page.goto('/landing');
-  const field = page.locator('[data-visual="circuit-field"]');
-  const cursorPulses = field.locator('[data-cursor-pulse]');
-  await expect(field).toHaveAttribute('data-motion', 'playing');
-  await page.mouse.move(260, 210, { steps: 3 });
-  const active = await cursorPulses.evaluateAll(
-    (groups) => groups.flatMap((node) => node.getAnimations({ subtree: true })).length,
-  );
-  expect(active).toBeGreaterThan(0);
-  expect(active).toBeLessThanOrEqual(6);
-  const screenshot = testInfo.outputPath('hero-cursor-pulses.png');
-  await page.screenshot({
-    path: screenshot,
-    style: 'nextjs-portal { visibility: hidden !important; }',
-  });
-  await testInfo.attach('hero-cursor-pulses', { path: screenshot, contentType: 'image/png' });
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await expect(field).toHaveAttribute('data-motion', 'reduced');
-  await expect
-    .poll(() =>
-      cursorPulses.evaluateAll(
-        (groups) => groups.flatMap((node) => node.getAnimations({ subtree: true })).length,
-      ),
-    )
-    .toBe(0);
-  await page.mouse.move(300, 250, { steps: 3 });
-  expect(
-    await cursorPulses.evaluateAll(
-      (groups) => groups.flatMap((node) => node.getAnimations({ subtree: true })).length,
-    ),
-  ).toBe(0);
+  await expect(field).toHaveAttribute('data-motion', 'static');
+  await page.mouse.move(260, 210, { steps: 5 });
+  expect(await field.evaluate((node) => node.getAnimations({ subtree: true }).length)).toBe(0);
+  await expect(field.locator('[data-cursor-pulse]')).toHaveCount(0);
 });
 
 for (const scenario of [
@@ -193,7 +112,7 @@ for (const scenario of [
     await expect(page.getByRole('link', { name: 'Continue with GitHub' })).toBeInViewport();
     await expect(page.locator('[data-visual="circuit-field"]')).toHaveAttribute(
       'data-motion',
-      'reduced',
+      'static',
     );
     await expect(page.locator('.identity-panel')).toHaveCSS('border-top-width', '1px');
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(scenario.width);
@@ -206,5 +125,121 @@ for (const scenario of [
       style: 'nextjs-portal { visibility: hidden !important; }',
     });
     await testInfo.attach('textured-login', { path: screenshot, contentType: 'image/png' });
+  });
+}
+
+test('code globe counter-scrolls and magnifies an illustrative review', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'no-preference', colorScheme: 'dark' });
+  await page.goto('/landing');
+  const globe = page.locator('[data-visual="inspection-mark"]');
+  await expect(globe).toHaveAttribute('data-running', 'true');
+  const canvas = globe.locator('[data-globe-canvas]');
+  const before = await canvas.evaluate((node) => (node as HTMLCanvasElement).toDataURL());
+  const offsets = await canvas.evaluate((node) => [
+    Number(node.getAttribute('data-offset-right')),
+    Number(node.getAttribute('data-offset-left')),
+  ]);
+  await expect
+    .poll(() =>
+      canvas.evaluate(
+        (node, baseline) =>
+          Number(node.getAttribute('data-offset-right')) > baseline[0] &&
+          Number(node.getAttribute('data-offset-left')) < baseline[1],
+        offsets,
+      ),
+    )
+    .toBe(true);
+  expect(await canvas.evaluate((node) => (node as HTMLCanvasElement).toDataURL())).not.toBe(before);
+  const magnifier = globe.getByRole('button', { name: 'Magnify an illustrative code review' });
+  const bounds = (await globe.locator('[data-globe-canvas]').boundingBox())!;
+  const viewport = globe.locator('[data-lens-viewport]');
+  await page.mouse.move(
+    bounds.x + (bounds.width * 155) / 440,
+    bounds.y + (bounds.height * 130) / 440,
+  );
+  await expect(globe).toHaveAttribute('data-inspecting', 'true');
+  await expect
+    .poll(async () => Number(await viewport.getAttribute('data-source-x')))
+    .toBeCloseTo(155, 0);
+  await page.mouse.move(
+    bounds.x + (bounds.width * 260) / 440,
+    bounds.y + (bounds.height * 230) / 440,
+  );
+  await expect
+    .poll(async () => Number(await viewport.getAttribute('data-source-x')))
+    .toBeCloseTo(260, 0);
+  await expect
+    .poll(async () => Number(await viewport.getAttribute('data-source-y')))
+    .toBeCloseTo(230, 0);
+  const ring = (await globe.locator('[data-lens-ring]').boundingBox())!;
+  expect(ring.x + ring.width / 2).toBeCloseTo(bounds.x + (bounds.width * 260) / 440, 0);
+  expect(ring.y + ring.height / 2).toBeCloseTo(bounds.y + (bounds.height * 230) / 440, 0);
+  await expect(globe).toHaveAttribute('data-review-phase', 'edited');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1440);
+  const image = testInfo.outputPath('code-globe-review.png');
+  await globe.screenshot({ path: image });
+  await testInfo.attach('code-globe-review', { path: image, contentType: 'image/png' });
+  await magnifier.click();
+  await expect(magnifier).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Escape');
+  await expect(globe).toHaveAttribute('data-inspecting', 'false');
+  await expect(magnifier).toHaveAttribute('aria-pressed', 'false');
+  await magnifier.focus();
+  await expect(globe).toHaveAttribute('data-inspecting', 'true');
+  await page.getByRole('heading', { name: 'The current boundary.' }).scrollIntoViewIfNeeded();
+  await expect(globe).toHaveAttribute('data-running', 'false');
+});
+
+test('reduced-motion code globe has a static magnified diff', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/landing');
+  const globe = page.locator('[data-visual="inspection-mark"]');
+  await expect(globe).toHaveAttribute('data-running', 'false');
+  await globe.getByRole('button', { name: 'Magnify an illustrative code review' }).focus();
+  await expect(globe).toHaveAttribute('data-review-phase', 'edited');
+  const viewport = globe.locator('[data-lens-viewport]');
+  await page.keyboard.press('ArrowLeft');
+  await expect
+    .poll(async () => Number(await viewport.getAttribute('data-source-x')))
+    .toBeCloseTo(266, 0);
+  const canvas = globe.locator('[data-globe-canvas]');
+  const image = await canvas.evaluate((node) => (node as HTMLCanvasElement).toDataURL());
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  expect(await canvas.evaluate((node) => (node as HTMLCanvasElement).toDataURL())).toBe(image);
+});
+
+for (const width of [1910, 1024]) {
+  test(`globe lens explores the rim without page overflow at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 989 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/landing');
+    const globe = page.locator('[data-visual="inspection-mark"]');
+    const bounds = (await globe.locator('[data-globe-canvas]').boundingBox())!;
+    const viewport = globe.locator('[data-lens-viewport]');
+    for (const [x, y] of [
+      [365, 205],
+      [45, 205],
+      [205, 45],
+      [205, 365],
+    ]) {
+      await page.mouse.move(
+        bounds.x + (bounds.width * x) / 440,
+        bounds.y + (bounds.height * y) / 440,
+      );
+      await expect
+        .poll(async () => Number(await viewport.getAttribute('data-source-x')))
+        .toBeCloseTo(x, 0);
+      await expect
+        .poll(async () => Number(await viewport.getAttribute('data-source-y')))
+        .toBeCloseTo(y, 0);
+      await expect(globe).toHaveAttribute('data-inspecting', 'true');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    }
   });
 }
