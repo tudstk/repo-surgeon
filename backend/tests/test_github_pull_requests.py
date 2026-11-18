@@ -135,3 +135,99 @@ async def test_pull_request_browser_reads_owned_snapshot_and_filters_unsafe_diff
                 .json()["detail"]
                 .startswith("GitHub could not find pull request #99")
             )
+
+
+@pytest.mark.anyio
+async def test_review_source_pins_head_filters_hidden_paths_and_rejects_a_changed_pr(
+    tmp_path: Path,
+) -> None:
+    from datetime import UTC, datetime
+
+    from repo_surgeon.application.review_context import build_review_context
+    from repo_surgeon.domain.repositories import Repository, RepositorySource
+    from repo_surgeon.infrastructure.github_import import GitHubImportError
+
+    changed = False
+    detail_reads = 0
+    head = "b" * 40
+    archived = []
+    pull = {
+        "number": 24,
+        "title": "Validate prices",
+        "body": "Reject invalid values",
+        "state": "open",
+        "updated_at": "2026-11-18T12:00:00Z",
+        "user": {"login": "ada"},
+        "base": {"ref": "main", "sha": "a" * 40},
+        "head": {"ref": "fix-validation", "sha": head},
+        "changed_files": 2,
+    }
+
+    def upstream(request: httpx.Request) -> httpx.Response:
+        nonlocal detail_reads
+        assert request.method == "GET"
+        assert "authorization" not in request.headers
+        path = request.url.path
+        if request.url.host == "codeload.github.com":
+            archived.append(path)
+            assert path.endswith(head)
+            return httpx.Response(
+                200, content=archive("repo/main.py", "def valid(n): return n > 0")
+            )
+        if path.endswith("/pulls/24/files"):
+            assert request.url.params["per_page"] == "10"
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "filename": "main.py",
+                        "status": "modified",
+                        "additions": 1,
+                        "deletions": 1,
+                        "patch": "@@ -1 +1 @@\n-old\n+new",
+                    },
+                    {
+                        "filename": ".env",
+                        "status": "modified",
+                        "additions": 1,
+                        "deletions": 1,
+                        "patch": "+SECRET",
+                    },
+                ],
+            )
+        if path.endswith("/pulls/24"):
+            detail_reads += 1
+            return httpx.Response(
+                200,
+                json={**pull, "head": {"ref": "fix-validation", "sha": "c" * 40}}
+                if changed and detail_reads % 2 == 0
+                else pull,
+            )
+        assert path == "/repos/owner/project"
+        return httpx.Response(
+            200,
+            json={"id": 42, "full_name": "owner/project", "private": False, "visibility": "public"},
+        )
+
+    repository = Repository(
+        uuid4(),
+        RepositorySource.GITHUB,
+        str(tmp_path / "storage" / "00000000-0000-0000-0000-000000000001" / "42" / ("a" * 40)),
+        datetime.now(UTC),
+        github_full_name="owner/project",
+        github_commit="a" * 40,
+    )
+    async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as client:
+        importer = GitHubImporter(tmp_path / "storage", client=client)
+        source = await importer.review_source(repository, 24, tmp_path / "head")
+        assert source.head_sha == head
+        assert source.description == "Reject invalid values"
+        assert source.omitted_files == 1
+        context = build_review_context(source)
+        assert "SECRET" not in context.text
+        assert context.limited
+        assert len(archived) == 1
+        changed = True
+        with pytest.raises(GitHubImportError, match="changed while loading"):
+            await importer.review_source(repository, 24, tmp_path / "second")
+        assert len(archived) == 1

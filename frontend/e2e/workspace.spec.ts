@@ -46,6 +46,9 @@ const repositorySummary = {
 };
 
 async function fixture(page: Page, state: 'saved' | 'empty' | 'failed' | 'ready' = 'saved') {
+  await page.route('**/api/v1/review-provider', (route) =>
+    route.fulfill({ json: { available: true, simulation: true, model: 'Simulation' } }),
+  );
   await page.route('**/api/v1/auth/session', (route) => route.fulfill({ json: account }));
   await page.route('**/api/v1/repositories', (route) =>
     route.fulfill({ json: state === 'empty' ? [] : [repository] }),
@@ -1614,7 +1617,7 @@ test('browses open and merged GitHub pull requests and both diff layouts', async
   await expect(
     panel.getByRole('heading', { name: /Validate the catalog price filter/ }),
   ).toBeFocused();
-  await expect(panel.getByRole('button', { name: 'Code Review this PR' })).toBeDisabled();
+  await expect(panel.getByRole('button', { name: 'Code Review this PR' })).toBeEnabled();
   const totals = panel.getByRole('group', { name: 'Pull request totals' });
   await expect(totals).toContainText('2 files changed');
   const title = panel.getByRole('heading', { name: /Validate the catalog price filter/ });
@@ -1680,3 +1683,78 @@ test('shows readable pull request diffs in the mobile repository tools drawer', 
   await expect(drawer.getByRole('region', { name: 'Side-by-side diff' })).toBeVisible();
   expect(await drawer.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
 });
+
+for (const width of [1920, 1440, 390]) {
+  test(`streams a clearly labelled PR review into chat at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+    await pullRequestFixture(page);
+    const review = {
+      number: 24,
+      title: 'Validate the catalog price filter',
+      repository: repository.name,
+      head_sha: 'b'.repeat(40),
+      simulation: true,
+      model: 'Simulation',
+    };
+    const answer =
+      '## Simulation\n\nNo model has evaluated this pull request.\n\n### Example suggestion format\n\n```javascript\nconst price = Number(input);\n```\n\nTests were not executed.';
+    let requested = false;
+    await page.route('**/api/v1/sessions/session-1/pull-request-reviews', async (route) => {
+      expect(route.request().headers()['x-csrf-token']).toBe('fixture-csrf');
+      expect(route.request().postDataJSON()).toEqual({
+        number: 24,
+        request_id: expect.any(String),
+      });
+      expect(requested).toBe(false);
+      requested = true;
+      await route.continue();
+    });
+    await page.route('**/api/v1/sessions/session-1', (route) =>
+      route.fulfill({
+        json: {
+          ...session,
+          turns: requested ? [{ ...turn, question: 'Code Review this PR', answer, review }] : [],
+        },
+      }),
+    );
+    await page.route('**/api/v1/agent-runs/run-1/events', (route) =>
+      route.fulfill({
+        contentType: 'text/event-stream',
+        body: `data: ${JSON.stringify({ event_id: 'map', run_id: 'run-1', sequence: 1, type: 'tool.completed', occurred_at: session.updated_at, data: { tool: 'repository_map' } })}\n\n`,
+      }),
+    );
+    await page.goto('/');
+    if (width < 1101)
+      await page.getByRole('button', { name: 'Repository tools', exact: true }).click();
+    await page.getByRole('tab', { name: 'Pull Request', exact: true }).click();
+    await page.getByRole('button', { name: /Validate the catalog price filter/ }).click();
+    await page.getByRole('button', { name: 'Code Review this PR' }).click();
+    const chat = page.getByRole('region', { name: 'Latest exchange' });
+    await expect(chat.getByText('Code Review this PR', { exact: true })).toBeVisible();
+    await expect(chat.locator('.review-processing')).toContainText(/review/);
+    await expect(chat.getByRole('button', { name: 'Stop review' })).toBeVisible();
+    await expect(chat.getByRole('heading', { name: 'Simulation', exact: true })).toBeVisible();
+    await expect(chat.getByRole('button', { name: 'Stop review' })).toBeVisible();
+    await expect(chat.getByText('Run outcome: completed')).toBeVisible();
+    const [bodyBounds, replyBounds] = await Promise.all([
+      chat.locator('.conversation-body').boundingBox(),
+      chat.locator('.review-context-note').boundingBox(),
+    ]);
+    expect(replyBounds).not.toBeNull();
+    expect(replyBounds!.x - bodyBounds!.x).toBeLessThanOrEqual(72);
+    await expect(chat.locator('.agent-avatar .icon')).toBeVisible();
+    await expect(chat.getByRole('button', { name: 'Stop review' })).toHaveCount(0);
+    await expect(chat.getByText('No model has evaluated this pull request.')).toBeVisible();
+    await expect(chat.getByRole('button', { name: 'Copy code' })).toBeVisible();
+    await capture(page, testInfo, `pr-review-simulation-${width}`);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await page.reload();
+    await expect(chat.getByRole('heading', { name: 'Simulation', exact: true })).toBeVisible();
+    await expect(chat.getByText(/PR revision/)).toContainText('bbbbbbb');
+  });
+}

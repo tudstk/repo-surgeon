@@ -52,6 +52,8 @@ describe('authenticated workspace', () => {
       if (typeof input === 'string' && input.includes('/tree?')) {
         return Promise.resolve(json({ entries: [], next_offset: null, scan_limit_reached: false }));
       }
+      if (input === '/api/v1/review-provider')
+        return Promise.resolve(json({ available: true, simulation: true, model: 'Simulation' }));
       throw new Error(`Unexpected request: ${input}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -100,6 +102,8 @@ describe('authenticated workspace', () => {
       if (typeof input === 'string' && input.includes('/tree?')) {
         return Promise.resolve(json({ entries: [], next_offset: null, scan_limit_reached: false }));
       }
+      if (input === '/api/v1/review-provider')
+        return Promise.resolve(json({ available: true, simulation: true, model: 'Simulation' }));
       throw new Error(`Unexpected request: ${input}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -149,6 +153,8 @@ describe('authenticated workspace', () => {
       if (typeof input === 'string' && input.includes('/tree?')) {
         return Promise.resolve(json({ entries: [], next_offset: null, scan_limit_reached: false }));
       }
+      if (input === '/api/v1/review-provider')
+        return Promise.resolve(json({ available: true, simulation: true, model: 'Simulation' }));
       throw new Error(`Unexpected request: ${input}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -195,6 +201,8 @@ describe('authenticated workspace', () => {
       if (typeof input === 'string' && input.includes('/tree?')) {
         return Promise.resolve(json({ entries: [], next_offset: null, scan_limit_reached: false }));
       }
+      if (input === '/api/v1/review-provider')
+        return Promise.resolve(json({ available: true, simulation: true, model: 'Simulation' }));
       throw new Error(`Unexpected request: ${input}`);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -288,6 +296,8 @@ describe('authenticated workspace', () => {
       if (typeof input === 'string' && input.includes('/tree?')) {
         return Promise.resolve(json({ entries: [], next_offset: null, scan_limit_reached: false }));
       }
+      if (input === '/api/v1/review-provider')
+        return Promise.resolve(json({ available: true, simulation: true, model: 'Simulation' }));
       throw new Error(`Unexpected request: ${input}`);
     });
     vi.stubGlobal('fetch', fetchMock);

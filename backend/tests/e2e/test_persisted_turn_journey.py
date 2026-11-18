@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -488,3 +488,176 @@ async def test_session_names_rename_and_removal_persist(
         retained = await database.get(ConversationSessionRecord, UUID(first.json()["id"]))
         assert retained is not None and retained.status == "archived"
         assert await database.get(AgentRunRecord, UUID(completed.json()["run_id"])) is not None
+
+
+@pytest.mark.anyio
+async def test_pr_review_stream_is_pinned_persisted_retry_safe_and_owner_scoped(
+    authenticated_app: AuthenticatedApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from repo_surgeon.application.repositories import ResolvedLocalRepositoryRoot
+    from repo_surgeon.application.review_models import PullReviewSource
+    from repo_surgeon.infrastructure.github_pull_requests import GitHubPullRequestFile
+
+    fixture = authenticated_app
+    fixture.app.state.settings = fixture.app.state.settings.model_copy(
+        update={"review_mode": "simulation"}
+    )
+    async with fixture.app.state.session_factory() as database:
+        record = await database.get(RepositoryRecord, fixture.repository_id)
+        assert record is not None
+        record.github_full_name = "sample/project"
+        record.github_commit = "a" * 40
+        await database.commit()
+    root = fixture.repository_root
+    (root / "src/main.py").write_text("def validate(value):\n    return value > 0\n")
+    before = _repository_snapshot(root)
+    calls = []
+
+    async def review_source(repository: Any, number: int, destination: Path) -> PullReviewSource:
+        calls.append((repository.id, number))
+        destination.mkdir()
+        (destination / "main.py").write_text("def validate(value):\n    return value > 1\n")
+        info = destination.stat()
+        return PullReviewSource(
+            number,
+            "Validate values",
+            "Reject invalid values",
+            "a" * 40,
+            "b" * 40,
+            (
+                GitHubPullRequestFile(
+                    "main.py",
+                    None,
+                    "modified",
+                    1,
+                    1,
+                    "@@ -1,2 +1,2 @@\n def validate(value):\n"
+                    "-    return value > 0\n+    return value > 1",
+                    "available",
+                ),
+            ),
+            0,
+            ResolvedLocalRepositoryRoot(str(destination), info.st_dev, info.st_ino),
+        )
+
+    monkeypatch.setattr(fixture.app.state.github_importer, "review_source", review_source)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=fixture.app), base_url="https://surgeon.example"
+    ) as client:
+        headers = _auth_headers(fixture, csrf=True)
+        session = await client.post(
+            "/api/v1/sessions",
+            headers=headers,
+            json={"repository_id": str(fixture.repository_id), "title": "Review test"},
+        )
+        session_id = session.json()["id"]
+        url = f"/api/v1/sessions/{session_id}/pull-request-reviews"
+        request = {"number": 24, "request_id": str(uuid4())}
+        missing_csrf = await client.post(url, headers=_auth_headers(fixture), json=request)
+        assert missing_csrf.status_code == 403
+        missing_owner = await client.post(
+            f"/api/v1/sessions/{uuid4()}/pull-request-reviews", headers=headers, json=request
+        )
+        assert missing_owner.status_code == 404
+        provider = await client.get("/api/v1/review-provider", headers=headers)
+        assert provider.json()["simulation"] is True
+        assert provider.headers["cache-control"] == "no-store"
+        response = await client.post(url, headers=headers, json=request)
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store, no-transform"
+        assert "event: delta" in response.text
+        frames = _sse_events(response)
+        result = frames[-1]
+        assert result["question"] == "Code Review this PR"
+        assert result["status"] == "completed"
+        assert "No model has evaluated" in str(result["answer"])
+        review = cast(dict[str, Any], result["review"])
+        assert review["head_sha"] == "b" * 40
+        assert review["title"] == "Validate values"
+        assert review["simulation"] is True
+        run_id = UUID(str(result["run_id"]))
+        replay = await client.post(url, headers=headers, json=request)
+        assert "event: completed" in replay.text
+        assert "event: delta" not in replay.text
+        assert len(calls) == 1
+        conflict = await client.post(url, headers=headers, json={**request, "number": 25})
+        assert conflict.status_code == 409
+        detail = await client.get(f"/api/v1/sessions/{session_id}", headers=headers)
+        assert detail.json()["turns"] == [result]
+        events = await client.get(f"/api/v1/agent-runs/{run_id}/events", headers=headers)
+        assert "repository_map" in events.text
+        assert "run.completed" in events.text
+        async with fixture.app.state.session_factory() as database:
+            saved = await database.get(AgentRunRecord, run_id)
+            assert saved is not None and saved.model_calls == 0
+            assert saved.review_context is not None
+            assert saved.review_context["excerpt_count"] == 1
+        fixture.app.state.settings = fixture.app.state.settings.model_copy(
+            update={"review_mode": "openrouter"}
+        )
+        unavailable = await client.post(
+            url, headers=headers, json={**request, "request_id": str(uuid4())}
+        )
+        assert unavailable.status_code == 503
+    assert _repository_snapshot(root) == before
+
+
+@pytest.mark.anyio
+async def test_failed_review_keeps_partial_answer_and_redacts_split_secrets(
+    authenticated_app: AuthenticatedApp, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from repo_surgeon.application.repositories import ResolvedLocalRepositoryRoot
+    from repo_surgeon.application.review_models import PullReviewSource
+    from repo_surgeon.infrastructure.openrouter_review import ReviewProviderError
+
+    fixture = authenticated_app
+    fixture.app.state.settings = fixture.app.state.settings.model_copy(
+        update={"review_mode": "simulation"}
+    )
+    async with fixture.app.state.session_factory() as database:
+        record = await database.get(RepositoryRecord, fixture.repository_id)
+        assert record is not None
+        record.github_full_name, record.github_commit = "sample/project", "a" * 40
+        await database.commit()
+
+    async def review_source(repository: Any, number: int, destination: Path) -> PullReviewSource:
+        destination.mkdir()
+        info = destination.stat()
+        return PullReviewSource(
+            number,
+            "Review",
+            "",
+            "a" * 40,
+            "b" * 40,
+            (),
+            0,
+            ResolvedLocalRepositoryRoot(str(destination), info.st_dev, info.st_ino),
+        )
+
+    class Failure:
+        async def stream(self, context: Any) -> AsyncIterator[str]:
+            yield "## Partial answer\npassword=hunt"
+            yield "er2\n"
+            raise ReviewProviderError("The model provider disconnected.")
+
+    monkeypatch.setattr(fixture.app.state.github_importer, "review_source", review_source)
+    fixture.app.state.review_provider_factory = Failure
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=fixture.app), base_url="https://surgeon.example"
+    ) as client:
+        headers = _auth_headers(fixture, csrf=True)
+        created = await client.post(
+            "/api/v1/sessions", headers=headers, json={"repository_id": str(fixture.repository_id)}
+        )
+        url = f"/api/v1/sessions/{created.json()['id']}"
+        response = await client.post(
+            url + "/pull-request-reviews",
+            headers=headers,
+            json={"number": 24, "request_id": str(uuid4())},
+        )
+        assert "hunter2" not in response.text
+        assert "event: failed" in response.text
+        persisted = (await client.get(url, headers=headers)).json()["turns"][0]
+        assert persisted["status"] == "failed"
+        assert persisted["answer"] == "## Partial answer\npassword=[REDACTED]\n"
+        assert persisted["review"]["error"] == "The model provider disconnected."

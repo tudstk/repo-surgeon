@@ -34,6 +34,7 @@ export type PersistedTurn = {
   answer: string;
   started_at: string;
   completed_at: string | null;
+  review?: import('./review-api').ReviewMetadata;
 };
 
 export type ProductSessionDetail = ProductSession & {

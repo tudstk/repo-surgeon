@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     github_oauth_callback_url: str | None = None
     github_app: GitHubAppSettings | None = None
     auth_encryption_key: str | None = None
+
+    openrouter_api_key: SecretStr | None = None
+    openrouter_model: str = Field(default="deepseek/deepseek-v3.2", min_length=3, max_length=128)
+    review_mode: Literal["openrouter", "simulation"] = "openrouter"
+    review_max_output_tokens: int = Field(default=4_000, ge=512, le=8_000)
+    review_timeout_seconds: int = Field(default=180, ge=30, le=300)
 
     session_idle_ttl_seconds: int = Field(default=43_200, ge=60, le=604_800)
     session_absolute_ttl_seconds: int = Field(default=604_800, ge=300, le=2_592_000)

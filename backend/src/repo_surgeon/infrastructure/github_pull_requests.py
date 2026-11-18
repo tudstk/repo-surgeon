@@ -9,6 +9,7 @@ from repo_surgeon.application.repository_files import (
     RepositoryFileError,
     ensure_visible_repository_path,
 )
+from repo_surgeon.domain.pull_requests import GitHubPullRequestFile as GitHubPullRequestFile
 
 PULL_REQUEST_PAGE_SIZE = 20
 PULL_REQUEST_FILE_PAGE_SIZE = 5
@@ -41,17 +42,6 @@ class GitHubPullRequest:
 class GitHubPullRequestPage:
     pulls: list[GitHubPullRequest]
     next_page: int | None
-
-
-@dataclass(frozen=True, slots=True)
-class GitHubPullRequestFile:
-    path: str
-    previous_path: str | None
-    status: str
-    additions: int
-    deletions: int
-    patch: str | None
-    patch_status: Literal["available", "unavailable", "limited", "restricted"]
 
 
 @dataclass(frozen=True, slots=True)

@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     String,
     Text,
     UniqueConstraint,
@@ -56,6 +57,10 @@ class AgentRunRecord(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False)
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    review_context: Mapped[dict[str, object] | None] = mapped_column(
+        JSON(none_as_null=True), nullable=True
+    )
+    review_request_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     stop_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     model_calls: Mapped[int] = mapped_column(nullable=False, default=0)
     tool_calls: Mapped[int] = mapped_column(nullable=False, default=0)
@@ -69,6 +74,9 @@ class AgentRunRecord(Base):
             name="ck_agent_runs_status",
         ),
         UniqueConstraint("id", "owner_user_id", name="uq_agent_runs_id_owner"),
+        Index(
+            "uq_agent_runs_owner_review_request", "owner_user_id", "review_request_id", unique=True
+        ),
     )
 
 

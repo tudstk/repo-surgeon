@@ -232,3 +232,7 @@ New session names use the repository name without its GitHub owner. Repeated nam
 The workspace opens the **Code** tab by default. Expand folders in **Files** and select a file to see its repository-relative path, line numbers, and syntax highlighting for supported languages. At the end of the loaded lines, use **View more** to append the next batch and **Activity** for saved run events. Drag the desktop divider to resize the pane between 20% and 50% of the viewport. On phones, open **Code & activity** and use **Files** to return to the tree.
 
 Folder listings are fetched on demand in pages of 100, with a scan cap of 10,000 entries per directory. Previews support UTF-8 and BOM-marked UTF-16/32 text up to 64 KiB, 500 lines at a time. Protected paths, binary files, and oversized files are excluded from previews.
+
+## Pull request code reviews
+
+The Pull Request tab sends **Code Review this PR** into the session, streams Markdown with copyable code blocks, and saves the PR revision with its answer. Set `REPO_SURGEON_REVIEW_MODE=simulation` to exercise this without paid inference. OpenRouter reviews require a backend-only API key. Run the normal migrations first; `20261118_0007` adds nullable review metadata and a retry identity without altering repository ownership or existing turns. See [setup, MCP capabilities, context limits and pricing](docs/learning/pr-code-reviews.md).

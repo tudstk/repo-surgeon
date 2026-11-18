@@ -21,7 +21,7 @@ The current authenticated release offers read-only inspection demonstrations and
 
 GitHub sign-in identifies the user through their public profile; it does not import repositories.
 The workspace inspects repositories owned by the account. The Add repository dialog searches public GitHub repositories, shows owner/repository labels and avatars, and imports a pinned source snapshot for read-only inspection. Same-commit retries reuse the snapshot; a later upstream commit creates a separate snapshot. Private access, refresh and deletion controls are not implemented.
-The deterministic demo provider lists files and returns a fixed completion message, not tailored answers.
+The deterministic Inspect demo lists files and returns a fixed completion message. The separate Code Review this PR flow prepares pinned PR context with a local dependency map and streams an OpenRouter answer, or an explicitly labelled simulation when configured. Code reviews never execute tests, modify files or post to GitHub.
 Sessions, turns and normalized events are saved; repository files are not modified and no Git commit is created.
 Only the latest exchange is displayed when restoring a session.
 The GitHub avatar menu links to Profile and Settings. Personalization controls the theme and accent color for the current browser. The inspection provider is fixed.

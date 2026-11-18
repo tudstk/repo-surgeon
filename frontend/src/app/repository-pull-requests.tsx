@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '@/components/ui/icons';
 import {
   getPullRequestChanges,
@@ -236,6 +236,8 @@ function PullDetails({
   layout,
   onLayout,
   onBack,
+  onReview,
+  reviewPending,
 }: {
   repositoryId: string;
   selection: GitHubPullRequest;
@@ -243,9 +245,10 @@ function PullDetails({
   layout: DiffLayout;
   onLayout: (layout: DiffLayout) => void;
   onBack: () => void;
+  onReview: (pull: GitHubPullRequest) => void;
+  reviewPending: boolean;
 }) {
   const [page, setPage] = useState(1);
-  const reviewNote = useId();
   const heading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -296,10 +299,14 @@ function PullDetails({
           </span>
         </div>
         <div className={styles.review}>
-          <button type="button" className="secondary-button" disabled aria-describedby={reviewNote}>
+          <button
+            type="button"
+            className="primary-button"
+            disabled={reviewPending}
+            onClick={() => onReview(selection)}
+          >
             <Icon name="check" /> Code Review this PR
           </button>
-          <span id={reviewNote}>Code review is coming in a later release.</span>
         </div>
       </header>
       {!result ? (
@@ -326,9 +333,13 @@ function PullDetails({
 export function RepositoryPullRequests({
   repositoryId,
   active,
+  onReview,
+  reviewPending,
 }: {
   repositoryId?: string;
   active: boolean;
+  onReview: (pull: GitHubPullRequest) => void;
+  reviewPending: boolean;
 }) {
   const [category, setCategory] = useState<PullRequestState>('open');
   const [listPage, setListPage] = useState(1);
@@ -389,6 +400,8 @@ export function RepositoryPullRequests({
           layout={layout}
           onLayout={setLayout}
           onBack={() => setSelection(undefined)}
+          onReview={onReview}
+          reviewPending={reviewPending}
         />
       ) : null}
     </>

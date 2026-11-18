@@ -784,8 +784,7 @@ code {
   margin-bottom: 24px;
 }
 .exchange {
-  max-width: 70ch;
-  margin: auto;
+  width: 100%;
 }
 .message-meta {
   display: flex;
@@ -796,19 +795,48 @@ code {
   font-size: 12px;
   margin-bottom: 10px;
 }
+.exchange > .message-meta:first-child {
+  justify-content: flex-end;
+}
 .user-message {
+  width: fit-content;
+  max-width: min(85%, 70ch);
+  margin-inline-start: auto;
   padding: 16px;
   border-radius: var(--radius);
   background: var(--raised);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-.agent-meta {
+.assistant-message {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
   margin-top: 32px;
-  color: var(--text);
 }
-.agent-meta > .icon {
+.agent-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--selected);
   color: var(--accent);
+}
+.agent-avatar > .icon {
+  width: 17px;
+  height: 17px;
+}
+.assistant-content {
+  min-width: 0;
+  max-width: 70ch;
+}
+.agent-meta {
+  min-height: 32px;
+  flex-wrap: wrap;
+  color: var(--text);
 }
 .agent-message {
   white-space: pre-wrap;
@@ -2261,5 +2289,70 @@ code {
   }
   .source-back {
     display: inline-flex;
+  }
+}
+
+.review-context-note {
+  display: grid;
+  gap: 4px;
+  margin-block: 0 16px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.review-context-note strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.review-processing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-block: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.review-processing button {
+  margin-inline-start: auto;
+  min-height: 32px;
+  padding: 4px 8px;
+  color: var(--accent);
+}
+.review-processing-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+.review-processing-dots i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: review-processing 1100ms ease-in-out infinite;
+}
+.review-processing-dots i:nth-child(2) {
+  animation-delay: 150ms;
+}
+.review-processing-dots i:nth-child(3) {
+  animation-delay: 300ms;
+}
+.review-error {
+  margin-block: 12px;
+  color: var(--danger);
+}
+@keyframes review-processing {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .review-processing-dots i {
+    animation: none;
   }
 }

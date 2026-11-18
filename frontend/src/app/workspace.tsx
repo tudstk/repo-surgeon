@@ -8,6 +8,8 @@ import { RowActions } from '@/components/ui/row-actions';
 import { SessionActionDialog } from '@/components/ui/session-action-dialog';
 import { RepositoryRemovalDialog } from '@/components/ui/repository-removal-dialog';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { ReviewAnswer } from './review-answer';
+import { streamPullReview, getReviewProvider } from '@/lib/review-api';
 import { RepositoryCode } from './repository-code';
 import { RepositoryPullRequests } from './repository-pull-requests';
 import { RepositoryRevisions, type RepositoryRevision } from './repository-revisions';
@@ -28,6 +30,8 @@ import {
   listOwnedRepositories,
   listProductSessions,
   type OwnedRepository,
+  type GitHubPullRequest,
+  type PersistedTurn,
   type ProductSession,
   type ProductSessionDetail,
   type RepositorySummary,
@@ -100,7 +104,25 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [message, setMessage] = useState('What does this repository contain?');
   const [loading, setLoading] = useState(true);
-  const [pendingAction, setPendingAction] = useState<'session' | 'turn' | null>(null);
+  const [pendingAction, setPendingAction] = useState<'session' | 'turn' | 'review' | null>(null);
+  const reviewRequest = useRef<AbortController | null>(null);
+  const [reviewTurn, setReviewTurn] = useState<PersistedTurn | null>(null);
+  const [reviewProgress, setReviewProgress] = useState('Preparing review…');
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewProvider, setReviewProvider] = useState<{
+    available: boolean;
+    simulation: boolean;
+    model: string;
+  }>();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void getReviewProvider(controller.signal).then(setReviewProvider, () => undefined);
+    return () => {
+      controller.abort();
+      reviewRequest.current?.abort();
+    };
+  }, []);
   const submitting = pendingAction !== null;
   const creatingSession = pendingAction === 'session';
   const [error, setError] = useState<string | null>(null);
@@ -116,6 +138,9 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   const clearPrivateWorkspace = useCallback(() => {
     workspaceRequestGeneration.current += 1;
     selectedRepositoryIdRef.current = null;
+    reviewRequest.current?.abort();
+    setReviewTurn(null);
+    setReviewError(null);
     setRepositories([]);
     setHistorySelection(null);
     setSelectedRepositoryId(null);
@@ -159,6 +184,8 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   );
 
   function openSnapshot(repository: OwnedRepository) {
+    setReviewTurn(null);
+    setReviewError(null);
     workspaceRequestGeneration.current += 1;
     selectedRepositoryIdRef.current = repository.id;
     setRepositories((current) => [
@@ -176,7 +203,8 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     setAttempt((current) => current + 1);
   }
 
-  const latestTurn = session?.turns.at(-1) ?? null;
+  const latestTurn = reviewTurn ?? session?.turns.at(-1) ?? null;
+  const reviewing = pendingAction === 'review';
 
   const restoreSession = useCallback(
     async (
@@ -320,6 +348,8 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   const handleStartSession = async () => {
     setSessionsExpanded(true);
     if (!selectedRepository || !summary || submitting) return;
+    setReviewTurn(null);
+    setReviewError(null);
     const generation = workspaceRequestGeneration.current;
     setPendingAction('session');
     setError(null);
@@ -343,6 +373,8 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setReviewTurn(null);
+    setReviewError(null);
     const trimmed = message.trim();
     if (!session || submitting || trimmed.length < 3) return;
     const generation = workspaceRequestGeneration.current;
@@ -365,6 +397,107 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
       }
     } finally {
       setPendingAction(null);
+    }
+  };
+
+  const handleReview = async (pull: GitHubPullRequest) => {
+    if (!selectedRepository || submitting || reviewRequest.current) return;
+    const controller = new AbortController();
+    reviewRequest.current = controller;
+    const generation = workspaceRequestGeneration.current;
+    setPendingAction('review');
+    setReviewError(null);
+    setReviewProgress('Preparing the pull request review…');
+    setError(null);
+    setEvents([]);
+    setReviewTurn({
+      run_id: '',
+      status: 'running',
+      question: 'Code Review this PR',
+      answer: '',
+      started_at: new Date().toISOString(),
+      completed_at: null,
+      review: {
+        number: pull.number,
+        repository: selectedRepository.name,
+        title: pull.title,
+        model: reviewProvider?.model || 'Review',
+        simulation: reviewProvider?.simulation ?? false,
+      },
+    });
+    closeDrawer();
+    try {
+      let targetSession = session;
+      if (!targetSession) {
+        const created = await createProductSession(selectedRepository.id, csrfToken);
+        if (generation !== workspaceRequestGeneration.current || controller.signal.aborted) return;
+        targetSession = { ...created, turns: [] };
+        setSessions((current) => [created, ...current]);
+        setSession(targetSession);
+      }
+      await streamPullReview(
+        targetSession.id,
+        pull.number,
+        crypto.randomUUID(),
+        csrfToken,
+        controller.signal,
+        (item) => {
+          if (generation !== workspaceRequestGeneration.current || controller.signal.aborted)
+            return;
+          if (item.type === 'started' || item.type === 'completed') setReviewTurn(item.turn);
+          else if (item.type === 'delta')
+            setReviewTurn((current) =>
+              current
+                ? {
+                    ...current,
+                    answer: current.answer + item.text,
+                  }
+                : current,
+            );
+          else if (item.type === 'progress') setReviewProgress(item.message);
+          else if (item.type === 'context')
+            setReviewTurn((current) =>
+              current
+                ? {
+                    ...current,
+                    review: item.context,
+                  }
+                : current,
+            );
+        },
+      );
+      if (generation !== workspaceRequestGeneration.current) return;
+      const detail = await getProductSession(targetSession.id);
+      if (generation !== workspaceRequestGeneration.current) return;
+      setSession(detail);
+      const latest = detail.turns.at(-1);
+      if (latest) {
+        const savedEvents = await getPersistedRunEvents(latest.run_id);
+        if (generation === workspaceRequestGeneration.current) setEvents(savedEvents);
+      }
+    } catch (cause) {
+      if (generation !== workspaceRequestGeneration.current) return;
+      const detail = controller.signal.aborted
+        ? 'Review stopped. Any partial answer remains in this session.'
+        : cause instanceof WorkspaceRequestError && cause.detail
+          ? cause.detail
+          : cause instanceof Error
+            ? cause.message
+            : 'The review could not be completed.';
+      setReviewError(detail);
+      setReviewTurn((current) =>
+        current
+          ? {
+              ...current,
+              status: 'failed',
+            }
+          : current,
+      );
+    } finally {
+      if (reviewRequest.current === controller) {
+        reviewRequest.current = null;
+        setPendingAction(null);
+      }
     }
   };
 
@@ -505,11 +638,14 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                   key={repository.id}
                 >
                   <button
+                    disabled={reviewing}
                     aria-pressed={repository.id === selectedRepositoryId}
                     className="selection-row"
                     onClick={() => {
                       if (repository.id === selectedRepositoryId) return;
                       workspaceRequestGeneration.current += 1;
+                      setReviewTurn(null);
+                      setReviewError(null);
                       selectedRepositoryIdRef.current = repository.id;
                       setSelectedRepositoryId(repository.id);
                       setSummary(null);
@@ -607,12 +743,15 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                 key={item.id}
               >
                 <button
+                  disabled={reviewing}
                   aria-pressed={item.id === session?.id}
                   className="selection-row"
                   title={sessionDisplayName(item.title)}
                   onClick={() => {
                     const generation = workspaceRequestGeneration.current + 1;
                     setSession(null);
+                    setReviewTurn(null);
+                    setReviewError(null);
                     setEvents([]);
                     void restoreSession(item.id).catch(() => {
                       if (generation === workspaceRequestGeneration.current) {
@@ -809,6 +948,8 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           key={selectedRepository?.id}
           repositoryId={selectedRepository?.github_commit ? selectedRepository.id : undefined}
           active={workTab === 'pull-request'}
+          onReview={(pull) => void handleReview(pull)}
+          reviewPending={submitting}
         />
       </div>
       <div
@@ -866,15 +1007,17 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
           <div className="panel-heading">
             <h1 id="conversation-title">Latest exchange</h1>
             <span className={`exchange-state ${submitting ? 'warning' : ''}`} role="status">
-              {creatingSession
-                ? 'Starting session…'
-                : submitting
-                  ? 'Inspecting…'
-                  : latestTurn
-                    ? 'Saved'
-                    : session
-                      ? 'Ready'
-                      : 'Read-only'}
+              {reviewing
+                ? 'Reviewing…'
+                : creatingSession
+                  ? 'Starting session…'
+                  : submitting
+                    ? 'Inspecting…'
+                    : latestTurn
+                      ? 'Saved'
+                      : session
+                        ? 'Ready'
+                        : 'Read-only'}
             </span>
           </div>
           <div className="conversation-body">
@@ -936,35 +1079,95 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
               <div className="exchange">
                 <div className="message-meta">You</div>
                 <div className="user-message">{latestTurn.question}</div>
-                <div className="message-meta agent-meta">
-                  <Icon name="activity" />
-                  Repo Surgeon<span className="status-badge">Demo</span>
-                </div>
-                <p className="agent-message">
-                  {latestTurn.answer || 'No answer was returned for this run.'}
-                </p>
-                <div className="activity-list" aria-label="Persisted agent activity">
-                  {events
-                    .filter((item) => item.type === 'tool.completed' || item.type === 'tool.failed')
-                    .map((item) => (
-                      <div className="activity-row" key={item.event_id}>
-                        <Icon name={item.type === 'tool.failed' ? 'error' : 'check'} />
-                        <code>{typeof item.data.tool === 'string' ? item.data.tool : 'tool'}</code>
-                        <span className={item.type === 'tool.failed' ? 'danger' : 'success'}>
-                          {item.type === 'tool.completed' ? 'Completed' : 'Failed'}
-                        </span>
+                <div className="assistant-message">
+                  <span className="agent-avatar" aria-hidden="true">
+                    <Icon name="activity" />
+                  </span>
+                  <div className="assistant-content">
+                    <div className="message-meta agent-meta">
+                      Repo Surgeon
+                      <span className="status-badge">
+                        {latestTurn.review
+                          ? latestTurn.review.simulation
+                            ? 'Simulation'
+                            : latestTurn.review.model
+                          : 'Demo'}
+                      </span>
+                    </div>
+                    {latestTurn.review ? (
+                      <div className="review-context-note">
+                        <strong>
+                          PR #{latestTurn.review.number} · {latestTurn.review.title}
+                        </strong>
+                        {latestTurn.review.head_sha ? (
+                          <span>
+                            PR revision <code>{latestTurn.review.head_sha.slice(0, 7)}</code>
+                          </span>
+                        ) : null}
+                        {latestTurn.review.limited ? (
+                          <span>Some context was omitted by review limits.</span>
+                        ) : null}
                       </div>
-                    ))}
+                    ) : null}
+                    {reviewing ? (
+                      <div className="review-processing" role="status">
+                        <span className="review-processing-dots" aria-hidden="true">
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                        <span>{reviewProgress}</span>
+                        <button type="button" onClick={() => reviewRequest.current?.abort()}>
+                          Stop review
+                        </button>
+                      </div>
+                    ) : null}
+                    {latestTurn.review ? (
+                      latestTurn.answer ? (
+                        <ReviewAnswer text={latestTurn.answer} />
+                      ) : null
+                    ) : (
+                      <p className="agent-message">
+                        {latestTurn.answer || 'No answer was returned for this run.'}
+                      </p>
+                    )}
+                    {reviewError || latestTurn.review?.error ? (
+                      <p className="review-error" role="alert">
+                        {reviewError || latestTurn.review?.error}
+                      </p>
+                    ) : null}
+                    <div className="activity-list" aria-label="Persisted agent activity">
+                      {events
+                        .filter(
+                          (item) => item.type === 'tool.completed' || item.type === 'tool.failed',
+                        )
+                        .map((item) => (
+                          <div className="activity-row" key={item.event_id}>
+                            <Icon name={item.type === 'tool.failed' ? 'error' : 'check'} />
+                            <code>
+                              {typeof item.data.tool === 'string' ? item.data.tool : 'tool'}
+                            </code>
+                            <span className={item.type === 'tool.failed' ? 'danger' : 'success'}>
+                              {item.type === 'tool.completed' ? 'Completed' : 'Failed'}
+                            </span>
+                          </div>
+                        ))}
+                    </div>
+                    {latestTurn.status !== 'running' && latestTurn.run_id ? (
+                      <p className="read-only-note">
+                        <Icon name="shield" />
+                        Saved to session history. Repository files are unchanged.
+                      </p>
+                    ) : null}
+                    <p
+                      className={
+                        latestTurn.status === 'failed' ? 'run-outcome danger' : 'run-outcome'
+                      }
+                    >
+                      Run outcome: {latestTurn.status}
+                    </p>
+                  </div>
                 </div>
-                <p className="read-only-note">
-                  <Icon name="shield" />
-                  Saved to session history. Repository files are unchanged.
-                </p>
-                <p
-                  className={latestTurn.status === 'failed' ? 'run-outcome danger' : 'run-outcome'}
-                >
-                  Run outcome: {latestTurn.status}
-                </p>
               </div>
             ) : session ? (
               <div className="workspace-empty">
@@ -981,8 +1184,8 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             <div className="demo-disclosure" id="demo-disclosure">
               <strong>Demo inspection</strong>
               <p>
-                The current provider lists files and returns a fixed completion message. It does not
-                generate tailored answers.
+                Demo inspections list files and return a fixed completion message. Use the Pull
+                Request tab to request a code review.
               </p>
             </div>
             <div className="composer-input">
