@@ -234,13 +234,33 @@ test('code globe counter-scrolls and magnifies an illustrative review', async ({
   expect(after[0]).toBeGreaterThan(values[0]);
   expect(after[1]).toBeLessThan(values[1]);
   const magnifier = globe.getByRole('button', { name: 'Magnify an illustrative code review' });
-  await magnifier.hover();
+  const bounds = (await globe.locator('svg').first().boundingBox())!;
+  const viewport = globe.locator('[data-lens-viewport]');
+  await page.mouse.move(
+    bounds.x + (bounds.width * 155) / 440,
+    bounds.y + (bounds.height * 130) / 440,
+  );
   await expect(globe).toHaveAttribute('data-inspecting', 'true');
   await expect
-    .poll(() =>
-      globe.locator('[data-review="inserted"]').evaluate((node) => getComputedStyle(node).opacity),
-    )
-    .toBe('1');
+    .poll(async () => Number(await viewport.getAttribute('data-source-x')))
+    .toBeCloseTo(155, 0);
+  await page.mouse.move(
+    bounds.x + (bounds.width * 260) / 440,
+    bounds.y + (bounds.height * 230) / 440,
+  );
+  await expect
+    .poll(async () => Number(await viewport.getAttribute('data-source-x')))
+    .toBeCloseTo(260, 0);
+  await expect
+    .poll(async () => Number(await viewport.getAttribute('data-source-y')))
+    .toBeCloseTo(230, 0);
+  const ring = (await globe.locator('[data-lens-ring]').boundingBox())!;
+  expect(ring.x + ring.width / 2).toBeCloseTo(bounds.x + (bounds.width * 260) / 440, 0);
+  expect(ring.y + ring.height / 2).toBeCloseTo(bounds.y + (bounds.height * 230) / 440, 0);
+  const original = await globe.locator('[data-selected="true"] text').textContent();
+  await expect(globe).toHaveAttribute('data-review-phase', 'edited');
+  expect(await globe.locator('[data-selected="true"] text').textContent()).not.toBe(original);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(1440);
   const image = testInfo.outputPath('code-globe-review.png');
   await globe.screenshot({ path: image });
   await testInfo.attach('code-globe-review', { path: image, contentType: 'image/png' });
@@ -262,8 +282,12 @@ test('reduced-motion code globe has a static magnified diff', async ({ page }) =
   const globe = page.locator('[data-visual="inspection-mark"]');
   await expect(globe).toHaveAttribute('data-running', 'false');
   await globe.getByRole('button', { name: 'Magnify an illustrative code review' }).focus();
-  await expect(globe.locator('[data-review="inserted"]')).toHaveCSS('opacity', '1');
-  await expect(globe.locator('[data-review="removed"]')).toHaveCSS('opacity', '0');
+  await expect(globe).toHaveAttribute('data-review-phase', 'edited');
+  const viewport = globe.locator('[data-lens-viewport]');
+  await page.keyboard.press('ArrowLeft');
+  await expect
+    .poll(async () => Number(await viewport.getAttribute('data-source-x')))
+    .toBeCloseTo(266, 0);
   expect(
     await globe
       .locator('svg')
@@ -276,3 +300,33 @@ test('reduced-motion code globe has a static magnified diff', async ({ page }) =
       }),
   ).toBe(0);
 });
+
+for (const width of [1910, 1024]) {
+  test(`globe lens explores the rim without page overflow at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 989 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/landing');
+    const globe = page.locator('[data-visual="inspection-mark"]');
+    const bounds = (await globe.locator('svg').first().boundingBox())!;
+    const viewport = globe.locator('[data-lens-viewport]');
+    for (const [x, y] of [
+      [365, 205],
+      [45, 205],
+      [205, 45],
+      [205, 365],
+    ]) {
+      await page.mouse.move(
+        bounds.x + (bounds.width * x) / 440,
+        bounds.y + (bounds.height * y) / 440,
+      );
+      await expect
+        .poll(async () => Number(await viewport.getAttribute('data-source-x')))
+        .toBeCloseTo(x, 0);
+      await expect
+        .poll(async () => Number(await viewport.getAttribute('data-source-y')))
+        .toBeCloseTo(y, 0);
+      await expect(globe).toHaveAttribute('data-inspecting', 'true');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+    }
+  });
+}
