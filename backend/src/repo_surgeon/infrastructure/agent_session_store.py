@@ -317,9 +317,13 @@ class SqlAlchemyAgentSessionStore:
                 )
             ).scalar_one_or_none()
             if existing is not None:
-                if existing.session_id != session_id or (existing.review_context or {}).get(
-                    "number"
-                ) != (review_context or {}).get("number"):
+                if (
+                    existing.session_id != session_id
+                    or (existing.review_context or {}).get("number")
+                    != (review_context or {}).get("number")
+                    or (existing.review_context or {}).get("requested_model")
+                    != (review_context or {}).get("requested_model")
+                ):
                     raise ValueError("This review request belongs to a different selection.")
                 if existing.status == "running":
                     if _aware(existing.started_at) < now - timedelta(minutes=6):

@@ -561,6 +561,15 @@ async def test_pr_review_stream_is_pinned_persisted_retry_safe_and_owner_scoped(
         assert missing_owner.status_code == 404
         provider = await client.get("/api/v1/review-provider", headers=headers)
         assert provider.json()["simulation"] is True
+        assert [m["id"] for m in provider.json()["models"]] == [
+            "deepseek/deepseek-v3.2",
+            "deepseek/deepseek-v4-flash",
+        ]
+        rejected = await client.post(
+            url, headers=headers, json={**request, "model": "unapproved/expensive"}
+        )
+        assert rejected.status_code == 422
+        assert calls == []
         assert provider.headers["cache-control"] == "no-store"
         response = await client.post(url, headers=headers, json=request)
         assert response.status_code == 200
@@ -580,6 +589,10 @@ async def test_pr_review_stream_is_pinned_persisted_retry_safe_and_owner_scoped(
         assert "event: completed" in replay.text
         assert "event: delta" not in replay.text
         assert len(calls) == 1
+        changed_model = await client.post(
+            url, headers=headers, json={**request, "model": "deepseek/deepseek-v4-flash"}
+        )
+        assert changed_model.status_code == 409
         conflict = await client.post(url, headers=headers, json={**request, "number": 25})
         assert conflict.status_code == 409
         detail = await client.get(f"/api/v1/sessions/{session_id}", headers=headers)

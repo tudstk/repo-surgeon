@@ -23,6 +23,10 @@ from repo_surgeon.api.problems import problem
 from repo_surgeon.application.agent_sessions import SessionBusyError
 from repo_surgeon.application.redaction import redact_text
 from repo_surgeon.application.repository_files import RepositoryFileError
+from repo_surgeon.application.review_catalog import (
+    REVIEW_MODELS,
+    review_model,
+)
 from repo_surgeon.application.review_context import build_review_context
 from repo_surgeon.infrastructure.agent_session_store import SqlAlchemyAgentSessionStore
 from repo_surgeon.infrastructure.github_import import GitHubImporter, GitHubImportError
@@ -40,6 +44,7 @@ router = APIRouter(prefix="/api/v1", tags=["pull request reviews"])
 class CreateReviewRequest(BaseModel):
     number: int = Field(ge=1, le=2**31 - 1)
     request_id: UUID
+    model: str | None = Field(default=None, max_length=128)
 
 
 def _frame(kind: str, payload: object) -> str:
@@ -85,6 +90,11 @@ async def review_provider(
         "available": simulation or settings.openrouter_api_key is not None,
         "simulation": simulation,
         "model": "Simulation" if simulation else settings.openrouter_model,
+        "default_model": settings.openrouter_model,
+        "models": [
+            {"id": model.id, "name": model.name, "description": model.description}
+            for model in REVIEW_MODELS
+        ],
     }
 
 
@@ -124,8 +134,19 @@ async def create_pull_request_review(
             status=503,
             detail="Configure the OpenRouter API key on the backend, or enable review simulation.",
         )
+    try:
+        selected = review_model(body.model or settings.openrouter_model)
+    except ValueError:
+        raise problem(
+            code="review_model_unavailable",
+            title="Model unavailable",
+            status=422,
+            detail="Choose one of the available review models.",
+        ) from None
+    settings = settings.model_copy(update={"openrouter_model": selected.id})
     metadata: dict[str, object] = {
         "number": body.number,
+        "requested_model": selected.id,
         "repository": repository.github_full_name,
         "simulation": simulation,
         "model": "Simulation" if simulation else settings.openrouter_model,

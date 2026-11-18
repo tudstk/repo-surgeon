@@ -1758,3 +1758,43 @@ for (const width of [1920, 1440, 390]) {
     await expect(chat.getByText(/PR revision/)).toContainText('bbbbbbb');
   });
 }
+
+test('chat model selector submits the selected budget model for PR review', async ({
+  page,
+}, testInfo) => {
+  await pullRequestFixture(page);
+  await page.route('**/api/v1/review-provider', (route) =>
+    route.fulfill({
+      json: {
+        available: true,
+        simulation: false,
+        model: 'deepseek/deepseek-v3.2',
+        default_model: 'deepseek/deepseek-v3.2',
+        models: [
+          { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', description: 'Default' },
+          { id: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash', description: 'Budget' },
+        ],
+      },
+    }),
+  );
+  let requestModel = '';
+  await page.route('**/api/v1/sessions/session-1/pull-request-reviews', (route) => {
+    requestModel = route.request().postDataJSON().model;
+    return route.fulfill({ status: 429, json: { detail: 'Test rate limit. No model call made.' } });
+  });
+  await page.goto('/');
+  const select = page.getByLabel('PR review model');
+  await expect(select).toHaveValue('deepseek/deepseek-v3.2');
+  await select.selectOption('deepseek/deepseek-v4-flash');
+  await capture(page, testInfo, 'model-selector-desktop');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(select).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await capture(page, testInfo, 'model-selector-mobile');
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('tab', { name: 'Pull Request', exact: true }).click();
+  await page.getByRole('button', { name: /Validate the catalog price filter/ }).click();
+  await page.getByRole('button', { name: 'Code Review this PR' }).click();
+  await expect(page.getByText('Test rate limit. No model call made.')).toBeVisible();
+  expect(requestModel).toBe('deepseek/deepseek-v4-flash');
+});

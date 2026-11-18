@@ -10,6 +10,8 @@ Context preparation uses confined file reads, deterministic dependency hints and
 
 One bounded completion request goes through the OpenRouter adapter. The API key remains backend-only. Untrusted titles, descriptions, patches and source stay in the data message behind the existing untrusted-data policy. Common credential patterns are redacted, while filenames still obey the established confinement rules. The adapter requests no-collection and zero-retention routing and never weakens those filters on failure. A dedicated operator-controlled key spending limit remains necessary because there is no monthly per-user billing quota in this slice.
 
+Model selection is a server-owned allowlist: DeepSeek V3.2 by default and DeepSeek V4 Flash as the budget choice. Browser input cannot choose an arbitrary model or change provider policy. Each request carries per-model routing price caps, and its selected model becomes part of the idempotency identity and persisted evidence. There is no automatic fallback to another model.
+
 Simulation is a deliberate configuration with explicit UI and answer disclaimers. It runs real context preparation without inference. It never silently stands in for a failed real review. Model quality is evaluated separately from no-network protocol tests.
 
 ## Streaming and persistence

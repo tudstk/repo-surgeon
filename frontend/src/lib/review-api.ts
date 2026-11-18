@@ -1,5 +1,14 @@
 import { WorkspaceRequestError, type PersistedTurn } from './workspace-api';
 
+export type ReviewModel = { id: string; name: string; description: string };
+export type ReviewProvider = {
+  available: boolean;
+  simulation: boolean;
+  model: string;
+  default_model?: string;
+  models?: ReviewModel[];
+};
+
 export type ReviewMetadata = {
   number: number;
   repository: string;
@@ -28,7 +37,7 @@ export async function getReviewProvider(signal: AbortSignal) {
     signal,
   }).then(async (response) => {
     if (!response.ok) throw new Error('Review provider unavailable');
-    return (await response.json()) as { available: boolean; simulation: boolean; model: string };
+    return (await response.json()) as ReviewProvider;
   });
 }
 
@@ -39,13 +48,14 @@ export async function streamPullReview(
   csrfToken: string,
   signal: AbortSignal,
   onEvent: (event: ReviewEvent) => void,
+  model?: string,
 ) {
   const response = await fetch(`/api/v1/sessions/${sessionId}/pull-request-reviews`, {
     method: 'POST',
     credentials: 'include',
     cache: 'no-store',
     headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-    body: JSON.stringify({ number, request_id: requestId }),
+    body: JSON.stringify({ number, request_id: requestId, ...(model ? { model } : {}) }),
     signal,
   });
   if (!response.ok) {

@@ -8,6 +8,7 @@ from typing import Protocol
 import httpx
 
 from repo_surgeon.agent.provider import UNTRUSTED_DATA_POLICY
+from repo_surgeon.application.review_catalog import review_model
 from repo_surgeon.application.review_context import ReviewContext
 from repo_surgeon.settings import Settings
 
@@ -60,6 +61,7 @@ class OpenRouterReview:
             )
         self.usage = {}
         self.limited = False
+        selected = review_model(self.settings.openrouter_model)
         request = {
             "model": self.settings.openrouter_model,
             "messages": [
@@ -70,7 +72,15 @@ class OpenRouterReview:
             "temperature": 0.2,
             "stream": True,
             "stream_options": {"include_usage": True},
-            "provider": {"data_collection": "deny", "zdr": True, "require_parameters": True},
+            "provider": {
+                "data_collection": "deny",
+                "zdr": True,
+                "require_parameters": True,
+                "max_price": {
+                    "prompt": selected.max_prompt_price,
+                    "completion": selected.max_completion_price,
+                },
+            },
         }
         try:
             async with self.client.stream(

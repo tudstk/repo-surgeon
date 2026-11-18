@@ -9,7 +9,7 @@ import { SessionActionDialog } from '@/components/ui/session-action-dialog';
 import { RepositoryRemovalDialog } from '@/components/ui/repository-removal-dialog';
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ReviewAnswer } from './review-answer';
-import { streamPullReview, getReviewProvider } from '@/lib/review-api';
+import { streamPullReview, getReviewProvider, type ReviewProvider } from '@/lib/review-api';
 import { RepositoryCode } from './repository-code';
 import { RepositoryPullRequests } from './repository-pull-requests';
 import { RepositoryRevisions, type RepositoryRevision } from './repository-revisions';
@@ -109,15 +109,18 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   const [reviewTurn, setReviewTurn] = useState<PersistedTurn | null>(null);
   const [reviewProgress, setReviewProgress] = useState('Preparing review…');
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const [reviewProvider, setReviewProvider] = useState<{
-    available: boolean;
-    simulation: boolean;
-    model: string;
-  }>();
+  const [reviewProvider, setReviewProvider] = useState<ReviewProvider>();
+  const [reviewModel, setReviewModel] = useState('deepseek/deepseek-v3.2');
 
   useEffect(() => {
     const controller = new AbortController();
-    void getReviewProvider(controller.signal).then(setReviewProvider, () => undefined);
+    void getReviewProvider(controller.signal).then(
+      (provider) => {
+        setReviewProvider(provider);
+        if (provider.default_model) setReviewModel(provider.default_model);
+      },
+      () => undefined,
+    );
     return () => {
       controller.abort();
       reviewRequest.current?.abort();
@@ -421,7 +424,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         number: pull.number,
         repository: selectedRepository.name,
         title: pull.title,
-        model: reviewProvider?.model || 'Review',
+        model: reviewProvider?.simulation ? 'Simulation' : reviewModel,
         simulation: reviewProvider?.simulation ?? false,
       },
     });
@@ -465,6 +468,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                 : current,
             );
         },
+        reviewProvider?.models?.length ? reviewModel : undefined,
       );
       if (generation !== workspaceRequestGeneration.current) return;
       const detail = await getProductSession(targetSession.id);
@@ -1181,6 +1185,24 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             ) : null}
           </div>
           <form className="composer" onSubmit={handleSubmit}>
+            {reviewProvider?.models?.length ? (
+              <div className="review-model-control">
+                <label htmlFor="review-model">PR review model</label>
+                <select
+                  id="review-model"
+                  value={reviewModel}
+                  disabled={submitting}
+                  onChange={(event) => setReviewModel(event.target.value)}
+                >
+                  {reviewProvider.models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name} · {model.description}
+                    </option>
+                  ))}
+                </select>
+                <span>{reviewProvider.simulation ? 'Simulation enabled' : 'Via OpenRouter'}</span>
+              </div>
+            ) : null}
             <div className="demo-disclosure" id="demo-disclosure">
               <strong>Demo inspection</strong>
               <p>
