@@ -233,7 +233,9 @@ test('an in-flight inspection disables duplicate submission and restores its sav
   await expect(page.getByRole('heading', { name: 'Session ready' })).toBeVisible();
   await page.getByRole('button', { name: 'Send instruction' }).click();
   await expect(page.getByRole('button', { name: 'Send instruction' })).toBeDisabled();
-  await expect(page.getByText('Running read-only inspection…')).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Latest exchange' }).getByRole('status'),
+  ).toHaveText('Inspecting…');
   await page.route('**/api/v1/sessions/session-1', (route) =>
     route.fulfill({ json: { ...session, turns: [turn] } }),
   );

@@ -1,6 +1,8 @@
 # Live PR reviews and model selection
 
-Validated 2026-11-18. The composer selects DeepSeek V3.2 (default) or DeepSeek V4 Flash (budget) for the next PR review. The server accepts only those IDs, applies separate routing price caps and preserves the selected model and returned usage in saved review metadata. The existing single-request, bounded-context and strict provider privacy policies remain in force. There is no automatic inference retry or model fallback.
+Validated 2026-11-18. The compact composer places a PR model selector immediately left of a circular upward-arrow send button. The visible demo disclosure is removed, with action scope retained in its accessible description and send tooltip. Responses center at up to 96ch, use lighter body text, stronger Markdown emphasis and prose numbers, and faint hairline separators.
+
+The composer selects DeepSeek V3.2 (default) or DeepSeek V4 Flash (budget) for the next PR review. The server accepts only those IDs, applies separate routing price caps and preserves the selected model and returned usage in saved review metadata. The existing single-request, bounded-context and strict provider privacy policies remain in force. There is no automatic inference retry or model fallback.
 
 ## Evidence
 
@@ -29,3 +31,5 @@ These are synthetic fixture accounts and repositories, captured by Playwright. T
 3. Open **Pull Request**, select a PR and click **Code Review this PR**. This action sends bounded PR context to OpenRouter and incurs usage.
 4. Confirm progress, streamed Markdown and code copying; reload the session to see the persisted answer and model. Stop review cancels an in-progress connection.
 5. Ordinary **Inspect** remains the deterministic file-listing demo. Use explicit simulation mode for free interface testing.
+
+![Centered response with lighter text and compact composer](response.png)

@@ -1185,38 +1185,13 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
             ) : null}
           </div>
           <form className="composer" onSubmit={handleSubmit}>
-            {reviewProvider?.models?.length ? (
-              <div className="review-model-control">
-                <label htmlFor="review-model">PR review model</label>
-                <select
-                  id="review-model"
-                  value={reviewModel}
-                  disabled={submitting}
-                  onChange={(event) => setReviewModel(event.target.value)}
-                >
-                  {reviewProvider.models.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.name} · {model.description}
-                    </option>
-                  ))}
-                </select>
-                <span>{reviewProvider.simulation ? 'Simulation enabled' : 'Via OpenRouter'}</span>
-              </div>
-            ) : null}
-            <div className="demo-disclosure" id="demo-disclosure">
-              <strong>Demo inspection</strong>
-              <p>
-                Demo inspections list files and return a fixed completion message. Use the Pull
-                Request tab to request a code review.
-              </p>
-            </div>
             <div className="composer-input">
               <label className="sr-only" htmlFor="instruction">
                 Agent instruction
               </label>
               <textarea
                 id="instruction"
-                aria-describedby="demo-disclosure"
+                aria-describedby="composer-scope"
                 disabled={!session || submitting}
                 onChange={(event) => setMessage(event.target.value)}
                 placeholder="Start a session to run an inspection…"
@@ -1224,21 +1199,36 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                 maxLength={8000}
               />
               <div className="composer-controls">
-                <span>
-                  {creatingSession
-                    ? 'Starting read-only session…'
-                    : submitting
-                      ? 'Running read-only inspection…'
-                      : 'Bounded, read-only access'}
+                <span className="sr-only" id="composer-scope">
+                  Send runs a demo inspection. Use the Pull Request tab for a model review.
                 </span>
+                {reviewProvider?.models?.length ? (
+                  <div className="review-model-control">
+                    <label className="sr-only" htmlFor="review-model">
+                      PR review model
+                    </label>
+                    <select
+                      id="review-model"
+                      value={reviewModel}
+                      disabled={submitting}
+                      onChange={(event) => setReviewModel(event.target.value)}
+                    >
+                      {reviewProvider.models.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name} · {model.description}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
                 <button
                   aria-label="Send instruction"
+                  title="Run demo inspection"
                   className="primary-button send"
                   disabled={!session || submitting || message.trim().length < 3}
                   type="submit"
                 >
-                  {creatingSession ? 'Starting…' : submitting ? 'Running…' : 'Inspect'}
-                  <Icon name="arrow" />
+                  <Icon name="send" />
                 </button>
               </div>
             </div>

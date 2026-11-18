@@ -47,6 +47,23 @@ function CodeBlock({ children }: { children?: ReactNode }) {
   );
 }
 
+// Emphasize prose quantities without rewriting links or syntax-highlighted code.
+function emphasizeNumbers(children: ReactNode) {
+  return Children.map(children, (child) =>
+    typeof child === 'string'
+      ? child.split(/(\b\d+(?:[.,]\d+)*%?)/g).map((part, index) =>
+          index % 2 ? (
+            <span className={styles.number} key={index}>
+              {part}
+            </span>
+          ) : (
+            part
+          ),
+        )
+      : child,
+  );
+}
+
 export function ReviewAnswer({ text }: { text: string }) {
   return (
     <div className={styles.answer}>
@@ -54,6 +71,8 @@ export function ReviewAnswer({ text }: { text: string }) {
         skipHtml
         components={{
           pre: CodeBlock,
+          p: ({ children }) => <p>{emphasizeNumbers(children)}</p>,
+          li: ({ children }) => <li>{emphasizeNumbers(children)}</li>,
           img: () => null,
           a: ({ href, children }) => (
             <a href={href} target="_blank" rel="noreferrer">
