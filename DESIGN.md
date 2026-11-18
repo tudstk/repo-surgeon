@@ -90,7 +90,7 @@ components:
 
 **Creative North Star: "Calm repository inspection"**
 
-DeepSource-informed neutral charcoal, quiet rules and restrained teal create a compact developer workspace for sustained inspection. System sans typography carries the interface; monospace is reserved for code, paths and event identifiers. The light palette follows the operating system.
+DeepSource-informed neutral charcoal, quiet rules and restrained teal create a compact developer workspace for sustained inspection. System sans typography carries the interface; monospace is reserved for code, paths and event identifiers. By default, the interface follows the operating system’s appearance.
 
 **Key Characteristics:**
 
@@ -100,10 +100,10 @@ DeepSource-informed neutral charcoal, quiet rules and restrained teal create a c
 
 ## Colors
 
-The frontmatter records the actual semantic tokens from `frontend/src/app/globals.css`; `light-` entries replace their dark counterparts under `prefers-color-scheme: light`.
-Teal identifies primary actions, focus and selected rows. Neutral canvas, panel and raised surfaces establish hierarchy. Muted text carries supporting explanations. Success, warning and danger retain distinct meanings and always accompany words or icons.
+The frontmatter records the actual semantic tokens from `frontend/src/app/globals.css`; `light-` entries replace their dark counterparts when the light theme is active.
+The chosen accent identifies primary actions, focus and selected rows. Green is the default. Neutral canvas, panel and raised surfaces establish hierarchy. Muted text carries supporting explanations. Success, warning and danger retain distinct meanings and always accompany words or icons.
 Control borders use their dedicated higher-contrast token; subtle dividers use the ordinary border token.
-The `/landing` variant stays on the dark canvas in every OS theme. It combines the existing green with a narrow coral type slice and a clean paper document outline; neutral white/muted copy provides the remaining hierarchy. The hero alone carries a low-opacity geometric circuit field; the rest of the landing page stays quiet. The sign-in screen reuses that field with a soft radial vignette and its existing OS-driven palette.
+The `/landing` variant stays on the dark canvas in every OS theme. It combines the existing green with a narrow coral type slice and a clean paper document outline; neutral white/muted copy provides the remaining hierarchy. The hero alone carries a low-opacity geometric circuit field; the rest of the landing page stays quiet. The sign-in screen reuses that field with a soft radial vignette and the current application palette.
 
 ## Typography
 
@@ -142,7 +142,7 @@ The landing headline keeps its narrow, static coral slice and original paper doc
 
 The repository discovery dialog opens from the workspace context bar on desktop and mobile. A blurred backdrop separates the workspace from the opaque dialog. Initial focus goes to the search field and Escape returns it to the trigger. Public suggestions show the GitHub owner avatar and the full owner/repository name, with an initial as the fallback. Search status stays in the results region. Selecting a result imports a public source snapshot and selects it in the workspace. While importing, controls are disabled and a live status names the repository; failures remain in the dialog with a retry path. The dialog explains that imports are read-only and public-only.
 
-Transitions use 160ms ease-out for color and borders. Reduced-motion preference disables transitions and animations. There is no theme switch; both palettes follow the operating system preference without client state.
+Transitions use 160ms ease-out for color and borders. Reduced-motion preference disables transitions and animations. Settings has a Personalization section for System, Dark and Light. Its theme previews distinguish the palettes, and five named accents each have coordinated text, selection and button colors for both themes. Preferences apply immediately and persist in the current browser.
 
 ## Do's and Don'ts
 

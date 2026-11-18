@@ -12,6 +12,7 @@ import {
   SessionRequestError,
 } from '@/lib/auth-api';
 import Workspace from './workspace';
+import { Personalization } from './settings/personalization';
 import { Avatar } from '@/components/ui/avatar';
 import { AppHeader, Brand, Icon, ReadOnlyBadge } from '@/components/ui/shell';
 import { CircuitField } from '@/components/ui/circuit-field';
@@ -227,36 +228,7 @@ export function ProfileScreen({ view = 'profile' }: { view?: 'profile' | 'settin
   }
 
   const { user } = session;
-  if (view === 'settings') {
-    return (
-      <main className="profile-shell">
-        <AppHeader active="settings" user={user} />
-        <section className="profile-card" aria-labelledby="settings-title">
-          <h1 id="settings-title" className="account-heading">
-            Settings
-          </h1>
-          <div className="profile-details">
-            <div>
-              <span>Appearance</span>
-              <strong>Follows your device</strong>
-            </div>
-            <div>
-              <span>Inspection provider</span>
-              <strong>Deterministic demo</strong>
-            </div>
-          </div>
-          <p className="profile-scope">
-            There are no configurable settings in this release. Light and dark appearance follow
-            your device preference; the inspection provider cannot be changed here.
-          </p>
-          <Link className="primary-button settings-return" href="/">
-            Return to workspace
-            <Icon name="arrow" />
-          </Link>
-        </section>
-      </main>
-    );
-  }
+  if (view === 'settings') return <Personalization user={user} />;
   return (
     <main className="profile-shell">
       <AppHeader active={view} user={user} />

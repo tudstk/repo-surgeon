@@ -388,7 +388,7 @@
 }
 
 .diffTable [data-change='added'] {
-  background: var(--selected);
+  background: var(--success-surface);
 }
 
 .diffTable [data-change='removed'] {

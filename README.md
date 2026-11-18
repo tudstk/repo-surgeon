@@ -24,8 +24,7 @@ Selecting a saved session restores its latest exchange and run events, not a com
 “Persisted” means saved to session history; it does not mean a Git commit was created or a tool succeeded.
 
 The interface uses three fixed desktop panes with plain dividers and conversation-first drawers at 1100px and below.
-The light palette follows the operating system preference; keyboard focus and reduced motion are supported.
-The top-right GitHub avatar shows the username on hover and opens Profile/Settings navigation. Settings currently explains the fixed defaults; it has no editable controls.
+The top-right GitHub avatar shows the username on hover and opens Profile and Settings. In **Settings**, use **Personalization** to choose System, Dark, or Light and an accent color. System and green are the defaults. Preferences are saved in the current browser. Keyboard focus and reduced motion are supported.
 The four unfinished direct URLs explain their availability and link back to the workspace.
 See the [design system](DESIGN.md), [product context](PRODUCT.md) and the [interface learning note](docs/learning/workspace-interface.md).
 

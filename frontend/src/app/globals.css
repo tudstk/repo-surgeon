@@ -1,44 +1,62 @@
 @import 'tailwindcss';
 :root {
-  color-scheme: dark;
-  --canvas: #101214;
-  --panel: #15181c;
-  --raised: #1b1f24;
-  --hover: #242a30;
-  --border: #343c45;
-  --control-border: #65717e;
-  --text: #eef1f4;
-  --muted: #a8b0ba;
-  --accent: #64d8c5;
-  --accent-ink: #092c27;
-  --selected: #19352f;
-  --success: #83d9ad;
-  --warning: #edc16a;
-  --danger: #ff9ca6;
-  --danger-surface: #302025;
+  color-scheme: light dark;
   --radius: 6px;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: 'SFMono-Regular', Consolas, monospace;
 }
-@media (prefers-color-scheme: light) {
-  :root {
-    color-scheme: light;
-    --canvas: #ffffff;
-    --panel: #f5f7f8;
-    --raised: #ebeff2;
-    --hover: #e2e8ec;
-    --border: #c1cad2;
-    --control-border: #80909d;
-    --text: #1c252c;
-    --muted: #52616d;
-    --accent: #116a5b;
-    --accent-ink: #ffffff;
-    --selected: #e0f2ed;
-    --success: #16653c;
-    --warning: #795400;
-    --danger: #a8273c;
-    --danger-surface: #fff0f2;
-  }
+:root,
+[data-theme-preview] {
+  --canvas: light-dark(#fff, #101214);
+  --panel: light-dark(#f5f7f8, #15181c);
+  --raised: light-dark(#ebeff2, #1b1f24);
+  --hover: light-dark(#e2e8ec, #242a30);
+  --border: light-dark(#c1cad2, #343c45);
+  --control-border: light-dark(#80909d, #65717e);
+  --text: light-dark(#1c252c, #eef1f4);
+  --muted: light-dark(#52616d, #a8b0ba);
+  --success: light-dark(#16653c, #83d9ad);
+  --success-surface: light-dark(#e0f2ed, #19352f);
+  --warning: light-dark(#795400, #edc16a);
+  --danger: light-dark(#a8273c, #ff9ca6);
+  --danger-surface: light-dark(#fff0f2, #302025);
+}
+:root[data-theme='dark'],
+[data-theme-preview='dark'] {
+  color-scheme: dark;
+}
+:root[data-theme='light'],
+[data-theme-preview='light'] {
+  color-scheme: light;
+}
+[data-theme-preview='system'] {
+  color-scheme: light dark;
+}
+:root,
+[data-accent='green'] {
+  --accent: light-dark(#116a5b, #64d8c5);
+  --accent-ink: light-dark(#fff, #092c27);
+  --selected: light-dark(#e0f2ed, #19352f);
+}
+[data-accent='blue'] {
+  --accent: light-dark(#2458a6, #93baff);
+  --accent-ink: light-dark(#fff, #102744);
+  --selected: light-dark(#e7effc, #202f49);
+}
+[data-accent='violet'] {
+  --accent: light-dark(#633ab6, #c5adff);
+  --accent-ink: light-dark(#fff, #271647);
+  --selected: light-dark(#efe8fb, #322747);
+}
+[data-accent='rose'] {
+  --accent: light-dark(#9d3458, #f7a5c1);
+  --accent-ink: light-dark(#fff, #3a1525);
+  --selected: light-dark(#fbeaf0, #3d2632);
+}
+[data-accent='amber'] {
+  --accent: light-dark(#795400, #edc16a);
+  --accent-ink: light-dark(#fff, #332303);
+  --selected: light-dark(#f8efd9, #3c3120);
 }
 * {
   box-sizing: border-box;
@@ -334,9 +352,6 @@ code {
 }
 .account-dropdown a[aria-current='page'] {
   color: var(--accent);
-}
-.settings-return {
-  margin-top: 32px;
 }
 .status-badge {
   display: inline-flex;

@@ -23,7 +23,8 @@ export function Icon({
     | 'check'
     | 'error'
     | 'user'
-    | 'settings';
+    | 'settings'
+    | 'personalization';
   className?: string;
 }) {
   const paths = {
@@ -32,6 +33,7 @@ export function Icon({
     file: 'M6 3h8l4 4v14H6zm8 0v5h4',
     chevron: 'm9 5 7 7-7 7',
     user: 'M8 7a4 4 0 1 0 8 0 4 4 0 0 0-8 0ZM4 21v-2a8 8 0 0 1 16 0v2',
+    personalization: 'M4 6h16M4 12h16M4 18h16M8 3v6M16 9v6M10 15v6',
     settings:
       'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM9.7 3.3l-.5 2-1.8 1-2-.6-2.3 4 1.5 1.4v2l-1.5 1.4 2.3 4 2-.6 1.8 1 .5 2h4.6l.5-2 1.8-1 2 .6 2.3-4-1.5-1.4v-2l1.5-1.4-2.3-4-2 .6-1.8-1-.5-2Z',
     repo: 'M4 3h13v16H4a2 2 0 0 1 0-4h13M4 3a2 2 0 0 0-2 2v12M7 7h6M7 10h4',
