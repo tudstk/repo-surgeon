@@ -52,7 +52,7 @@
   border-radius: 50%;
   background: transparent;
   color: inherit;
-  cursor: none;
+  cursor: zoom-in;
   /* Translate percentages use the button width, so convert scene coordinates by 17/6. */
   translate: calc(var(--lens-x, 63.1818%) * 17 / 6 - 50%)
     calc(var(--lens-y, 58.1818%) * 17 / 6 - 50%);
@@ -68,7 +68,7 @@
 .scene[data-inspecting='true'] .magnifier {
   transform: scale(1.18);
 }
-.scene[data-inspecting='true'] .globe {
+.scene[data-hovering='true'] :is(.globe, .magnifier) {
   cursor: none;
 }
 .magnifier:focus-visible {

@@ -166,6 +166,7 @@ export function InspectionMark() {
       className={styles.scene}
       data-visual="inspection-mark"
       data-inspecting={inspecting}
+      data-hovering={hovered}
       data-running={running}
       data-review-phase={reviewPhase}
       aria-label="Illustrative code globe and review magnifier"
