@@ -208,3 +208,71 @@ for (const scenario of [
     await testInfo.attach('textured-login', { path: screenshot, contentType: 'image/png' });
   });
 }
+
+test('code globe counter-scrolls and magnifies an illustrative review', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'no-preference', colorScheme: 'dark' });
+  await page.goto('/landing');
+  const globe = page.locator('[data-visual="inspection-mark"]');
+  await expect(globe).toHaveAttribute('data-running', 'true');
+  const bands = globe.locator('textPath');
+  const values = await bands.evaluateAll((nodes) =>
+    nodes.slice(8, 10).map((node) => (node as SVGTextPathElement).startOffset.animVal.value),
+  );
+  await expect
+    .poll(async () =>
+      bands.evaluateAll((nodes) =>
+        nodes.slice(8, 10).map((node) => (node as SVGTextPathElement).startOffset.animVal.value),
+      ),
+    )
+    .not.toEqual(values);
+  const after = await bands.evaluateAll((nodes) =>
+    nodes.slice(8, 10).map((node) => (node as SVGTextPathElement).startOffset.animVal.value),
+  );
+  expect(after[0]).toBeGreaterThan(values[0]);
+  expect(after[1]).toBeLessThan(values[1]);
+  const magnifier = globe.getByRole('button', { name: 'Magnify an illustrative code review' });
+  await magnifier.hover();
+  await expect(globe).toHaveAttribute('data-inspecting', 'true');
+  await expect
+    .poll(() =>
+      globe.locator('[data-review="inserted"]').evaluate((node) => getComputedStyle(node).opacity),
+    )
+    .toBe('1');
+  const image = testInfo.outputPath('code-globe-review.png');
+  await globe.screenshot({ path: image });
+  await testInfo.attach('code-globe-review', { path: image, contentType: 'image/png' });
+  await magnifier.click();
+  await expect(magnifier).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Escape');
+  await expect(globe).toHaveAttribute('data-inspecting', 'false');
+  await expect(magnifier).toHaveAttribute('aria-pressed', 'false');
+  await magnifier.focus();
+  await expect(globe).toHaveAttribute('data-inspecting', 'true');
+  await page.getByRole('heading', { name: 'The current boundary.' }).scrollIntoViewIfNeeded();
+  await expect(globe).toHaveAttribute('data-running', 'false');
+});
+
+test('reduced-motion code globe has a static magnified diff', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/landing');
+  const globe = page.locator('[data-visual="inspection-mark"]');
+  await expect(globe).toHaveAttribute('data-running', 'false');
+  await globe.getByRole('button', { name: 'Magnify an illustrative code review' }).focus();
+  await expect(globe.locator('[data-review="inserted"]')).toHaveCSS('opacity', '1');
+  await expect(globe.locator('[data-review="removed"]')).toHaveCSS('opacity', '0');
+  expect(
+    await globe
+      .locator('svg')
+      .first()
+      .evaluate(async (element) => {
+        const svg = element as SVGSVGElement;
+        const before = svg.getCurrentTime();
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        return svg.getCurrentTime() - before;
+      }),
+  ).toBe(0);
+});

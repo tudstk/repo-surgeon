@@ -1,0 +1,7 @@
+# Landing code globe
+
+Native Playwright captures from 2026-11-18. The desktop capture uses a 1440x900 viewport, reduced motion and a full-page screenshot. The magnifier capture shows the active illustrative insertion with motion enabled. Code is a fixed local example; no real repository data, model output or account information is used by the graphic.
+
+The document mark is replaced by 21 curved SVG text paths. Neighboring bands scroll in opposite directions. Hovering or focusing the lens enlarges the example, highlights a removed return statement and inserts a validation guard. Click pins the lens; Escape releases it. Both the globe and editing animation pause offscreen or in hidden tabs. Reduced motion shows static code and a static inserted guard on focus. The existing responsive layout hides the artwork at 800px and below.
+
+Validation: frontend formatting, lint, type checking, 40 unit tests, all 69 browser tests and the production build passed. Browser tests measured the opposing SVG offsets, exercised hover/focus/pinning/Escape, checked offscreen pausing and verified a frozen SVG clock with reduced motion. Existing landing checks cover 1910, 1440, 1280, 1024, 768, 390 and 320px, no horizontal overflow and no private API requests. Impeccable's detector returned no findings; direct rendered review covered the default and magnified scene. No additional dependencies, canvas, WebGL or inference calls were introduced.
