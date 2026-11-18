@@ -138,12 +138,20 @@ test('code globe counter-scrolls and magnifies an illustrative review', async ({
   await expect(globe).toHaveAttribute('data-running', 'true');
   const canvas = globe.locator('[data-globe-canvas]');
   const before = await canvas.evaluate((node) => (node as HTMLCanvasElement).toDataURL());
-  const right = Number(await canvas.getAttribute('data-offset-right'));
-  const left = Number(await canvas.getAttribute('data-offset-left'));
+  const offsets = await canvas.evaluate((node) => [
+    Number(node.getAttribute('data-offset-right')),
+    Number(node.getAttribute('data-offset-left')),
+  ]);
   await expect
-    .poll(async () => Number(await canvas.getAttribute('data-offset-right')))
-    .toBeGreaterThan(right);
-  expect(Number(await canvas.getAttribute('data-offset-left'))).toBeLessThan(left);
+    .poll(() =>
+      canvas.evaluate(
+        (node, baseline) =>
+          Number(node.getAttribute('data-offset-right')) > baseline[0] &&
+          Number(node.getAttribute('data-offset-left')) < baseline[1],
+        offsets,
+      ),
+    )
+    .toBe(true);
   expect(await canvas.evaluate((node) => (node as HTMLCanvasElement).toDataURL())).not.toBe(before);
   const magnifier = globe.getByRole('button', { name: 'Magnify an illustrative code review' });
   const bounds = (await globe.locator('[data-globe-canvas]').boundingBox())!;
