@@ -25,3 +25,10 @@ Completed request replays return their saved result. A new button click uses a n
 ## Validation
 
 HTTP adapter tests cover PR revision races and path filtering. Application tests cover confinement, graph retrieval and secret fragmentation. End-to-end session tests cover authentication/CSRF, persistence, idempotent replay and partial failures. Provider transports are mocked; browser fixtures exercise actual streaming through the Next rewrite and desktop/mobile restoration. No paid inference is required by any quality gate.
+
+
+## Repository chat extension
+
+The same streaming/persistence boundary serves ordinary repository messages through `/repository-messages`. A distinct server-selected system prompt answers the user's question rather than issuing a PR verdict. This flow reads the registered snapshot through its pinned device/inode capability; it never reads an active historical preview or imports a different GitHub revision. The mapper selects question-relevant excerpts under the same scan and packet limits. At most four recent completed exchanges are included, each with bounded question/answer text. Source, history and output remain subject to the untrusted-data and credential-redaction policies. A model's answer is advice, not evidence that code ran or was modified.
+
+The request identity now includes the question as well as the session, PR selection and model. A replay cannot change its message. Chat metadata carries `kind: repository_chat` in the existing nullable JSON evidence field, so no schema migration is necessary. The legacy deterministic turn endpoint remains separate for existing clients. No new MCP tool or model-accessible command is introduced.

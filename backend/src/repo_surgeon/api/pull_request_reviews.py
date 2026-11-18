@@ -22,15 +22,19 @@ from repo_surgeon.api.dependencies import CurrentPrincipal, DatabaseSession, Mut
 from repo_surgeon.api.problems import problem
 from repo_surgeon.application.agent_sessions import SessionBusyError
 from repo_surgeon.application.redaction import redact_text
+from repo_surgeon.application.repositories import ResolvedLocalRepositoryRoot
 from repo_surgeon.application.repository_files import RepositoryFileError
 from repo_surgeon.application.review_catalog import (
     REVIEW_MODELS,
     review_model,
 )
 from repo_surgeon.application.review_context import build_review_context
+from repo_surgeon.application.review_models import PullReviewSource, RepositoryChatSource
 from repo_surgeon.infrastructure.agent_session_store import SqlAlchemyAgentSessionStore
 from repo_surgeon.infrastructure.github_import import GitHubImporter, GitHubImportError
 from repo_surgeon.infrastructure.openrouter_review import (
+    CHAT_SYSTEM_PROMPT,
+    REVIEW_SYSTEM_PROMPT,
     OpenRouterReview,
     ReviewProvider,
     ReviewProviderError,
@@ -43,6 +47,12 @@ router = APIRouter(prefix="/api/v1", tags=["pull request reviews"])
 
 class CreateReviewRequest(BaseModel):
     number: int = Field(ge=1, le=2**31 - 1)
+    request_id: UUID
+    model: str | None = Field(default=None, max_length=128)
+
+
+class CreateMessageRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=8000)
     request_id: UUID
     model: str | None = Field(default=None, max_length=128)
 
@@ -87,6 +97,7 @@ async def review_provider(
     settings = request.app.state.settings
     simulation = settings.review_mode == "simulation"
     return {
+        "repository_chat": True,
         "available": simulation or settings.openrouter_api_key is not None,
         "simulation": simulation,
         "model": "Simulation" if simulation else settings.openrouter_model,
@@ -98,14 +109,14 @@ async def review_provider(
     }
 
 
-@router.post("/sessions/{session_id}/pull-request-reviews")
-async def create_pull_request_review(
+async def _create_model_response(
     session_id: UUID,
-    body: CreateReviewRequest,
+    body: CreateReviewRequest | CreateMessageRequest,
     request: Request,
     principal: MutationPrincipal,
     database: DatabaseSession,
 ) -> StreamingResponse:
+    chat = isinstance(body, CreateMessageRequest)
     store = SqlAlchemyAgentSessionStore(database, principal.user_id)
     session = await store.get_session(session_id)
     if session is None:
@@ -118,7 +129,9 @@ async def create_pull_request_review(
     repository = await SqlAlchemyRepositoryStore(database, principal.user_id).get(
         session.repository_id
     )
-    if repository is None or not repository.github_full_name or not repository.github_commit:
+    if repository is None or (
+        not chat and (not repository.github_full_name or not repository.github_commit)
+    ):
         raise problem(
             code="review_repository_unavailable",
             title="Review unavailable",
@@ -145,16 +158,22 @@ async def create_pull_request_review(
         ) from None
     settings = settings.model_copy(update={"openrouter_model": selected.id})
     metadata: dict[str, object] = {
-        "number": body.number,
+        **(
+            {"kind": "repository_chat"}
+            if isinstance(body, CreateMessageRequest)
+            else {"number": body.number}
+        ),
         "requested_model": selected.id,
-        "repository": repository.github_full_name,
+        "repository": repository.github_full_name or "Local repository",
         "simulation": simulation,
         "model": "Simulation" if simulation else settings.openrouter_model,
     }
     try:
         run = await store.start_run(
             session_id,
-            "Code Review this PR",
+            redact_text(body.message.strip())
+            if isinstance(body, CreateMessageRequest)
+            else "Code Review this PR",
             datetime.now(UTC),
             review_request_id=body.request_id,
             review_context=metadata,
@@ -191,7 +210,13 @@ async def create_pull_request_review(
         answer = ""
         visible = _VisibleAnswer()
         finalized = False
-        provider: ReviewProvider = SimulatedReview() if simulation else OpenRouterReview(settings)
+        provider: ReviewProvider = (
+            SimulatedReview(chat=chat)
+            if simulation
+            else OpenRouterReview(
+                settings, system_prompt=CHAT_SYSTEM_PROMPT if chat else REVIEW_SYSTEM_PROMPT
+            )
+        )
         # Tests inject an in-memory stream here. Production uses the configured adapter.
         if hasattr(request.app.state, "review_provider_factory"):
             provider = request.app.state.review_provider_factory()
@@ -199,13 +224,39 @@ async def create_pull_request_review(
             yield _frame("started", PersistedTurnResponse.from_domain(run).model_dump(mode="json"))
             async with asyncio.timeout(settings.review_timeout_seconds):
                 yield _frame(
-                    "progress", {"message": "Loading the pull request and its pinned source…"}
+                    "progress",
+                    {
+                        "message": "Reading the saved repository snapshot…"
+                        if chat
+                        else "Loading the pull request and its pinned source…"
+                    },
                 )
                 importer: GitHubImporter = request.app.state.github_importer
                 with TemporaryDirectory(prefix="repo-surgeon-review-") as temporary:
-                    source = await importer.review_source(
-                        repository, body.number, Path(temporary) / "head"
-                    )
+                    source: PullReviewSource | RepositoryChatSource
+                    if isinstance(body, CreateMessageRequest):
+                        if repository.root_device is None or repository.root_inode is None:
+                            raise RepositoryFileError(
+                                "repository_unavailable", "Recover the repository snapshot first."
+                            )
+                        previous = await store.recent_model_runs(session_id)
+                        history = tuple(
+                            {"question": item.question[:2000], "answer": item.answer[:3000]}
+                            for item in previous
+                        )
+                        source = RepositoryChatSource(
+                            ResolvedLocalRepositoryRoot(
+                                repository.canonical_root,
+                                repository.root_device,
+                                repository.root_inode,
+                            ),
+                            redact_text(body.message.strip()),
+                            history,
+                        )
+                    else:
+                        source = await importer.review_source(
+                            repository, body.number, Path(temporary) / "head"
+                        )
                     yield _frame(
                         "progress", {"message": "Mapping dependencies and reading related source…"}
                     )
@@ -219,9 +270,15 @@ async def create_pull_request_review(
                         raise
                     metadata.update(
                         {
-                            "title": redact_text(source.title),
-                            "base_sha": source.base_sha,
-                            "head_sha": source.head_sha,
+                            **(
+                                {"head_sha": repository.github_commit}
+                                if isinstance(source, RepositoryChatSource)
+                                else {
+                                    "title": redact_text(source.title),
+                                    "base_sha": source.base_sha,
+                                    "head_sha": source.head_sha,
+                                }
+                            ),
                             "file_count": context.file_count,
                             "source_count": context.source_count,
                             "excerpt_count": context.excerpt_count,
@@ -236,6 +293,8 @@ async def create_pull_request_review(
                         {
                             "message": "Generating simulated review…"
                             if simulation
+                            else "Answering your question…"
+                            if chat
                             else "Reviewing the changes…"
                         },
                     )
@@ -295,9 +354,16 @@ async def create_pull_request_review(
             if isinstance(error, (GitHubImportError, ReviewProviderError)):
                 detail = str(error)
             elif isinstance(error, TimeoutError):
-                detail = "The review reached its time limit. Retry with a smaller pull request."
+                detail = (
+                    "The response reached its time limit. "
+                    "Try a more specific question or smaller PR."
+                )
             elif isinstance(error, ValueError):
-                detail = "The pull request exceeds the review context limits."
+                detail = (
+                    "The message exceeds the repository context limits."
+                    if chat
+                    else "The pull request exceeds the review context limits."
+                )
             else:
                 detail = "The pinned repository source could not be read."
             metadata["error"] = detail
@@ -325,3 +391,29 @@ async def create_pull_request_review(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no"},
     )
+
+
+@router.post("/sessions/{session_id}/pull-request-reviews")
+async def create_pull_request_review(
+    session_id: UUID,
+    body: CreateReviewRequest,
+    request: Request,
+    principal: MutationPrincipal,
+    database: DatabaseSession,
+) -> StreamingResponse:
+    return await _create_model_response(session_id, body, request, principal, database)
+
+
+@router.post("/sessions/{session_id}/repository-messages")
+async def create_repository_message(
+    session_id: UUID,
+    body: CreateMessageRequest,
+    request: Request,
+    principal: MutationPrincipal,
+    database: DatabaseSession,
+) -> StreamingResponse:
+    if not body.message.strip():
+        raise problem(
+            code="message_empty", title="Empty message", status=422, detail="Write a message first."
+        )
+    return await _create_model_response(session_id, body, request, principal, database)

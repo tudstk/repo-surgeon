@@ -674,3 +674,78 @@ async def test_failed_review_keeps_partial_answer_and_redacts_split_secrets(
         assert persisted["status"] == "failed"
         assert persisted["answer"] == "## Partial answer\npassword=[REDACTED]\n"
         assert persisted["review"]["error"] == "The model provider disconnected."
+
+
+@pytest.mark.anyio
+async def test_repository_chat_answers_and_followups_are_bounded_owned_and_replay_safe(
+    authenticated_app: AuthenticatedApp,
+) -> None:
+    from repo_surgeon.application.review_context import ReviewContext
+
+    fixture = authenticated_app
+    fixture.app.state.settings = fixture.app.state.settings.model_copy(
+        update={"review_mode": "simulation"}
+    )
+    packets: list[dict[str, Any]] = []
+
+    class Provider:
+        async def stream(self, context: ReviewContext) -> AsyncIterator[str]:
+            packets.append(json.loads(context.text))
+            yield "The entry point is `src/main.py`.\n"
+
+    fixture.app.state.review_provider_factory = Provider
+    before = _repository_snapshot(fixture.repository_root)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=fixture.app), base_url="https://surgeon.example"
+    ) as client:
+        headers = _auth_headers(fixture, csrf=True)
+        created = await client.post(
+            "/api/v1/sessions", headers=headers, json={"repository_id": str(fixture.repository_id)}
+        )
+        sid = created.json()["id"]
+        url = f"/api/v1/sessions/{sid}/repository-messages"
+        body = {
+            "message": "Explain the main entry point",
+            "request_id": str(uuid4()),
+            "model": "deepseek/deepseek-v4-flash",
+        }
+        assert (
+            await client.post(url, headers=_auth_headers(fixture), json=body)
+        ).status_code == 403
+        assert (
+            await client.post(
+                f"/api/v1/sessions/{uuid4()}/repository-messages", headers=headers, json=body
+            )
+        ).status_code == 404
+        assert (
+            await client.post(url, headers=headers, json={**body, "model": "unapproved/model"})
+        ).status_code == 422
+        first = await client.post(url, headers=headers, json=body)
+        assert first.status_code == 200
+        result = _sse_events(first)[-1]
+        assert result["status"] == "completed"
+        assert result["question"] == body["message"]
+        assert cast(dict[str, Any], result["review"])["kind"] == "repository_chat"
+        assert "pull_request" not in packets[0]
+        assert packets[0]["question"] == body["message"]
+        assert packets[0]["excerpts"]
+        assert packets[0]["recent_conversation"] == []
+        assert (await client.post(url, headers=headers, json=body)).status_code == 200
+        assert len(packets) == 1
+        assert (
+            await client.post(
+                url, headers=headers, json={**body, "message": "A different question"}
+            )
+        ).status_code == 409
+        second = await client.post(
+            url,
+            headers=headers,
+            json={**body, "request_id": str(uuid4()), "message": "Explain more"},
+        )
+        assert _sse_events(second)[-1]["status"] == "completed"
+        assert packets[1]["recent_conversation"] == [
+            {"question": body["message"], "answer": result["answer"]}
+        ]
+        restored = (await client.get(f"/api/v1/sessions/{sid}", headers=headers)).json()
+        assert restored["turns"][-1]["question"] == "Explain more"
+    assert _repository_snapshot(fixture.repository_root) == before

@@ -9,7 +9,7 @@ from pathlib import PurePosixPath
 
 from repo_surgeon.application.redaction import redact_text
 from repo_surgeon.application.repository_files import ConfinedRepositoryFiles, RepositoryFileError
-from repo_surgeon.application.review_models import PullReviewSource
+from repo_surgeon.application.review_models import PullReviewSource, RepositoryChatSource
 
 MAX_CONTEXT_CHARS = 140_000
 _MAX_SCAN_BYTES = 4 * 1024 * 1024
@@ -113,16 +113,25 @@ def _resolve_import(path: str, name: str, available: set[str]) -> str | None:
     return next((candidate for candidate in candidates if candidate in available), None)
 
 
-def build_review_context(source: PullReviewSource) -> ReviewContext:
+def _chat_terms(source: RepositoryChatSource) -> set[str]:
+    # Bound local retrieval work independently of the user's message length.
+    query = source.question + " " + " ".join(item["question"] for item in source.history[-2:])
+    return set(list(dict.fromkeys(re.findall(r"[a-zA-Z_][a-zA-Z_0-9]{2,}", query.lower())))[:48])
+
+
+def build_review_context(source: PullReviewSource | RepositoryChatSource) -> ReviewContext:
     """Read source as data through the same confinement policy used by the MCP tools."""
     files = ConfinedRepositoryFiles(
         source.root.canonical_root, (source.root.root_device, source.root.root_inode)
     )
+    changes = source.files if isinstance(source, PullReviewSource) else ()
     queue = ["."]
     paths: list[str] = []
     scanned_directories = 0
-    missing_patches = sum(file.patch_status != "available" for file in source.files)
-    limited = bool(source.omitted_files or missing_patches)
+    missing_patches = sum(file.patch_status != "available" for file in changes)
+    limited = bool(
+        (source.omitted_files if isinstance(source, PullReviewSource) else 0) or missing_patches
+    )
     while queue and len(paths) < 1_000 and scanned_directories < 300:
         directory = queue.pop(0)
         scanned_directories += 1
@@ -140,7 +149,7 @@ def build_review_context(source: PullReviewSource) -> ReviewContext:
             page = files.browse_directory(directory, page.next_offset)
     limited |= bool(queue) or len(paths) > 1_000
     paths = paths[:1_000]
-    changed = {file.path for file in source.files}
+    changed = {file.path for file in changes}
     available = set(paths)
     texts: dict[str, str] = {}
     nodes: list[dict[str, object]] = []
@@ -174,6 +183,18 @@ def build_review_context(source: PullReviewSource) -> ReviewContext:
         ]
         edges[path] = neighbors
         nodes.append({"file": path, "symbols": symbols, "imports": neighbors})
+    if isinstance(source, RepositoryChatSource):
+        terms = _chat_terms(source)
+
+        def relevance(path: str) -> int:
+            symbols = next((node["symbols"] for node in nodes if node["file"] == path), [])
+            haystack = path.lower() + " " + str(symbols).lower()
+            content = texts[path].lower()
+            return sum(8 for term in terms if term in haystack) + sum(
+                min(content.count(term), 3) for term in terms
+            )
+
+        changed = set(sorted(texts, key=lambda path: (-relevance(path), path))[:8])
     # Deterministic retrieval: changed source, one-hop callers/dependencies, tests and manifest.
     related = set(changed)
     for path, neighbors in edges.items():
@@ -194,13 +215,23 @@ def build_review_context(source: PullReviewSource) -> ReviewContext:
         if PurePosixPath(path).name in {"package.json", "pyproject.toml", "README.md"}
     ]
     packet: dict[str, object] = {
-        "pull_request": {
-            "number": source.number,
-            "title": redact_text(source.title),
-            "description": redact_text(source.description),
-            "base_sha": source.base_sha,
-            "head_sha": source.head_sha,
-        },
+        **(
+            {
+                "question": source.question,
+                "recent_conversation": source.history,
+                "source": "Saved snapshot with selected source excerpts.",
+            }
+            if isinstance(source, RepositoryChatSource)
+            else {
+                "pull_request": {
+                    "number": source.number,
+                    "title": redact_text(source.title),
+                    "description": redact_text(source.description),
+                    "base_sha": source.base_sha,
+                    "head_sha": source.head_sha,
+                }
+            }
+        ),
         "changed_files": [
             {
                 "path": file.path,
@@ -209,7 +240,7 @@ def build_review_context(source: PullReviewSource) -> ReviewContext:
                 "patch": redact_text(file.patch) if file.patch else None,
                 "patch_status": file.patch_status,
             }
-            for file in source.files
+            for file in changes
         ],
         "repository_map": [],
         "excerpts": [],
@@ -236,7 +267,13 @@ def build_review_context(source: PullReviewSource) -> ReviewContext:
         lines = texts[path].splitlines()
         # Include surrounding changed hunks even when they occur deep in a source file.
         starts = [0]
-        patch = next((file.patch for file in source.files if file.path == path), None)
+        patch = next((file.patch for file in changes if file.path == path), None)
+        if isinstance(source, RepositoryChatSource):
+            terms = _chat_terms(source)
+            hits = [
+                i for i, line in enumerate(lines) if any(term in line.lower() for term in terms)
+            ]
+            starts = list(dict.fromkeys([max(0, i - 20) for i in hits[:2]])) or [0]
         if patch:
             starts = [max(0, int(n) - 21) for n in re.findall(r"@@ -\d+(?:,\d+)? \+(\d+)", patch)][
                 :4
@@ -265,7 +302,9 @@ def build_review_context(source: PullReviewSource) -> ReviewContext:
         "excerpts_are_selected": True,
         "included_excerpts": len(excerpts),
         "limited": limited,
-        "omitted_changed_files": source.omitted_files,
+        "omitted_changed_files": source.omitted_files
+        if isinstance(source, PullReviewSource)
+        else 0,
         "map_method": "Python AST and lexical JS/TS imports and declarations. Static hints only.",
     }
     serialized = json.dumps(packet, ensure_ascii=True)

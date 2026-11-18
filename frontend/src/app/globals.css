@@ -906,13 +906,15 @@ code {
 }
 .composer textarea {
   display: block;
-  resize: vertical;
-  min-height: 72px;
+  resize: none;
+  overflow-y: auto;
+  min-height: 44px;
+  line-height: 22px;
   max-height: 180px;
   width: 100%;
   border: 0;
   border-radius: var(--radius);
-  padding: 12px;
+  padding: 10px 12px;
   background: transparent;
   color: var(--text);
 }
@@ -1346,7 +1348,7 @@ code {
   }
   .composer textarea {
     font-size: 16px;
-    min-height: 64px;
+    min-height: 44px;
   }
   .composer-controls {
     flex-wrap: nowrap;
@@ -1711,12 +1713,8 @@ code {
   .composer {
     padding: 8px 16px;
   }
-  .demo-disclosure {
-    margin-bottom: 6px;
-  }
   .composer textarea {
-    height: 60px;
-    min-height: 48px;
+    min-height: 44px;
   }
 }
 
@@ -2140,9 +2138,8 @@ code {
   font-weight: 600;
 }
 .source-code-scroll {
-  display: grid;
-  grid-template-columns: max-content max-content;
-  align-content: start;
+  display: block;
+  padding-block: 10px;
   flex: 1;
   overflow: auto;
   overflow-anchor: none;
@@ -2151,12 +2148,13 @@ code {
   font: 12px/22px var(--font-mono);
   direction: ltr;
 }
-.source-code-lines {
-  position: sticky;
-  left: 0;
-  flex: 0 0 auto;
-  min-width: 40px;
-  padding: 10px 8px;
+.source-code-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  min-width: 0;
+}
+.source-line-number {
+  padding-inline: 8px;
   color: var(--muted);
   background: var(--canvas);
   border-right: 1px solid var(--border);
@@ -2164,7 +2162,12 @@ code {
   user-select: none;
 }
 .source-code-scroll pre {
-  padding: 10px 12px;
+  margin: 0;
+  min-width: 0;
+  min-height: 22px;
+  padding-inline: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   tab-size: 4;
 }
 .source-code-scroll code {
@@ -2372,7 +2375,7 @@ code {
   min-height: 36px;
   padding: 0;
   flex-shrink: 0;
-  border-radius: 50%;
+  border-radius: var(--radius);
 }
 .composer-controls .send .icon {
   width: 20px;

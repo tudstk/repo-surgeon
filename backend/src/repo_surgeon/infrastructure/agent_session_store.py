@@ -295,6 +295,21 @@ class SqlAlchemyAgentSessionStore:
         ).scalars()
         return SessionWithRuns(session, tuple(_run(record) for record in records))
 
+    async def recent_model_runs(self, session_id: UUID) -> tuple[AgentRun, ...]:
+        records = (
+            await self._database.execute(
+                select(AgentRunRecord)
+                .where(
+                    AgentRunRecord.owner_user_id == self._owner_user_id,
+                    AgentRunRecord.session_id == session_id,
+                    AgentRunRecord.status == "completed",
+                )
+                .order_by(AgentRunRecord.started_at.desc(), AgentRunRecord.id.desc())
+                .limit(4)
+            )
+        ).scalars()
+        return tuple(reversed([_run(record) for record in records]))
+
     async def start_run(
         self,
         session_id: UUID,
@@ -319,6 +334,7 @@ class SqlAlchemyAgentSessionStore:
             if existing is not None:
                 if (
                     existing.session_id != session_id
+                    or existing.question != question
                     or (existing.review_context or {}).get("number")
                     != (review_context or {}).get("number")
                     or (existing.review_context or {}).get("requested_model")
