@@ -796,7 +796,13 @@ code {
   font-size: 12px;
   margin-bottom: 10px;
 }
+.exchange > .message-meta:first-child {
+  justify-content: flex-end;
+}
 .user-message {
+  width: fit-content;
+  max-width: 85%;
+  margin-inline-start: auto;
   padding: 16px;
   border-radius: var(--radius);
   background: var(--raised);

@@ -174,3 +174,5 @@ In **Code**, branch and commit controls share the file browser’s column divide
 PR reviews send the exact chat message **Code Review this PR** and keep the selected PR beside the conversation on desktop. Phones close the tools drawer to reveal the answer. A restrained processing indicator offers Stop review, with reduced-motion support. Responses use Markdown, numbered source evidence supplied by the model, syntax-highlighted fenced code and explicit Copy code feedback. The PR title and revision stay above the answer. Simulation is labelled before and within its content; failed reviews retain partial text with a separate error. Restored sessions show the latest saved exchange.
 
 Review response bodies sit in a quiet panel message box, using muted prose and softened headings to reduce white intensity. Code-copy controls use 11px text beside a 13px copy/check icon while preserving usable pointer and touch targets.
+
+Conversation questions use content-sized bubbles aligned right with their author label; Repo Surgeon responses remain left aligned. Question bubbles stop at 85% of the conversation width and wrap long content.

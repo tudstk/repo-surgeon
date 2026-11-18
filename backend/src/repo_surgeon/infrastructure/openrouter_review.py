@@ -27,7 +27,7 @@ REVIEW_SYSTEM_PROMPT = (
     "Respond in Markdown with Verdict, Findings, Suggested improvements, and Coverage. "
     "Describe omitted files, missing patches, graph limitations and unexecuted tests. "
     "Repository maps guide retrieval and do not prove runtime behavior. "
-    "Never claim the entire repository was analyzed when coverage is limited."
+    "Only selected source excerpts are supplied. Never claim the entire repository code was read."
 )
 
 

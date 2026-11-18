@@ -1,6 +1,7 @@
 """No inference calls: confined context retrieval and provider protocol contracts."""
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -82,6 +83,15 @@ def test_graph_retrieves_callers_dependencies_and_tests_without_reading_secrets(
     assert "NEVER" not in context.text
     assert "outside-link" not in context.text
     assert len(context.text) <= MAX_CONTEXT_CHARS
+
+
+def test_missing_patches_are_reported_as_limited_context(tmp_path: Path) -> None:
+    original = source(tmp_path)
+    unavailable = replace(original.files[0], patch=None, patch_status="unavailable")
+    context = build_review_context(replace(original, files=(unavailable,)))
+    assert context.limited
+    assert json.loads(context.text)["coverage"]["missing_patches"] == 1
+    assert json.loads(context.text)["coverage"]["excerpts_are_selected"] is True
 
 
 def test_stream_redaction_buffers_split_credentials_and_pem() -> None:

@@ -121,7 +121,8 @@ def build_review_context(source: PullReviewSource) -> ReviewContext:
     queue = ["."]
     paths: list[str] = []
     scanned_directories = 0
-    limited = bool(source.omitted_files)
+    missing_patches = sum(file.patch_status != "available" for file in source.files)
+    limited = bool(source.omitted_files or missing_patches)
     while queue and len(paths) < 1_000 and scanned_directories < 300:
         directory = queue.pop(0)
         scanned_directories += 1
@@ -259,6 +260,9 @@ def build_review_context(source: PullReviewSource) -> ReviewContext:
     packet["coverage"] = {
         "visible_files": len(paths),
         "mapped_files": len(nodes),
+        "included_map_nodes": len(map_nodes),
+        "missing_patches": missing_patches,
+        "excerpts_are_selected": True,
         "included_excerpts": len(excerpts),
         "limited": limited,
         "omitted_changed_files": source.omitted_files,
