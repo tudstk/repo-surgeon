@@ -4,7 +4,7 @@
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--panel);
-  color: var(--muted);
+  color: color-mix(in srgb, var(--text) 76%, var(--muted));
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
@@ -14,7 +14,7 @@
 .answer h2,
 .answer h3 {
   margin-block: 22px 8px;
-  color: color-mix(in srgb, var(--text) 82%, var(--panel));
+  color: var(--text);
   font-size: 16px;
   line-height: 1.4;
 }
@@ -112,4 +112,21 @@
   .codeHeader button {
     min-height: 44px;
   }
+}
+
+.answer strong,
+.answer em,
+.answer li::marker,
+.answer p code,
+.answer li code,
+.number {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.answer hr {
+  height: 0;
+  border: 0;
+  border-top: 0.5px solid color-mix(in srgb, var(--text) 18%, transparent);
+  margin-block: 24px;
 }

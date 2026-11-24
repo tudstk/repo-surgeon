@@ -1,7 +1,18 @@
 import { WorkspaceRequestError, type PersistedTurn } from './workspace-api';
 
+export type ReviewModel = { id: string; name: string; description: string };
+export type ReviewProvider = {
+  repository_chat?: boolean;
+  available: boolean;
+  simulation: boolean;
+  model: string;
+  default_model?: string;
+  models?: ReviewModel[];
+};
+
 export type ReviewMetadata = {
-  number: number;
+  number?: number;
+  kind?: 'repository_chat';
   repository: string;
   simulation: boolean;
   model: string;
@@ -28,26 +39,34 @@ export async function getReviewProvider(signal: AbortSignal) {
     signal,
   }).then(async (response) => {
     if (!response.ok) throw new Error('Review provider unavailable');
-    return (await response.json()) as { available: boolean; simulation: boolean; model: string };
+    return (await response.json()) as ReviewProvider;
   });
 }
 
-export async function streamPullReview(
+export async function streamRepositoryResponse(
   sessionId: string,
-  number: number,
+  selection: { number: number } | { message: string },
   requestId: string,
   csrfToken: string,
   signal: AbortSignal,
   onEvent: (event: ReviewEvent) => void,
+  model?: string,
 ) {
-  const response = await fetch(`/api/v1/sessions/${sessionId}/pull-request-reviews`, {
-    method: 'POST',
-    credentials: 'include',
-    cache: 'no-store',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-    body: JSON.stringify({ number, request_id: requestId }),
-    signal,
-  });
+  const response = await fetch(
+    `/api/v1/sessions/${sessionId}/${'number' in selection ? 'pull-request-reviews' : 'repository-messages'}`,
+    {
+      method: 'POST',
+      credentials: 'include',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+      body: JSON.stringify({
+        ...selection,
+        request_id: requestId,
+        ...(model ? { model } : {}),
+      }),
+      signal,
+    },
+  );
   if (!response.ok) {
     const body = (await response.json().catch(() => ({}))) as { detail?: string; code?: string };
     throw new WorkspaceRequestError(response.status, body.code || 'review_failed', body.detail);
@@ -99,4 +118,24 @@ export async function streamPullReview(
     await reader.cancel().catch(() => undefined);
     reader.releaseLock();
   }
+}
+
+export function streamPullReview(
+  sessionId: string,
+  number: number,
+  requestId: string,
+  csrfToken: string,
+  signal: AbortSignal,
+  onEvent: (event: ReviewEvent) => void,
+  model?: string,
+) {
+  return streamRepositoryResponse(
+    sessionId,
+    { number },
+    requestId,
+    csrfToken,
+    signal,
+    onEvent,
+    model,
+  );
 }

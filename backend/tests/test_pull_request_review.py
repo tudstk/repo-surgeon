@@ -109,17 +109,30 @@ def sse(payload: object) -> str:
 
 
 @pytest.mark.anyio
-async def test_provider_sends_one_bounded_request_and_ignores_reasoning() -> None:
+@pytest.mark.parametrize(
+    "model,prompt_cap,completion_cap",
+    [
+        ("deepseek/deepseek-v3.2", 0.30, 0.50),
+        ("deepseek/deepseek-v4-flash", 0.12, 0.25),
+    ],
+)
+async def test_provider_sends_one_bounded_request_and_ignores_reasoning(
+    model: str,
+    prompt_cap: float,
+    completion_cap: float,
+) -> None:
     calls = []
 
     def upstream(request: httpx.Request) -> httpx.Response:
         calls.append(request)
         packet = json.loads(request.content)
+        assert packet["model"] == model
         assert packet["max_tokens"] == 4000
         assert packet["provider"] == {
             "data_collection": "deny",
             "zdr": True,
             "require_parameters": True,
+            "max_price": {"prompt": prompt_cap, "completion": completion_cap},
         }
         assert packet["messages"][1]["content"] == "context data"
         return httpx.Response(
@@ -140,7 +153,9 @@ async def test_provider_sends_one_bounded_request_and_ignores_reasoning() -> Non
             ),
         )
 
-    settings = Settings(environment="test", openrouter_api_key=SecretStr("test-placeholder"))
+    settings = Settings(
+        environment="test", openrouter_model=model, openrouter_api_key=SecretStr("test-placeholder")
+    )
     async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as client:
         provider = OpenRouterReview(settings, client)
         result = "".join(

@@ -1,32 +1,22 @@
 # Repo Surgeon
 
-Repo Surgeon is a local-first, human-controlled coding assistant for understanding and safely changing Git repositories.
+![A magnifying glass inspects a globe made of source code. Review the change. Keep the context.](docs/assets/repo-surgeon-banner.png)
 
-## Implemented status
+**Review pull requests with the surrounding code in view.** Open a GitHub PR, read its diff alongside the repository, and select **Code Review this PR**. Repo Surgeon gives the model the PR title, description, pinned diff and relevant source excerpts so you can judge whether the change solves the stated problem and where it needs work.
 
-This checkout provides an executable foundation: a typed FastAPI process, a strict TypeScript and Next.js frontend, local PostgreSQL through Docker Compose, and CI quality gates. It also registers an existing local Git working tree and persists its resolved canonical root. The backend includes bounded read-only file and exact-search tools, deterministic repository intelligence, a deterministic model-provider agent loop, a bounded bug-investigation workflow, and the authenticated persisted-turn seam. The frontend includes GitHub login and profile screens plus a tenant-scoped three-pane workspace for one bounded read-only turn.
+## Inside the workspace
 
-Registration validates only the selected path and Git worktree boundary. The MCP tools read and search bounded safe content, and the agent loop can use only those read-only capabilities through a provider boundary. Repository intelligence maps bounded manifest evidence to versioned language and test-command catalogs without executing repository code. Bug investigations use a fixed bounded search plan and, for the canonical seeded fixture, an evaluation-owned deterministic behavioral proof; unsupported questions return insufficient evidence. Authenticated users can select an owned repository, create a product session, submit one deterministic read-only turn, and resume its persisted normalized SSE events. There is still no HTTP MCP transport, repository indexing, URL cloning, repository mutation, sandbox, patch workflow, or approval system. Local-trusted repository behavior remains available only through the existing local boundary; public-authenticated workspace requests use the current principal and fail closed for foreign IDs. See [safe search](docs/mcp/safe-search-tools.md), [product scope](docs/product/scope.md), and [persisted turns](docs/architecture/decisions/0011-persisted-agent-turns.md).
+- **Read the change.** Import a public GitHub repository, browse open or closed pull requests, and switch between unified and side-by-side diffs.
+- **Follow the evidence.** A bounded dependency map helps select related source for the review. Browse files, branches and earlier commits to check a finding yourself.
+- **Ask a follow-up.** Repository chat uses your saved snapshot and recent conversation. Reviews identify the PR revision they examined. Responses stream into the workspace with copyable code blocks.
 
-No model API key is required.
+### Tools and models
 
-### Workspace interface
+Repo Surgeon's Python **FastMCP** tools let the read-only agent list visible paths with `list_files`, read bounded excerpts with `read_file`, and locate matching code with `search_code`. They run in-process and enforce the registered repository boundary. A separate GitHub adapter retrieves PRs and diffs. [Read about the tool limits](docs/mcp/safe-search-tools.md).
 
-A public landing-page preview is available at `/landing`; the working workspace remains at `/`. The shared brand returns to the landing page. The hero and sign-in screen share a faint circuit texture with two introductory accent pulses and mouse-triggered pulses. Reduced-motion preference keeps it static.
-The landing page uses locally hosted type and actual UI captures with synthetic demo data. It makes no model calls and loads no private workspace records.
+Choose **DeepSeek V3.2** (`deepseek/deepseek-v3.2`, default) or **DeepSeek V4 Flash** (`deepseek/deepseek-v4-flash`, budget) in the composer. Live requests send selected repository context to OpenRouter using a backend-only key. Explicit simulation lets you try the interface without spending credits. [Model setup and context limits](docs/learning/pr-code-reviews.md).
 
-The workspace’s **Add repository** dialog searches public GitHub repositories by name or `owner/repository`, with owner avatars. Select a result to import its default branch at a pinned commit as a read-only source snapshot. Search and new imports use credential-free GitHub endpoints and may be rate-limited. A local operator can connect one existing snapshot to a [read-only GitHub App](#local-github-app-access).
-
-GitHub sign-in identifies your account; it does not connect or import your GitHub repositories.
-The workspace shows your imported snapshots and any local repositories already assigned to your account.
-Its demo provider lists files and returns a fixed completion message, rather than a tailored answer.
-Selecting a saved session restores its latest exchange and run events, not a complete transcript.
-“Persisted” means saved to session history; it does not mean a Git commit was created or a tool succeeded.
-
-The interface uses three fixed desktop panes with plain dividers and conversation-first drawers at 1100px and below.
-The top-right GitHub avatar shows the username on hover and opens Profile and Settings. In **Settings**, use **Personalization** to choose System, Dark, or Light and an accent color. System and green are the defaults. Preferences are saved in the current browser. Keyboard focus and reduced motion are supported.
-The four unfinished direct URLs explain their availability and link back to the workspace.
-See the [design system](DESIGN.md), [product context](PRODUCT.md) and the [interface learning note](docs/learning/workspace-interface.md).
+Reviews are advisory. The review action reads source and saves the response to your session. Running tests, approving a fix and publishing a commit are separate operations outside this release's review flow.
 
 ## Access modes and authentication foundation
 
@@ -181,7 +171,7 @@ Future work continues with Git context, test sandboxing, proposals, approvals, p
 
 Run the normal `uv run alembic upgrade head` migration before starting this version. Migration `20261114_0005` adds nullable snapshot provenance fields and preserves existing registrations and ownership. Migration `20261114_0006` adds persistent workspace visibility; existing repositories remain visible.
 
-In the workspace, choose **Add repository**, search by repository name or exact `owner/repository`, then select a suggestion. After import, the snapshot is selected and ready for a read-only session. Its short commit identifier appears in the repository list. Reloading restores the saved registration. The deterministic demo provider still lists files and returns its fixed completion message.
+In the workspace, choose **Add repository**, search by repository name or exact `owner/repository`, then select a suggestion. After import, the snapshot is selected and ready for a read-only session. Its short commit identifier appears in the repository list. Reloading restores the saved registration. Ask questions about the imported snapshot in the composer, or open a PR to review its pinned revision.
 
 The backend checks public visibility without a GitHub token, resolves the default branch to a commit and downloads a bounded source ZIP into app-managed storage. Set `REPO_SURGEON_REPOSITORY_STORAGE` to a private, persistent directory owned by the backend process; its default is `~/.local/share/repo-surgeon/repositories`. Back up this directory together with the database. Multiple workers must share the same filesystem. The Next.js API proxy allows 90 seconds for import responses; any outer proxy needs a compatible timeout. The browser never supplies a filesystem path.
 

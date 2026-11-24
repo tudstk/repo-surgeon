@@ -30,3 +30,7 @@ REPOSITORY DISCOVERY: The workspace context bar opens a focused dialog with a bl
 
 
 PULL REQUESTS: The right work pane lists open and closed pull requests with text labels for draft and merged states. Details group PR-wide totals with the title and place the unified and side-by-side switch beside per-file line counts in the file header. The source and target branches sit above the file selector. Additions and deletions use the existing semantic colors with explicit signs and line numbers. The mobile Repository tools drawer uses the same controls and contains any horizontal diff scrolling within the comparison. Code Review this PR sends that exact message into chat, closes the mobile tools drawer and streams a Markdown review with copyable code. Progress and Stop review are visible while processing; simulation is explicit, errors preserve partial answers, and the PR revision is saved.
+
+The composer places an accessibly labelled PR model selector immediately left of its rounded-square upward send arrow. A screen-reader description explains bounded saved-snapshot context without a visible disclosure block. Responses center within the conversation at a generous width, with lighter body text and primary-foreground emphasis for Markdown keywords and prose numbers.
+
+The one-line input grows with content and caps at 180px. Ordinary repository questions and follow-ups share the selected model and saved response treatment. Long lines in Code wrap with aligned line numbers.

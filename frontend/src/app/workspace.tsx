@@ -7,9 +7,9 @@ import { Drawer } from '@/components/ui/drawer';
 import { RowActions } from '@/components/ui/row-actions';
 import { SessionActionDialog } from '@/components/ui/session-action-dialog';
 import { RepositoryRemovalDialog } from '@/components/ui/repository-removal-dialog';
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useId, useMemo, useRef, useState } from 'react';
 import { ReviewAnswer } from './review-answer';
-import { streamPullReview, getReviewProvider } from '@/lib/review-api';
+import { streamRepositoryResponse, getReviewProvider, type ReviewProvider } from '@/lib/review-api';
 import { RepositoryCode } from './repository-code';
 import { RepositoryPullRequests } from './repository-pull-requests';
 import { RepositoryRevisions, type RepositoryRevision } from './repository-revisions';
@@ -102,22 +102,32 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
   const [sessions, setSessions] = useState<ProductSession[]>([]);
   const [session, setSession] = useState<ProductSessionDetail | null>(null);
   const [events, setEvents] = useState<RunEvent[]>([]);
-  const [message, setMessage] = useState('What does this repository contain?');
+  const [message, setMessage] = useState('');
+  const messageInput = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const input = messageInput.current;
+    if (!input) return;
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
+  }, [message]);
   const [loading, setLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState<'session' | 'turn' | 'review' | null>(null);
   const reviewRequest = useRef<AbortController | null>(null);
   const [reviewTurn, setReviewTurn] = useState<PersistedTurn | null>(null);
   const [reviewProgress, setReviewProgress] = useState('Preparing review…');
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const [reviewProvider, setReviewProvider] = useState<{
-    available: boolean;
-    simulation: boolean;
-    model: string;
-  }>();
+  const [reviewProvider, setReviewProvider] = useState<ReviewProvider>();
+  const [reviewModel, setReviewModel] = useState('deepseek/deepseek-v3.2');
 
   useEffect(() => {
     const controller = new AbortController();
-    void getReviewProvider(controller.signal).then(setReviewProvider, () => undefined);
+    void getReviewProvider(controller.signal).then(
+      (provider) => {
+        setReviewProvider(provider);
+        if (provider.default_model) setReviewModel(provider.default_model);
+      },
+      () => undefined,
+    );
     return () => {
       controller.abort();
       reviewRequest.current?.abort();
@@ -376,6 +386,12 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     setReviewTurn(null);
     setReviewError(null);
     const trimmed = message.trim();
+    if (!reviewProvider?.available) return;
+    if (reviewProvider?.repository_chat) {
+      if (!selectedRepository || submitting || !trimmed) return;
+      await handleReview(null, trimmed);
+      return;
+    }
     if (!session || submitting || trimmed.length < 3) return;
     const generation = workspaceRequestGeneration.current;
     const sessionId = session.id;
@@ -400,28 +416,29 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     }
   };
 
-  const handleReview = async (pull: GitHubPullRequest) => {
+  const handleReview = async (pull: GitHubPullRequest | null, question?: string) => {
     if (!selectedRepository || submitting || reviewRequest.current) return;
     const controller = new AbortController();
     reviewRequest.current = controller;
     const generation = workspaceRequestGeneration.current;
     setPendingAction('review');
     setReviewError(null);
-    setReviewProgress('Preparing the pull request review…');
+    setReviewProgress(pull ? 'Preparing the pull request review…' : 'Reading repository context…');
     setError(null);
     setEvents([]);
     setReviewTurn({
       run_id: '',
       status: 'running',
-      question: 'Code Review this PR',
+      question: question ?? 'Code Review this PR',
       answer: '',
       started_at: new Date().toISOString(),
       completed_at: null,
       review: {
-        number: pull.number,
+        ...(pull
+          ? { number: pull.number, title: pull.title }
+          : { kind: 'repository_chat' as const }),
         repository: selectedRepository.name,
-        title: pull.title,
-        model: reviewProvider?.model || 'Review',
+        model: reviewProvider?.simulation ? 'Simulation' : reviewModel,
         simulation: reviewProvider?.simulation ?? false,
       },
     });
@@ -435,9 +452,9 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
         setSessions((current) => [created, ...current]);
         setSession(targetSession);
       }
-      await streamPullReview(
+      await streamRepositoryResponse(
         targetSession.id,
-        pull.number,
+        pull ? { number: pull.number } : { message: question ?? '' },
         crypto.randomUUID(),
         csrfToken,
         controller.signal,
@@ -465,7 +482,9 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                 : current,
             );
         },
+        reviewProvider?.models?.length ? reviewModel : undefined,
       );
+      if (question) setMessage('');
       if (generation !== workspaceRequestGeneration.current) return;
       const detail = await getProductSession(targetSession.id);
       if (generation !== workspaceRequestGeneration.current) return;
@@ -478,7 +497,7 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
     } catch (cause) {
       if (generation !== workspaceRequestGeneration.current) return;
       const detail = controller.signal.aborted
-        ? 'Review stopped. Any partial answer remains in this session.'
+        ? 'Response stopped. Any partial answer remains in this session.'
         : cause instanceof WorkspaceRequestError && cause.detail
           ? cause.detail
           : cause instanceof Error
@@ -1097,11 +1116,16 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                     {latestTurn.review ? (
                       <div className="review-context-note">
                         <strong>
-                          PR #{latestTurn.review.number} · {latestTurn.review.title}
+                          {latestTurn.review.kind === 'repository_chat'
+                            ? 'Repository conversation'
+                            : `PR #${latestTurn.review.number} · ${latestTurn.review.title}`}
                         </strong>
                         {latestTurn.review.head_sha ? (
                           <span>
-                            PR revision <code>{latestTurn.review.head_sha.slice(0, 7)}</code>
+                            {latestTurn.review.kind === 'repository_chat'
+                              ? 'Snapshot'
+                              : 'PR revision'}{' '}
+                            <code>{latestTurn.review.head_sha.slice(0, 7)}</code>
                           </span>
                         ) : null}
                         {latestTurn.review.limited ? (
@@ -1118,7 +1142,9 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                         </span>
                         <span>{reviewProgress}</span>
                         <button type="button" onClick={() => reviewRequest.current?.abort()}>
-                          Stop review
+                          {latestTurn.review?.kind === 'repository_chat'
+                            ? 'Stop response'
+                            : 'Stop review'}
                         </button>
                       </div>
                     ) : null}
@@ -1174,49 +1200,65 @@ export default function Workspace({ user, csrfToken }: { user: SafeProfile; csrf
                 <Icon name="activity" />
                 <h2>Session ready</h2>
                 <p>
-                  Run a demo inspection to list repository files and save its activity. This view
-                  shows the latest exchange in the selected session.
+                  Ask about the repository, explore its code, or open a pull request for a review.
+                  Your latest exchange is saved in this session.
                 </p>
               </div>
             ) : null}
           </div>
           <form className="composer" onSubmit={handleSubmit}>
-            <div className="demo-disclosure" id="demo-disclosure">
-              <strong>Demo inspection</strong>
-              <p>
-                Demo inspections list files and return a fixed completion message. Use the Pull
-                Request tab to request a code review.
-              </p>
-            </div>
             <div className="composer-input">
               <label className="sr-only" htmlFor="instruction">
                 Agent instruction
               </label>
               <textarea
                 id="instruction"
-                aria-describedby="demo-disclosure"
-                disabled={!session || submitting}
+                ref={messageInput}
+                rows={1}
+                aria-describedby="composer-scope"
+                disabled={!selectedRepository || submitting}
                 onChange={(event) => setMessage(event.target.value)}
-                placeholder="Start a session to run an inspection…"
+                placeholder="Write your message..."
                 value={message}
                 maxLength={8000}
               />
               <div className="composer-controls">
-                <span>
-                  {creatingSession
-                    ? 'Starting read-only session…'
-                    : submitting
-                      ? 'Running read-only inspection…'
-                      : 'Bounded, read-only access'}
+                <span className="sr-only" id="composer-scope">
+                  Ask a question about the selected repository. Answers use bounded saved-snapshot
+                  context.
                 </span>
+                {reviewProvider?.models?.length ? (
+                  <div className="review-model-control">
+                    <label className="sr-only" htmlFor="review-model">
+                      Chat model
+                    </label>
+                    <select
+                      id="review-model"
+                      value={reviewModel}
+                      disabled={submitting}
+                      onChange={(event) => setReviewModel(event.target.value)}
+                    >
+                      {reviewProvider.models.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.name} · {model.description}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
                 <button
                   aria-label="Send instruction"
+                  title="Send message"
                   className="primary-button send"
-                  disabled={!session || submitting || message.trim().length < 3}
+                  disabled={
+                    !selectedRepository ||
+                    submitting ||
+                    !message.trim() ||
+                    !reviewProvider?.available
+                  }
                   type="submit"
                 >
-                  {creatingSession ? 'Starting…' : submitting ? 'Running…' : 'Inspect'}
-                  <Icon name="arrow" />
+                  <Icon name="send" />
                 </button>
               </div>
             </div>

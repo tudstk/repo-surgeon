@@ -16,3 +16,10 @@ class PullReviewSource:
     files: tuple[GitHubPullRequestFile, ...]
     omitted_files: int
     root: ResolvedLocalRepositoryRoot
+
+
+@dataclass(frozen=True, slots=True)
+class RepositoryChatSource:
+    root: ResolvedLocalRepositoryRoot
+    question: str
+    history: tuple[dict[str, str], ...] = ()

@@ -1,5 +1,5 @@
 import { common, createLowlight } from 'lowlight';
-import type { ReactNode } from 'react';
+import { Children, cloneElement, isValidElement, type ReactNode } from 'react';
 
 const highlighter = createLowlight(common);
 const languageAliases: Record<string, string> = {
@@ -34,4 +34,27 @@ export function highlightedCode(path: string, text: string): ReactNode {
     );
   }
   return tree.children.map(render);
+}
+
+/** Split already highlighted tokens while preserving multiline syntax state. */
+export function highlightedCodeLines(path: string, text: string): ReactNode[][] {
+  function split(children: ReactNode): ReactNode[][] {
+    const lines: ReactNode[][] = [[]];
+    for (const child of Children.toArray(children)) {
+      let parts: ReactNode[][];
+      if (typeof child === 'string') {
+        parts = child.split('\n').map((line) => [line]);
+      } else if (isValidElement<{ children?: ReactNode }>(child)) {
+        parts = split(child.props.children).map((line, index) => [
+          cloneElement(child, { key: `${child.key}-${index}` }, line),
+        ]);
+      } else {
+        parts = [[child]];
+      }
+      lines[lines.length - 1].push(...parts[0]);
+      lines.push(...parts.slice(1));
+    }
+    return lines;
+  }
+  return split(highlightedCode(path, text));
 }
