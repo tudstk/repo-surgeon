@@ -343,7 +343,7 @@ class GitHubImporter:
     ) -> ResolvedLocalRepositoryRoot:
         # refs/pull/<n>/head is available through the base repository's archive endpoint,
         # including fork PRs. Never send the installation token to a fork host.
-        url = await self._archive_url(upstream, head_sha)
+        url = await self._archive_url(upstream.name, head_sha, upstream.token)
         payload = bytearray()
         async with self.client.stream("GET", url, follow_redirects=False) as response:
             response.raise_for_status()
@@ -569,24 +569,7 @@ class GitHubImporter:
         verify_existing: bool = False,
         history: bool = False,
     ) -> ImportedSnapshot:
-        payload = bytearray()
-        url = await self._archive_url(upstream, commit)
-        async with self.client.stream("GET", url, follow_redirects=False) as response:
-            response.raise_for_status()
-            length = response.headers.get("content-length", "")
-            if length.isdigit() and int(length) > MAX_ARCHIVE_BYTES:
-                raise GitHubImportError(
-                    f"Archive download is {int(length):,} bytes; "
-                    f"the limit is {MAX_ARCHIVE_BYTES:,} bytes (25 MiB)."
-                )
-            async for chunk in response.aiter_bytes(64 * 1024):
-                payload.extend(chunk)
-                if len(payload) > MAX_ARCHIVE_BYTES:
-                    raise GitHubImportError(
-                        f"Download exceeds the 25 MiB limit ({MAX_ARCHIVE_BYTES:,} bytes). "
-                        f"At least {len(payload):,} bytes were received; "
-                        "the full archive size is unknown because the download was stopped."
-                    )
+        payload = await self.download_archive(upstream.name, commit, upstream.token)
         # The deterministic destination makes retries and concurrent imports converge.
         publication = asyncio.create_task(
             asyncio.to_thread(
@@ -609,13 +592,36 @@ class GitHubImporter:
             await publication
             raise
 
-    async def _archive_url(self, upstream: _UpstreamRepository, commit: str) -> str:
-        if upstream.token is None:
-            return f"https://codeload.github.com/{upstream.name}/zip/{commit}"
+    async def download_archive(self, name: str, commit: str, token: str | None) -> bytes:
+        if not re.fullmatch(FULL_NAME_PATTERN, name) or not re.fullmatch(COMMIT_PATTERN, commit):
+            raise GitHubImportError("Invalid archive identity.")
+        payload = bytearray()
+        url = await self._archive_url(name, commit, token)
+        async with self.client.stream("GET", url, follow_redirects=False) as response:
+            response.raise_for_status()
+            length = response.headers.get("content-length", "")
+            if length.isdigit() and int(length) > MAX_ARCHIVE_BYTES:
+                raise GitHubImportError(
+                    f"Archive download is {int(length):,} bytes; "
+                    f"the limit is {MAX_ARCHIVE_BYTES:,} bytes (25 MiB)."
+                )
+            async for chunk in response.aiter_bytes(64 * 1024):
+                payload.extend(chunk)
+                if len(payload) > MAX_ARCHIVE_BYTES:
+                    raise GitHubImportError(
+                        f"Download exceeds the 25 MiB limit ({MAX_ARCHIVE_BYTES:,} bytes). "
+                        f"At least {len(payload):,} bytes were received; "
+                        "the full archive size is unknown because the download was stopped."
+                    )
+        return bytes(payload)
+
+    async def _archive_url(self, name: str, commit: str, token: str | None) -> str:
+        if token is None:
+            return f"https://codeload.github.com/{name}/zip/{commit}"
         async with self.client.stream(
             "GET",
-            f"https://api.github.com/repos/{upstream.name}/zipball/{commit}",
-            headers=_api_headers(upstream.token),
+            f"https://api.github.com/repos/{name}/zipball/{commit}",
+            headers=_api_headers(token),
             follow_redirects=False,
         ) as response:
             if response.status_code != 302:
@@ -630,8 +636,8 @@ class GitHubImporter:
             or parsed.fragment
             or parsed.path.lower()
             not in {
-                f"/{upstream.name.lower()}/legacy.zip/{commit}",
-                f"/{upstream.name.lower()}/zip/{commit}",
+                f"/{name.lower()}/legacy.zip/{commit}",
+                f"/{name.lower()}/zip/{commit}",
             }
         ):
             raise GitHubImportError("GitHub returned an unexpected archive download link.")
