@@ -16,7 +16,7 @@ Repo Surgeon's Python **FastMCP** tools let the read-only agent list visible pat
 
 Choose **DeepSeek V3.2** (`deepseek/deepseek-v3.2`, default) or **DeepSeek V4 Flash** (`deepseek/deepseek-v4-flash`, budget) in the composer. Live requests send selected repository context to OpenRouter using a backend-only key. Explicit simulation lets you try the interface without spending credits. [Model setup and context limits](docs/learning/pr-code-reviews.md).
 
-Reviews are advisory. The review action reads source and saves the response to your session. Running tests, approving a fix and publishing a commit are separate operations outside this release's review flow.
+Reviews are advisory. The review action reads source and saves the response to your session. For a GitHub inline suggestion, the optional [owner-approved fix bot](docs/learning/approved-fix-bot.md) can test the change and publish a commit to a dedicated branch after separate approval and Apply commands.
 
 ## Access modes and authentication foundation
 

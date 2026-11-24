@@ -64,7 +64,7 @@ class _SignedArchiveLogFilter(logging.Filter):
 
 
 class GitHubAppInstallation:
-    """Mint and reuse a read-only token for the configured numeric repository ID."""
+    """Mint single-permission tokens for the configured numeric repository ID."""
 
     def __init__(self, settings: GitHubAppSettings) -> None:
         self._app_id = settings.app_id
@@ -72,7 +72,7 @@ class GitHubAppInstallation:
         self.repository_id = settings.repository_id
         self._key = _load_key(settings.private_key_path)
         self._lock = asyncio.Lock()
-        self._tokens: dict[GitHubReadPermission, tuple[str, datetime]] = {}
+        self._tokens: dict[tuple[str, str], tuple[str, datetime]] = {}
         # httpx logs full URLs at INFO. Private archive redirects carry a temporary token.
         logger = logging.getLogger("httpx")
         if not any(isinstance(item, _SignedArchiveLogFilter) for item in logger.filters):
@@ -90,19 +90,40 @@ class GitHubAppInstallation:
     async def access_token(
         self, client: httpx.AsyncClient, *, permission: GitHubReadPermission = "contents"
     ) -> str:
+        return await self._mint(client, permission, "read")
+
+    async def fix_publication_token(self, client: httpx.AsyncClient) -> str:
+        """Used only by the standalone approved-fix publisher."""
+        return await self._mint(client, "contents", "write")
+
+    async def fix_comment_token(self, client: httpx.AsyncClient) -> str:
+        """The bot uses this token only to reply in the PR conversation."""
+        return await self._mint(client, "issues", "write")
+
+    async def _mint(
+        self,
+        client: httpx.AsyncClient,
+        permission: Literal["contents", "issues", "pull_requests"],
+        level: Literal["read", "write"],
+    ) -> str:
+        key = (permission, level)
         async with self._lock:
             now = datetime.now(UTC)
-            cached = self._tokens.get(permission)
+            cached = self._tokens.get(key)
             if cached is not None and cached[1] > now + timedelta(minutes=1):
                 return cached[0]
             response = await client.post(
                 f"https://api.github.com/app/installations/{self._installation_id}/access_tokens",
                 headers={**GITHUB_API_HEADERS, "Authorization": f"Bearer {self._jwt(now)}"},
-                json={"repository_ids": [self.repository_id], "permissions": {permission: "read"}},
+                json={"repository_ids": [self.repository_id], "permissions": {permission: level}},
                 follow_redirects=False,
             )
             if response.status_code != 201:
-                if permission == "pull_requests" and response.status_code == 422:
+                if (
+                    permission == "pull_requests"
+                    and level == "read"
+                    and response.status_code == 422
+                ):
                     raise GitHubAppError(
                         "Approve Pull requests: Read-only on the GitHub App installation."
                     )
@@ -121,9 +142,9 @@ class GitHubAppInstallation:
                     or not token.isascii()
                     or any(not 33 <= ord(char) <= 126 for char in token)
                     or not isinstance(permissions, dict)
-                    or permissions.get(permission) != "read"
+                    or permissions.get(permission) != level
                     or not permissions.keys() <= {permission, "metadata"}
-                    or any(value != "read" for value in permissions.values())
+                    or permissions.get("metadata", "read") != "read"
                     or expires_at.tzinfo is None
                     or not now < expires_at <= now + timedelta(minutes=65)
                 ):
@@ -132,5 +153,5 @@ class GitHubAppInstallation:
                 raise GitHubAppError(
                     "GitHub returned an invalid installation token response."
                 ) from None
-            self._tokens[permission] = (token, expires_at)
+            self._tokens[key] = (token, expires_at)
             return token
